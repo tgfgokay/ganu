@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 380">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3f46"/><stop offset="1" stop-color="#2a2e34"/></linearGradient>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBF8F1"/><stop offset="1" stop-color="#ECE6D8"/></linearGradient>
+  </defs>
+  <rect width="700" height="380" fill="url(#wall)"/>
+  <rect x="120" y="80" width="460" height="220" rx="6" fill="url(#plate)"/>
+  <rect x="120" y="80" width="460" height="220" rx="6" fill="none" stroke="#00000022" stroke-width="2"/>
+  <circle cx="140" cy="100" r="4" fill="#9a958a"/><circle cx="560" cy="100" r="4" fill="#9a958a"/>
+  <circle cx="140" cy="280" r="4" fill="#9a958a"/><circle cx="560" cy="280" r="4" fill="#9a958a"/>
+  <text x="350" y="195" text-anchor="middle" font-family="Fraunces, serif" font-weight="600" font-size="78" letter-spacing="3" fill="#15243B">GANU</text>
+  <text x="352" y="235" text-anchor="middle" font-family="'Plus Jakarta Sans', sans-serif" font-weight="600" font-size="13" letter-spacing="9" fill="#15243B">SANAL OFİS · İSTANBUL</text>
+</svg>

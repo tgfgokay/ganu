@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="360" viewBox="0 0 900 360">
+  <rect width="900" height="360" fill="#EEF1F4"/>
+  <text x="40" y="40" font-family="Plus Jakarta Sans" font-size="18" fill="#4c637b">Favikon — 128 / 64 / 32 / 16 px (koyu + açık)</text>
+  <g transform="translate(40,70)"><image href="favicon.svg" width="128" height="128"/></g>
+  <g transform="translate(200,134)"><image href="favicon.svg" width="64" height="64"/></g>
+  <g transform="translate(300,166)"><image href="favicon.svg" width="32" height="32"/></g>
+  <g transform="translate(360,182)"><image href="favicon.svg" width="16" height="16"/></g>
+  <g transform="translate(460,70)"><image href="favicon-light.svg" width="128" height="128"/></g>
+  <g transform="translate(620,134)"><image href="favicon-light.svg" width="64" height="64"/></g>
+  <g transform="translate(720,166)"><image href="favicon-light.svg" width="32" height="32"/></g>
+  <g transform="translate(780,182)"><image href="favicon-light.svg" width="16" height="16"/></g>
+</svg>

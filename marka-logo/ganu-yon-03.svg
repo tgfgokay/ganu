@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1500" viewBox="0 0 1600 1500">
+<defs><style>.sans{font-family:'Plus Jakarta Sans',sans-serif;}</style></defs>
+<rect width="1600" height="1500" fill="#EEF1F4"/>
+<text x="120" y="112" class="sans" font-size="21" font-weight="600" letter-spacing="4" fill="#4c637b">GANU · MARKA İŞARETİ — 4.2 “İÇ BOŞLUK AKSANI”</text>
+<line x1="120" y1="146" x2="1480" y2="146" stroke="#0A2540" stroke-opacity="0.16" stroke-width="1.4"/>
+<rect x="120" y="196" width="1360" height="470" rx="32" fill="#FFFFFF" stroke="#0A2540" stroke-opacity="0.08" stroke-width="1.4"/>
+<text x="164" y="248" class="sans" font-size="18" font-weight="700" letter-spacing="2.5" fill="#4c637b">01 · ANA İŞARET</text>
+<g transform="translate(280.00,186.63) scale(0.816967792615868)">
+  <g fill="none" stroke="#0A2540" stroke-width="54.00" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 60.00 250.00 A 123.00 123.00 0 1 0 306.00 250.00 A 123.00 123.00 0 1 0 60.00 250.00 Z"/>
+    <path d="M 306.00 127.00 L 306.00 434.00 A 116.00 116.00 0 0 1 98.00 452.00"/>
+    <path d="M 352.00 250.00 A 123.00 123.00 0 1 0 598.00 250.00 A 123.00 123.00 0 1 0 352.00 250.00 Z"/>
+    <path d="M 598.00 127.00 L 598.00 373.00"/>
+    <path d="M 698.00 373.00 L 698.00 197.00 A 97.00 97.00 0 0 1 892.00 197.00 L 892.00 373.00"/>
+    <path d="M 992.00 127.00 L 992.00 303.00 A 97.00 97.00 0 0 0 1186.00 303.00 L 1186.00 127.00"/>
+  </g>
+  <circle cx="475.00" cy="250.00" r="44.00" fill="#00D4B2"/>
+</g>
+<text x="800.0" y="636" text-anchor="middle" class="sans" font-size="15" font-weight="400" fill="#7488a0">teal “adres noktası”, ‘a’ harfinin iç boşluğunda — bir işletmenin var oluş noktası.</text>
+<rect x="120" y="700" width="660.0" height="420" rx="32" fill="#0A2540"/>
+<text x="164" y="752" class="sans" font-size="18" font-weight="700" letter-spacing="2.5" fill="#F4EFE7" fill-opacity="0.55">02 · KOYU ZEMİN</text>
+<g transform="translate(210.00,806.14) scale(0.3770620581304006)">
+  <g fill="none" stroke="#F4EFE7" stroke-width="54.00" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 60.00 250.00 A 123.00 123.00 0 1 0 306.00 250.00 A 123.00 123.00 0 1 0 60.00 250.00 Z"/>
+    <path d="M 306.00 127.00 L 306.00 434.00 A 116.00 116.00 0 0 1 98.00 452.00"/>
+    <path d="M 352.00 250.00 A 123.00 123.00 0 1 0 598.00 250.00 A 123.00 123.00 0 1 0 352.00 250.00 Z"/>
+    <path d="M 598.00 127.00 L 598.00 373.00"/>
+    <path d="M 698.00 373.00 L 698.00 197.00 A 97.00 97.00 0 0 1 892.00 197.00 L 892.00 373.00"/>
+    <path d="M 992.00 127.00 L 992.00 303.00 A 97.00 97.00 0 0 0 1186.00 303.00 L 1186.00 127.00"/>
+  </g>
+  <circle cx="475.00" cy="250.00" r="44.00" fill="#00D4B2"/>
+</g>
+<rect x="820.0" y="700" width="660.0" height="420" rx="32" fill="#FFFFFF" stroke="#0A2540" stroke-opacity="0.08" stroke-width="1.4"/>
+<text x="864.0" y="752" class="sans" font-size="18" font-weight="700" letter-spacing="2.5" fill="#4c637b">03 · FAVİKON · APP İKON</text>
+<text x="864.0" y="778" class="sans" font-size="13.5" font-weight="400" fill="#7488a0">harfsiz · ortak-tarafsız · “adres noktası” özü</text>
+<rect x="934.00" y="820.00" width="168.00" height="168.00" rx="40.32" fill="#0A2540"/>
+<circle cx="1018.00" cy="904.00" r="48.72" fill="none" stroke="#F4EFE7" stroke-opacity="0.9" stroke-width="12.60"/>
+<circle cx="1018.00" cy="904.00" r="22.68" fill="#00D4B2"/>
+<text x="1018.00" y="1022.00" text-anchor="middle" class="sans" font-size="14" font-weight="500" fill="#7488a0">koyu</text>
+<rect x="1145.20" y="820.00" width="168.00" height="168.00" rx="40.32" fill="#F4EFE7" stroke="#0A2540" stroke-opacity="0.12" stroke-width="1.4"/>
+<circle cx="1229.20" cy="904.00" r="48.72" fill="none" stroke="#0A2540" stroke-opacity="1.0" stroke-width="12.60"/>
+<circle cx="1229.20" cy="904.00" r="22.68" fill="#00D4B2"/>
+<text x="1229.20" y="1022.00" text-anchor="middle" class="sans" font-size="14" font-weight="500" fill="#7488a0">açık</text>
+<rect x="1353.00" y="852.00" width="56.00" height="56.00" rx="13.44" fill="#0A2540"/>
+<circle cx="1381.00" cy="880.00" r="16.24" fill="none" stroke="#F4EFE7" stroke-opacity="0.9" stroke-width="4.20"/>
+<circle cx="1381.00" cy="880.00" r="7.56" fill="#00D4B2"/>
+<text x="1381.00" y="936.00" text-anchor="middle" class="sans" font-size="12" font-weight="600" letter-spacing="1" fill="#7488a0">32 px</text>
+<rect x="120" y="1160" width="1360" height="200" rx="32" fill="#FFFFFF" stroke="#0A2540" stroke-opacity="0.08" stroke-width="1.4"/>
+<text x="164" y="1212" class="sans" font-size="18" font-weight="700" letter-spacing="2.5" fill="#4c637b">PALET</text>
+<rect x="164" y="1246" width="52" height="52" rx="12" fill="#0A2540" stroke="#0A2540" stroke-opacity="0.12"/>
+<text x="234" y="1268" class="sans" font-size="17" font-weight="700" fill="#0A2540">NAVY</text>
+<text x="234" y="1292" class="sans" font-size="14" font-weight="400" fill="#7488a0">#0A2540 · ana</text>
+<rect x="564" y="1246" width="52" height="52" rx="12" fill="#00D4B2" stroke="#0A2540" stroke-opacity="0.12"/>
+<text x="634" y="1268" class="sans" font-size="17" font-weight="700" fill="#0A2540">TEAL</text>
+<text x="634" y="1292" class="sans" font-size="14" font-weight="400" fill="#7488a0">#00D4B2 · yalnız aksan</text>
+<rect x="964" y="1246" width="52" height="52" rx="12" fill="#F4EFE7" stroke="#0A2540" stroke-opacity="0.12"/>
+<text x="1034" y="1268" class="sans" font-size="17" font-weight="700" fill="#0A2540">PAPER</text>
+<text x="1034" y="1292" class="sans" font-size="14" font-weight="400" fill="#7488a0">#F4EFE7 · zemin</text>
+<text x="120" y="1458" class="sans" font-size="17" font-weight="500" fill="#4c637b">4.2 — yumuşak geometrik küçük harf “ganu”, tek çizgi (monoline), yuvarlak uçlar: davetkâr &amp; çağdaş.</text>
+</svg>

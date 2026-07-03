@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2060" viewBox="0 0 1600 2060">
+  <!-- ================= GANU · MARKA YÖNÜ 01 (wordmark-first) ================= -->
+  <defs>
+    <style>
+      .serif { font-family: 'Fraunces', serif; }
+      .sans  { font-family: 'Plus Jakarta Sans', sans-serif; }
+      .navy  { fill: #0A2540; }
+      .teal  { fill: #00D4B2; }
+      .cream { fill: #F4EFE7; }
+      .ink60 { fill: #4c637b; }
+    </style>
+  </defs>
+
+  <!-- cool light ground -->
+  <rect width="1600" height="2060" fill="#ECEFF1"/>
+
+  <!--Header -->
+  <text x="120" y="118" class="sans" font-size="21" font-weight="600" letter-spacing="4" fill="#4c637b">GANU · MARKA İŞARETİ — DÜNYA KIYASINDAN SONRAKİ YÖN</text>
+  <line x1="120" y1="150" x2="1480" y2="150" stroke="#0A2540" stroke-opacity="0.16" stroke-width="1.4"/>
+
+  <!--Section A: Primary wordmark -->
+  <text x="800" y="428" text-anchor="middle" class="serif" font-size="212" font-weight="450" letter-spacing="-3"><tspan class="navy">GANU</tspan><tspan class="teal">.</tspan></text>
+  <text x="800" y="504" text-anchor="middle" class="sans" font-size="27" font-weight="600" letter-spacing="9" fill="#4c637b">SANAL OFİS · İSTANBUL</text>
+  <text x="800" y="556" text-anchor="middle" class="sans" font-size="18" font-weight="400" letter-spacing="0.5" fill="#7488a0">Ana marka işareti — zarif serif wordmark + teal “adres noktası”.</text>
+  <line x1="120" y1="612" x2="1480" y2="612" stroke="#0A2540" stroke-opacity="0.16" stroke-width="1.4"/>
+
+  <!--Section B: Symbol + application -->
+  <text x="120" y="676" class="sans" font-size="19" font-weight="600" letter-spacing="3.5" fill="#4c637b">AMBLEM &amp; UYGULAMA</text>
+
+  <!-- big monogram G. -->
+  <text x="150" y="1028" class="serif" font-size="330" font-weight="500" letter-spacing="-4"><tspan class="navy">G</tspan><tspan class="teal">.</tspan></text>
+  <text x="168" y="1082" class="sans" font-size="18" font-weight="500" letter-spacing="0.5" fill="#7488a0">Amblem: “G.” — harf + adres noktası</text>
+
+  <!-- application tiles -->
+  <text x="770" y="742" class="sans" font-size="16" font-weight="600" letter-spacing="2.5" fill="#4c637b">FAVİKON · UYGULAMA İKONU</text>
+
+  <!-- tile A: navy -->
+  <rect x="770" y="770" width="184" height="184" rx="40" class="navy"/>
+  <text x="854" y="908" text-anchor="middle" class="serif" font-size="132" font-weight="500" fill="#F4EFE7">G</text>
+  <circle cx="906" cy="884" r="12" class="teal"/>
+
+  <!-- tile B: light -->
+  <rect x="986" y="770" width="184" height="184" rx="40" fill="#FFFFFF" stroke="#0A2540" stroke-opacity="0.12" stroke-width="1.4"/>
+  <text x="1070" y="908" text-anchor="middle" class="serif" font-size="132" font-weight="500" fill="#0A2540">G</text>
+  <circle cx="1122" cy="884" r="12" class="teal"/>
+
+  <!-- tile C: small navy (favicon scale) -->
+  <rect x="1202" y="854" width="100" height="100" rx="22" class="navy"/>
+  <text x="1247" y="928" text-anchor="middle" class="serif" font-size="72" font-weight="500" fill="#F4EFE7">G</text>
+  <circle cx="1276" cy="915" r="7" class="teal"/>
+  <text x="1252" y="742" text-anchor="middle" class="sans" font-size="13" font-weight="600" letter-spacing="1.5" fill="#7488a0">32 px</text>
+
+  <line x1="120" y1="1122" x2="1480" y2="1122" stroke="#0A2540" stroke-opacity="0.16" stroke-width="1.4"/>
+
+  <!--Section C: navy panel (reversed + palette) -->
+  <rect x="120" y="1172" width="1360" height="742" rx="40" class="navy"/>
+  <text x="170" y="1240" class="sans" font-size="18" font-weight="600" letter-spacing="3.5" fill="#F4EFE7" fill-opacity="0.55">KOYU ZEMİN · REVERSED</text>
+
+  <!-- reversed wordmark -->
+  <text x="800" y="1486" text-anchor="middle" class="serif" font-size="190" font-weight="450" letter-spacing="-3"><tspan class="cream">GANU</tspan><tspan class="teal">.</tspan></text>
+  <text x="800" y="1556" text-anchor="middle" class="sans" font-size="24" font-weight="600" letter-spacing="8" fill="#8aa0b4">SANAL OFİS · İSTANBUL</text>
+
+  <!-- horizontal lockup mini -->
+  <g>
+    <rect x="595" y="1636" width="86" height="86" rx="20" fill="#12314f"/>
+    <text x="634" y="1701" text-anchor="middle" class="serif" font-size="62" font-weight="500" fill="#F4EFE7">G</text>
+    <circle cx="659" cy="1690" r="6" class="teal"/>
+    <text x="702" y="1690" class="serif" font-size="56" font-weight="500" letter-spacing="-1"><tspan class="cream">GANU</tspan><tspan class="teal">.</tspan></text>
+    <text x="704" y="1714" class="sans" font-size="14" font-weight="600" letter-spacing="4" fill="#8aa0b4">ANAHTAR TESLİM SANAL OFİS</text>
+  </g>
+
+  <!-- palette chips -->
+  <g>
+    <rect x="200" y="1804" width="44" height="44" rx="10" fill="#0A2540" stroke="#F4EFE7" stroke-opacity="0.25"/>
+    <text x="262" y="1824" class="sans" font-size="17" font-weight="700" fill="#F4EFE7">NAVY</text>
+    <text x="262" y="1846" class="sans" font-size="14" font-weight="400" fill="#8aa0b4">#0A2540</text>
+
+    <rect x="470" y="1804" width="44" height="44" rx="10" fill="#00D4B2"/>
+    <text x="532" y="1824" class="sans" font-size="17" font-weight="700" fill="#F4EFE7">TEAL</text>
+    <text x="532" y="1846" class="sans" font-size="14" font-weight="400" fill="#8aa0b4">#00D4B2 · yalnız aksan</text>
+
+    <rect x="820" y="1804" width="44" height="44" rx="10" fill="#F4EFE7"/>
+    <text x="882" y="1824" class="sans" font-size="17" font-weight="700" fill="#F4EFE7">PAPER</text>
+    <text x="882" y="1846" class="sans" font-size="14" font-weight="400" fill="#8aa0b4">#F4EFE7</text>
+  </g>
+
+  <!--Footer note -->
+  <text x="120" y="1970" class="sans" font-size="17.5" font-weight="500" fill="#4c637b">Dünya kıyası — Servcorp · Regus · Spaces: hepsi wordmark-öncelikli, sade, tek imza aksanı.</text>
+  <text x="120" y="1998" class="sans" font-size="17.5" font-weight="500" fill="#4c637b">GANU farkı: rakipler sans-serif; GANU zarif serif (Fraunces) + tek teal “adres noktası” = prestijli ve ayrışan.</text>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 300">
+  <rect width="520" height="300" fill="#0A2540"/>
+  <text x="248" y="150" text-anchor="middle" font-family="Fraunces, serif" font-weight="600" font-size="112" letter-spacing="2" fill="#FFFFFF">GANU</text>
+  <circle cx="452" cy="144" r="10" fill="#00D4B2"/>
+  <text x="262" y="202" text-anchor="middle" font-family="'Plus Jakarta Sans', sans-serif" font-weight="500" font-size="13" letter-spacing="13" fill="#FFFFFF">SANAL OFİS<tspan fill="#00D4B2" dx="6">·</tspan><tspan dx="6">İSTANBUL</tspan></text>
+</svg>

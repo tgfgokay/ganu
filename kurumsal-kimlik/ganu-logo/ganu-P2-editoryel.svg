@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400">
+  <!-- P2: Editöryel — Gloock yüksek kontrast serif, Orman & Krem paleti -->
+  <rect width="640" height="400" fill="#F1ECE0"/>
+  <!-- üst hairline + tracked label -->
+  <line x1="80" y1="150" x2="560" y2="150" stroke="#173A2D" stroke-width="1" opacity="0.35"/>
+  <text x="80" y="142" font-family="'Bricolage Grotesque', sans-serif" font-size="13" letter-spacing="7" fill="#B2935A">PRESTİJLİ ADRES</text>
+  <text x="560" y="142" text-anchor="end" font-family="'Bricolage Grotesque', sans-serif" font-size="13" letter-spacing="3" fill="#173A2D" opacity="0.6">İSTANBUL</text>
+  <!-- wordmark -->
+  <text x="78" y="258" font-family="Gloock, serif" font-size="118" letter-spacing="2" fill="#173A2D">GANU</text>
+  <!-- alt satır -->
+  <text x="82" y="300" font-family="'Bricolage Grotesque', sans-serif" font-size="16" letter-spacing="10" fill="#173A2D" opacity="0.7">SANAL OFİS</text>
+  <!-- akıllı detay: nokta = adres işareti -->
+  <circle cx="540" cy="248" r="9" fill="#B2935A"/>
+</svg>

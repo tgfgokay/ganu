@@ -1,0 +1,31 @@
+// Auto-generated from marka-logo/_draw.py — GANU 4.2 wordmark ("ganu" + adres noktası).
+// Edit the generator, not this file.
+export default function GanuMark({
+  color = 'currentColor',
+  dot = '#00D4B2',
+  title = 'ganu',
+  className = '',
+  ...rest
+}) {
+  return (
+    <svg
+      className={className}
+      viewBox="25.00 92.00 1196.00 452.00"
+      role="img"
+      aria-label={title}
+      xmlns="http://www.w3.org/2000/svg"
+      {...rest}
+    >
+      <title>{title}</title>
+      <g fill="none" stroke={color} strokeWidth="54.00" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M 60.00 250.00 A 123.00 123.00 0 1 0 306.00 250.00 A 123.00 123.00 0 1 0 60.00 250.00 Z" />
+        <path d="M 306.00 127.00 L 306.00 434.00 A 116.00 116.00 0 0 1 98.00 452.00" />
+        <path d="M 352.00 250.00 A 123.00 123.00 0 1 0 598.00 250.00 A 123.00 123.00 0 1 0 352.00 250.00 Z" />
+        <path d="M 598.00 127.00 L 598.00 373.00" />
+        <path d="M 698.00 373.00 L 698.00 224.00 A 97.00 97.00 0 0 1 892.00 224.00 L 892.00 373.00" />
+        <path d="M 992.00 127.00 L 992.00 276.00 A 97.00 97.00 0 0 0 1186.00 276.00 L 1186.00 127.00" />
+      </g>
+      <circle cx="475.00" cy="250.00" r="44.00" fill={dot} />
+    </svg>
+  );
+}

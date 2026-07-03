@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 140" font-family="Manrope, 'Segoe UI', Arial, sans-serif">
+  <rect width="460" height="140" fill="#FFFFFF"/>
+  <!-- Palet 2: Lacivert + Teal -->
+  <path d="M70 16 L117 43 L117 97 L70 124 L23 97 L23 43 Z" fill="#1B2A4A"/>
+  <text x="70" y="74" text-anchor="middle" dominant-baseline="central" font-size="62" font-weight="800" fill="#2BB3A3">G</text>
+  <text x="152" y="60" dominant-baseline="central" font-size="56" font-weight="800" letter-spacing="3" fill="#1B2A4A">GANU</text>
+  <text x="155" y="96" dominant-baseline="central" font-size="13" font-weight="600" letter-spacing="6" fill="#2BB3A3">SANAL OFİS</text>
+</svg>

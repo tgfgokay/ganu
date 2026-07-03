@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 150" font-family="Manrope, 'Segoe UI', Arial, sans-serif">
+  <rect width="470" height="150" fill="#FFFFFF"/>
+  <!-- Konsept G: "@dres" — @ = dijital işin, gerçek adresi -->
+  <!-- @ dış halka (sağ altta açık) -->
+  <circle cx="78" cy="75" r="46" fill="none" stroke="#1B2A4A" stroke-width="11"
+          stroke-linecap="round" stroke-dasharray="218 71" transform="rotate(28 78 75)"/>
+  <!-- iç: konum pini (amber) = "burada" -->
+  <path d="M78 50 c-13 0 -23 10 -23 23 c0 16 23 33 23 33 c0 0 23 -17 23 -33 c0 -13 -10 -23 -23 -23 z" fill="#F2A93B"/>
+  <circle cx="78" cy="73" r="8.5" fill="#FFFFFF"/>
+  <!-- wordmark -->
+  <text x="150" y="64" dominant-baseline="central" font-size="54" font-weight="800" letter-spacing="2" fill="#1B2A4A">GANU</text>
+  <text x="153" y="100" dominant-baseline="central" font-size="13" font-weight="600" letter-spacing="5" fill="#1B2A4A" opacity="0.65">SANAL OFİS</text>
+</svg>

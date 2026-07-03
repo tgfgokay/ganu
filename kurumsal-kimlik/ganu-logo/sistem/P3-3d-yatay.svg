@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 220">
+  <defs>
+    <linearGradient id="front" x1="0" y1="0" x2="0.15" y2="1">
+      <stop offset="0%" stop-color="#3C3F45"/>
+      <stop offset="100%" stop-color="#212328"/>
+    </linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="3" dy="6" stdDeviation="6" flood-color="#3a2a22" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect width="520" height="220" fill="#FBFAF8"/>
+  <g filter="url(#sh)">
+  <text x="276.40" y="151.16" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#605D58">GANU</text>
+  <text x="276.00" y="150.70" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#615E59">GANU</text>
+  <text x="275.60" y="150.24" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#625F5A">GANU</text>
+  <text x="275.20" y="149.78" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#64615C">GANU</text>
+  <text x="274.80" y="149.32" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#65625D">GANU</text>
+  <text x="274.40" y="148.86" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#66635E">GANU</text>
+  <text x="274.00" y="148.40" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#67645F">GANU</text>
+  <text x="273.60" y="147.94" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#686560">GANU</text>
+  <text x="273.20" y="147.48" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#6A6761">GANU</text>
+  <text x="272.80" y="147.02" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#6B6863">GANU</text>
+  <text x="272.40" y="146.56" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#6C6964">GANU</text>
+  <text x="272.00" y="146.10" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#6D6A65">GANU</text>
+  <text x="271.60" y="145.64" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#6E6B66">GANU</text>
+  <text x="271.20" y="145.18" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#706D67">GANU</text>
+  <text x="270.80" y="144.72" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#716E68">GANU</text>
+  <text x="270.40" y="144.26" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#726F6A">GANU</text>
+  <text x="270.00" y="143.80" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#73706B">GANU</text>
+  <text x="269.60" y="143.34" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#74716C">GANU</text>
+  <text x="269.20" y="142.88" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#76736D">GANU</text>
+  <text x="268.80" y="142.42" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#77746E">GANU</text>
+  <text x="268.40" y="141.96" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#787570">GANU</text>
+  <text x="268.00" y="141.50" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#797671">GANU</text>
+  <text x="267.60" y="141.04" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#7A7772">GANU</text>
+  <text x="267.20" y="140.58" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#7C7973">GANU</text>
+  <text x="266.80" y="140.12" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#7D7A74">GANU</text>
+  <text x="266.40" y="139.66" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#7E7B75">GANU</text>
+  <text x="266.00" y="139.20" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#7F7C77">GANU</text>
+  <text x="265.60" y="138.74" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#807D78">GANU</text>
+  <text x="265.20" y="138.28" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#827F79">GANU</text>
+  <text x="264.80" y="137.82" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#83807A">GANU</text>
+  <text x="264.40" y="137.36" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#84817B">GANU</text>
+  <text x="264.00" y="136.90" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#85827D">GANU</text>
+  <text x="263.60" y="136.44" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#86837E">GANU</text>
+  <text x="263.20" y="135.98" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#88857F">GANU</text>
+  <text x="262.80" y="135.52" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#898680">GANU</text>
+  <text x="262.40" y="135.06" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#8A8781">GANU</text>
+  <text x="262.00" y="134.60" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#8B8882">GANU</text>
+  <text x="261.60" y="134.14" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#8C8984">GANU</text>
+  <text x="261.20" y="133.68" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#8E8B85">GANU</text>
+  <text x="260.80" y="133.22" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#8F8C86">GANU</text>
+  <text x="260.40" y="132.76" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#908D87">GANU</text>
+  <text x="260.00" y="132.30" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#918E88">GANU</text>
+  <text x="259.60" y="131.84" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#928F89">GANU</text>
+  <text x="259.20" y="131.38" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#94918B">GANU</text>
+  <text x="258.80" y="130.92" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#95928C">GANU</text>
+  <text x="258.40" y="130.46" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="#96938D">GANU</text>
+  <text x="258.00" y="130.00" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="96" letter-spacing="-3" fill="url(#front)">GANU</text>
+  </g>
+  <rect x="196" y="150" width="128" height="7" rx="3.5" fill="#E2603F"/>
+  <text x="260" y="190" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="13" letter-spacing="9" fill="#26282C" opacity="0.6">SANAL OFİS · İSTANBUL</text>
+</svg>

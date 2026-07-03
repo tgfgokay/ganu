@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 150">
+  <rect width="460" height="150" fill="#F1ECE0"/>
+  <text x="230" y="74" text-anchor="middle" font-family="Italiana, serif" font-size="68" letter-spacing="11" fill="#163A2E">GANU</text>
+  <line x1="178" y1="98" x2="282" y2="98" stroke="#B2935A" stroke-width="0.9"/>
+  <circle cx="230" cy="98" r="1.9" fill="#B2935A"/>
+  <text x="230" y="120" text-anchor="middle" font-family="Italiana, serif" font-size="13" letter-spacing="10" fill="#163A2E">SANAL OFİS</text>
+</svg>

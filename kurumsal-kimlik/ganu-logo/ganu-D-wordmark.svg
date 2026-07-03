@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 130" font-family="Manrope, 'Segoe UI', Arial, sans-serif">
+  <rect width="420" height="130" fill="#FFFFFF"/>
+  <!-- Konsept D: Wordmark ağırlıklı + amber vurgu noktası -->
+  <text x="40" y="66" dominant-baseline="central" font-size="76" font-weight="800" letter-spacing="4" fill="#1B2A4A">GANU</text>
+  <circle cx="372" cy="40" r="9" fill="#F2A93B"/>
+  <text x="44" y="108" dominant-baseline="central" font-size="14" font-weight="600" letter-spacing="9" fill="#F2A93B">SANAL OFİS</text>
+</svg>

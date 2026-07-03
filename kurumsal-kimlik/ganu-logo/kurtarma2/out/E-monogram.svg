@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#F4F1EA"/>
+  <!-- kemer (arch) ince kontur -->
+  <path d="M180 430 L180 300 A120 120 0 0 1 420 300 L420 430"
+        fill="none" stroke="#15243B" stroke-width="14" stroke-linecap="square"/>
+  <!-- kilit taşı (keystone) -->
+  <path d="M270 196 L330 196 L342 250 L258 250 Z" fill="#15243B"/>
+  <!-- taban çizgisi (adres satırı) -->
+  <line x1="150" y1="430" x2="450" y2="430" stroke="#15243B" stroke-width="14" stroke-linecap="square"/>
+  <text x="300" y="510" text-anchor="middle" font-family="Fraunces, serif" font-weight="600" font-size="60" letter-spacing="6" fill="#15243B">GANU</text>
+</svg>

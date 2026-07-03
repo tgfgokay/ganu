@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 250" font-family="Manrope, 'Segoe UI', Arial, sans-serif">
+  <rect width="240" height="250" fill="#FFFFFF"/>
+  <!-- Dikey kilit: kapı üstte, GANU altta -->
+  <rect x="80" y="18" width="80" height="116" rx="9" fill="#1B2A4A"/>
+  <rect x="88" y="26" width="64" height="6" rx="3" fill="#FFFFFF" opacity="0.14"/>
+  <rect x="96" y="46" width="48" height="22" rx="4" fill="#F2A93B"/>
+  <text x="120" y="57.5" text-anchor="middle" dominant-baseline="central" font-size="15" font-weight="800" fill="#1B2A4A">GANU</text>
+  <rect x="94" y="80" width="52" height="44" rx="5" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.16"/>
+  <circle cx="148" cy="100" r="4.2" fill="#F2A93B"/>
+  <text x="120" y="174" text-anchor="middle" dominant-baseline="central" font-size="46" font-weight="800" letter-spacing="3" fill="#1B2A4A">GANU</text>
+  <text x="120" y="207" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="600" letter-spacing="6" fill="#1B2A4A" opacity="0.65">SANAL OFİS</text>
+</svg>

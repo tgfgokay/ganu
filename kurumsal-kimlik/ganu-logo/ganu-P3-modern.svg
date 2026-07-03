@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400">
+  <!-- P3: Modern Grotesk — Bricolage Bold, karakterli, tek aksanlı (kömür + mercan) -->
+  <rect width="640" height="400" fill="#FBFAF8"/>
+  <!-- büyük wordmark, sıkı -->
+  <text x="320" y="212" text-anchor="middle" font-family="'Bricolage Grotesque', sans-serif" font-weight="700" font-size="132" letter-spacing="-4" fill="#26282C">GANU</text>
+  <!-- akıllı aksan: "U" altında açılan eşik (giriş) -->
+  <rect x="232" y="236" width="176" height="7" rx="3.5" fill="#E2603F"/>
+  <!-- tracked alt etiket -->
+  <text x="320" y="292" text-anchor="middle" font-family="'Bricolage Grotesque', sans-serif" font-weight="700" font-size="15" letter-spacing="11" fill="#26282C" opacity="0.7">SANAL OFİS · İSTANBUL</text>
+</svg>

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+  <defs>
+    <radialGradient id="bg" cx="38%" cy="30%" r="85%">
+      <stop offset="0%" stop-color="#34373D"/>
+      <stop offset="100%" stop-color="#202227"/>
+    </radialGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0.25" y2="1">
+      <stop offset="0%" stop-color="#F48062"/>
+      <stop offset="100%" stop-color="#D25637"/>
+    </linearGradient>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="6" dy="9" stdDeviation="9" flood-color="#000000" flood-opacity="0.40"/>
+    </filter>
+  </defs>
+  <rect width="240" height="240" rx="48" fill="url(#bg)"/>
+  <g filter="url(#sh)">
+  <text x="137.00" y="190.48" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#6E2616">G</text>
+  <text x="136.50" y="189.92" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#6F2616">G</text>
+  <text x="136.00" y="189.36" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#702717">G</text>
+  <text x="135.50" y="188.80" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#712717">G</text>
+  <text x="135.00" y="188.24" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#732817">G</text>
+  <text x="134.50" y="187.68" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#742818">G</text>
+  <text x="134.00" y="187.12" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#752918">G</text>
+  <text x="133.50" y="186.56" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#762918">G</text>
+  <text x="133.00" y="186.00" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#772A19">G</text>
+  <text x="132.50" y="185.44" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#782A19">G</text>
+  <text x="132.00" y="184.88" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#7A2B19">G</text>
+  <text x="131.50" y="184.32" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#7B2B19">G</text>
+  <text x="131.00" y="183.76" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#7C2B1A">G</text>
+  <text x="130.50" y="183.20" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#7D2C1A">G</text>
+  <text x="130.00" y="182.64" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#7E2C1A">G</text>
+  <text x="129.50" y="182.08" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#7F2D1B">G</text>
+  <text x="129.00" y="181.52" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#812D1B">G</text>
+  <text x="128.50" y="180.96" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#822E1B">G</text>
+  <text x="128.00" y="180.40" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#832E1C">G</text>
+  <text x="127.50" y="179.84" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#842F1C">G</text>
+  <text x="127.00" y="179.28" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#852F1C">G</text>
+  <text x="126.50" y="178.72" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#86301D">G</text>
+  <text x="126.00" y="178.16" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#87301D">G</text>
+  <text x="125.50" y="177.60" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#89301D">G</text>
+  <text x="125.00" y="177.04" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#8A311E">G</text>
+  <text x="124.50" y="176.48" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#8B311E">G</text>
+  <text x="124.00" y="175.92" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#8C321E">G</text>
+  <text x="123.50" y="175.36" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#8D321F">G</text>
+  <text x="123.00" y="174.80" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#8E331F">G</text>
+  <text x="122.50" y="174.24" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#90331F">G</text>
+  <text x="122.00" y="173.68" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#91341F">G</text>
+  <text x="121.50" y="173.12" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#923420">G</text>
+  <text x="121.00" y="172.56" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#933520">G</text>
+  <text x="120.50" y="172.00" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#943520">G</text>
+  <text x="120.00" y="171.44" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#953621">G</text>
+  <text x="119.50" y="170.88" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#973621">G</text>
+  <text x="119.00" y="170.32" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#983621">G</text>
+  <text x="118.50" y="169.76" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#993722">G</text>
+  <text x="118.00" y="169.20" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#9A3722">G</text>
+  <text x="117.50" y="168.64" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#9B3822">G</text>
+  <text x="117.00" y="168.08" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#9C3823">G</text>
+  <text x="116.50" y="167.52" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#9D3923">G</text>
+  <text x="116.00" y="166.96" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#9F3923">G</text>
+  <text x="115.50" y="166.40" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A03A24">G</text>
+  <text x="115.00" y="165.84" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A13A24">G</text>
+  <text x="114.50" y="165.28" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A23B24">G</text>
+  <text x="114.00" y="164.72" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A33B25">G</text>
+  <text x="113.50" y="164.16" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A43B25">G</text>
+  <text x="113.00" y="163.60" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A63C25">G</text>
+  <text x="112.50" y="163.04" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A73C25">G</text>
+  <text x="112.00" y="162.48" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A83D26">G</text>
+  <text x="111.50" y="161.92" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#A93D26">G</text>
+  <text x="111.00" y="161.36" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#AA3E26">G</text>
+  <text x="110.50" y="160.80" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#AB3E27">G</text>
+  <text x="110.00" y="160.24" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#AD3F27">G</text>
+  <text x="109.50" y="159.68" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#AE3F27">G</text>
+  <text x="109.00" y="159.12" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#AF4028">G</text>
+  <text x="108.50" y="158.56" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="#B04028">G</text>
+  <text x="108.00" y="158.00" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="168" letter-spacing="-4" fill="url(#front)">G</text>
+  </g>
+  <!-- ince üst ışık çizgisi -->
+  <rect x="74" y="182" width="86" height="10" rx="5" fill="#E2603F"/>
+  <rect x="74" y="182" width="86" height="4" rx="2" fill="#F59E82" opacity="0.8"/>
+</svg>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">
+  <rect width="1200" height="900" fill="#F4EFE7"/>
+  <text x="40" y="120" font-family="Manrope" font-weight="600" font-size="150" fill="#0A2540">ganu</text>
+  <text x="700" y="120" font-family="Manrope" font-size="26" fill="#7488a0">Manrope 600</text>
+
+  <text x="40" y="300" font-family="Plus Jakarta Sans" font-weight="600" font-size="150" fill="#0A2540">ganu</text>
+  <text x="700" y="300" font-family="Plus Jakarta Sans" font-size="26" fill="#7488a0">Plus Jakarta 600</text>
+
+  <text x="40" y="480" font-family="Outfit" font-weight="700" font-size="150" fill="#0A2540">ganu</text>
+  <text x="700" y="480" font-family="Outfit" font-size="26" fill="#7488a0">Outfit 700</text>
+
+  <text x="40" y="660" font-family="Futura" font-weight="500" font-size="150" fill="#0A2540">ganu</text>
+  <text x="700" y="660" font-family="Futura" font-size="26" fill="#7488a0">Futura Medium (ref only)</text>
+
+  <text x="40" y="840" font-family="Manrope" font-weight="800" font-size="150" fill="#0A2540">ganu</text>
+  <text x="700" y="840" font-family="Manrope" font-size="26" fill="#7488a0">Manrope 800</text>
+</svg>

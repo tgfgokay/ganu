@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" font-family="Manrope, 'Segoe UI', Arial, sans-serif">
+  <!-- Sosyal medya avatarı: kare lacivert zemin + amber altıgen G -->
+  <rect width="240" height="240" rx="48" fill="#1B2A4A"/>
+  <path d="M120 52 L175 84 L175 156 L120 188 L65 156 L65 84 Z" fill="none" stroke="#F2A93B" stroke-width="7"/>
+  <text x="120" y="124" text-anchor="middle" dominant-baseline="central" font-size="96" font-weight="800" fill="#F2A93B">G</text>
+</svg>

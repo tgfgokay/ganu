@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2100" viewBox="0 0 1600 2100">
+  <!-- GANU · DORT YON, HEPSINDEN URETILDI -->
+  <defs>
+    <style>
+      .serif { font-family: 'Fraunces', serif; }
+      .sans  { font-family: 'Plus Jakarta Sans', sans-serif; }
+      .navy  { fill: #0A2540; }
+      .teal  { fill: #00D4B2; }
+      .cream { fill: #F4EFE7; }
+    </style>
+    <linearGradient id="tileGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0"    stop-color="#0A2540"/>
+      <stop offset="0.55" stop-color="#12405f"/>
+      <stop offset="1"    stop-color="#00D4B2"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="0.24"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="16"/>
+      <feOffset dx="0" dy="12" result="off"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.30"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ground -->
+  <rect width="1600" height="2100" fill="#EEF1F4"/>
+
+  <!-- Header -->
+  <text x="120" y="110" class="sans" font-size="21" font-weight="600" letter-spacing="4" fill="#4c637b">GANU · MARKA İŞARETİ — DÖRT YÖN, HEPSİNDEN ÜRETİLDİ</text>
+  <line x1="120" y1="144" x2="1480" y2="144" stroke="#0A2540" stroke-opacity="0.16" stroke-width="1.4"/>
+
+  <!-- Cards -->
+  <rect x="120"  y="196"  width="660" height="848" rx="32" fill="#FFFFFF" stroke="#0A2540" stroke-opacity="0.08" stroke-width="1.4"/>
+  <rect x="820"  y="196"  width="660" height="848" rx="32" fill="#FFFFFF" stroke="#0A2540" stroke-opacity="0.08" stroke-width="1.4"/>
+  <rect x="120"  y="1088" width="660" height="848" rx="32" fill="#FFFFFF" stroke="#0A2540" stroke-opacity="0.08" stroke-width="1.4"/>
+  <rect x="820"  y="1088" width="660" height="848" rx="32" fill="#FFFFFF" stroke="#0A2540" stroke-opacity="0.08" stroke-width="1.4"/>
+
+  <!-- Card A: graphic symbol (pin + G) -->
+  <text x="164" y="258" class="sans" font-size="18" font-weight="700" letter-spacing="2.5" fill="#4c637b">01 · GRAFİK SİMGE</text>
+  <path d="M 450 662 C 402 590 358 528 358 470 A 92 92 0 1 1 542 470 C 542 528 498 590 450 662 Z" class="navy"/>
+  <text x="450" y="511" text-anchor="middle" class="sans" font-size="118" font-weight="800" fill="#F4EFE7">G</text>
+  <circle cx="450" cy="684" r="10" class="teal"/>
+  <text x="450" y="800" text-anchor="middle" class="sans" font-size="60" font-weight="600" letter-spacing="0.5" fill="#0A2540">GANU</text>
+  <rect x="164" y="910" width="62" height="62" rx="15" class="navy"/>
+  <text x="195" y="953" text-anchor="middle" class="sans" font-size="40" font-weight="800" fill="#F4EFE7">G</text>
+  <circle cx="214" cy="944" r="5" class="teal"/>
+  <text x="246" y="938" class="sans" font-size="15.5" font-weight="600" fill="#4c637b">Adres pini + G</text>
+  <text x="246" y="960" class="sans" font-size="14" font-weight="400" fill="#7488a0">haritada var oluş noktası</text>
+
+  <!-- Card B: modern tech, dimensional (gradient tile) -->
+  <text x="864" y="258" class="sans" font-size="18" font-weight="700" letter-spacing="2.5" fill="#4c637b">02 · MODERN TECH · BOYUTLU</text>
+  <rect x="1032" y="354" width="236" height="236" rx="56" fill="url(#tileGrad)" filter="url(#softShadow)"/>
+  <rect x="1032" y="354" width="236" height="236" rx="56" fill="url(#gloss)"/>
+  <text x="1150" y="524" text-anchor="middle" class="sans" font-size="150" font-weight="800" fill="#FFFFFF">G</text>
+  <text x="1150" y="800" text-anchor="middle" class="sans" font-size="60" font-weight="700"><tspan class="navy">GANU</tspan><tspan class="teal">.</tspan></text>
+  <rect x="864" y="910" width="62" height="62" rx="15" fill="url(#tileGrad)"/>
+  <text x="895" y="953" text-anchor="middle" class="sans" font-size="40" font-weight="800" fill="#FFFFFF">G</text>
+  <text x="946" y="938" class="sans" font-size="15.5" font-weight="600" fill="#4c637b">Gradient + derinlik</text>
+  <text x="946" y="960" class="sans" font-size="14" font-weight="400" fill="#7488a0">modern app ikonu hissi</text>
+
+  <!-- Card C: bold geometric G -->
+  <text x="164" y="1150" class="sans" font-size="18" font-weight="700" letter-spacing="2.5" fill="#4c637b">03 · CESUR GEOMETRİK</text>
+  <path d="M 528 1305 A 96 96 0 1 0 528 1415" fill="none" stroke="#0A2540" stroke-width="46"/>
+  <rect x="456" y="1337" width="88" height="46" class="navy"/>
+  <circle cx="470" cy="1360" r="15" class="teal"/>
+  <text x="450" y="1690" text-anchor="middle" class="sans" font-size="62" font-weight="800" letter-spacing="-1"><tspan class="navy">GANU</tspan><tspan class="teal">.</tspan></text>
+  <rect x="164" y="1800" width="62" height="62" rx="13" class="navy"/>
+  <text x="195" y="1843" text-anchor="middle" class="sans" font-size="40" font-weight="800" fill="#F4EFE7">G</text>
+  <circle cx="216" cy="1834" r="5" class="teal"/>
+  <text x="246" y="1828" class="sans" font-size="15.5" font-weight="600" fill="#4c637b">Geometrik G</text>
+  <text x="246" y="1850" class="sans" font-size="14" font-weight="400" fill="#7488a0">keskin, sade, çağdaş</text>
+
+  <!-- Card D: warm & friendly (rounded bubble) -->
+  <text x="864" y="1150" class="sans" font-size="18" font-weight="700" letter-spacing="2.5" fill="#4c637b">04 · SICAK &amp; SAMİMİ</text>
+  <rect x="1050" y="1248" width="200" height="196" rx="66" class="navy"/>
+  <path d="M 1090 1432 Q 1070 1484 1122 1446 Q 1104 1442 1090 1432 Z" class="navy"/>
+  <text x="1150" y="1398" text-anchor="middle" class="sans" font-size="140" font-weight="600" fill="#FFFFFF">g</text>
+  <circle cx="1214" cy="1378" r="12" class="teal"/>
+  <text x="1150" y="1690" text-anchor="middle" class="sans" font-size="64" font-weight="600" letter-spacing="0.5"><tspan class="navy">ganu</tspan><tspan class="teal">.</tspan></text>
+  <rect x="864" y="1800" width="62" height="62" rx="18" fill="#F4EFE7" stroke="#0A2540" stroke-opacity="0.12" stroke-width="1.4"/>
+  <text x="895" y="1846" text-anchor="middle" class="sans" font-size="40" font-weight="600" fill="#0A2540">g</text>
+  <circle cx="915" cy="1832" r="5" class="teal"/>
+  <text x="946" y="1828" class="sans" font-size="15.5" font-weight="600" fill="#4c637b">Yuvarlak · davetkâr</text>
+  <text x="946" y="1850" class="sans" font-size="14" font-weight="400" fill="#7488a0">insana yakın, sıcak</text>
+
+  <!-- Footer -->
+  <text x="120" y="1996" class="sans" font-size="17" font-weight="500" fill="#4c637b">Dört yön de aynı çekirdekten türedi: navy zemin + tek teal “adres noktası” aksanı.</text>
+  <text x="120" y="2024" class="sans" font-size="17" font-weight="500" fill="#4c637b">Beğendiğin yönü (ya da bir kombinasyonu) söyle — temiz vektöre çevirip favicon, site header ve OG görseline uygularım.</text>
+</svg>
