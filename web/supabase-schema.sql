@@ -77,8 +77,15 @@ create table if not exists public.invoices (
   einvoice_uuid text,                         -- e-belge UUID (entegratör)
   einvoice_no text,                           -- e-belge numarası
   einvoice_status text,                       -- kesildi | iptal | başarısız
+  einvoice_pdf text,                          -- e-belge PDF bağlantısı (Paraşüt)
   created_at timestamptz not null default now()
 );
+-- mevcut kurulumlar için (tablo zaten varsa kolonu ekle):
+alter table public.invoices add column if not exists einvoice_pdf text;
+alter table public.invoices add column if not exists payment_link text;      -- kartla ödeme linki (sanal POS)
+alter table public.customers add column if not exists kvkk_consent_at timestamptz; -- portal KVKK onay zamanı
+alter table public.contracts add column if not exists reminded_at timestamptz;     -- son yenileme hatırlatması
+alter table public.expenses add column if not exists invoice_id uuid references public.invoices(id) on delete set null; -- yansıtılan fatura
 
 -- Belgeler (belge kasası)
 create table if not exists public.documents (
@@ -114,6 +121,27 @@ create table if not exists public.requests (
   created_at timestamptz not null default now()
 );
 
+-- Talep mesajları (panel ↔ müşteri konuşma dizisi)
+create table if not exists public.request_messages (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null references public.requests(id) on delete cascade,
+  "from" text not null default 'ganu',         -- ganu | musteri
+  text text not null,
+  created_at timestamptz not null default now()
+);
+
+-- Masraflar (ofis giderleri + müşteriye yansıtılacak harcamalar)
+create table if not exists public.expenses (
+  id uuid primary key default gen_random_uuid(),
+  date date not null default current_date,
+  category text not null default 'diger',      -- kira | aidat | fatura | kargo | harc | kirtasiye | personel | diger
+  amount numeric not null default 0,
+  customer_id uuid references public.customers(id) on delete set null,
+  billable boolean not null default false,     -- müşteriye yansıtılacak mı
+  note text,
+  created_at timestamptz not null default now()
+);
+
 -- Yoklama kayıtları (vergi dairesi adres yoklaması · VUK 127)
 create table if not exists public.inspections (
   id uuid primary key default gen_random_uuid(),
@@ -135,6 +163,9 @@ create index if not exists idx_mail_date on public.mail_items(received_date);
 create index if not exists idx_invoices_customer on public.invoices(customer_id);
 create index if not exists idx_documents_customer on public.documents(customer_id);
 create index if not exists idx_customers_partner on public.customers(partner_id);
+create index if not exists idx_reqmsg_request on public.request_messages(request_id);
+create index if not exists idx_expenses_date on public.expenses(date);
+create index if not exists idx_expenses_customer on public.expenses(customer_id);
 
 -- ------------------------------------------------------------
 -- RLS (Row Level Security)
@@ -150,6 +181,8 @@ alter table public.documents     enable row level security;
 alter table public.notifications enable row level security;
 alter table public.requests      enable row level security;
 alter table public.inspections   enable row level security;
+alter table public.request_messages enable row level security;
+alter table public.expenses      enable row level security;
 
 create policy "staff_all_partners"      on public.partners      for all to authenticated using (true) with check (true);
 create policy "staff_all_customers"     on public.customers     for all to authenticated using (true) with check (true);
@@ -160,6 +193,13 @@ create policy "staff_all_documents"     on public.documents     for all to authe
 create policy "staff_all_notifications" on public.notifications for all to authenticated using (true) with check (true);
 create policy "staff_all_requests"      on public.requests      for all to authenticated using (true) with check (true);
 create policy "staff_all_inspections"   on public.inspections   for all to authenticated using (true) with check (true);
+create policy "staff_all_reqmsg"        on public.request_messages for all to authenticated using (true) with check (true);
+create policy "staff_all_expenses"      on public.expenses      for all to authenticated using (true) with check (true);
+
+-- Sitedeki online başvuru formu: anonim ziyaretçi yalnız 'aday' kaydı EKLEYEBİLİR
+-- (okuyamaz, güncelleyemez; erişim kodu boş geldiğinden portala giremez)
+create policy "public_apply_customers" on public.customers
+  for insert to anon with check (status = 'aday' and access_code = '');
 
 -- NOT: Faz 2'de müşteri girişi eklenince, müşterinin SADECE kendi
 -- kayıtlarını görmesi için ek policy'ler tanımlanacak (auth_uid eşleşmesi).

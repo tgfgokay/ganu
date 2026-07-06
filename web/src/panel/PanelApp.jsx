@@ -5,6 +5,7 @@ import { getUser, login, logout, resetPassword, authMode } from './lib/auth.js'
 import Dashboard from './pages/Dashboard.jsx'
 import Kargo from './pages/Kargo.jsx'
 import Faturalar from './pages/Faturalar.jsx'
+import Masraflar from './pages/Masraflar.jsx'
 import Sozlesmeler from './pages/Sozlesmeler.jsx'
 import Musteriler from './pages/Musteriler.jsx'
 import MusteriDetay from './pages/MusteriDetay.jsx'
@@ -24,6 +25,7 @@ const ICONS = {
   bell: <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>,
   clip: <svg viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M9 11l2 2 4-4"/></svg>,
   handshake: <svg viewBox="0 0 24 24"><path d="M11 17l2 2 4-4M3 10l4-4 5 4 5-4 4 4M7 6v6l4 4M17 6v6"/></svg>,
+  wallet: <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg>,
 }
 
 function LoginGate({ onOk }) {
@@ -111,6 +113,7 @@ function Shell({ children }) {
           {link('/panel/kargo', ICONS.box, 'Kargo & Posta')}
           {link('/panel/sozlesmeler', ICONS.doc, 'Sözleşmeler')}
           {link('/panel/faturalar', ICONS.bill, 'Fatura & Gelir')}
+          {link('/panel/masraflar', ICONS.wallet, 'Masraflar')}
           {link('/panel/musteriler', ICONS.users, 'Müşteriler')}
           {link('/panel/ortaklar', ICONS.handshake, 'İş Ortakları')}
           {link('/panel/yoklama', ICONS.clip, 'Yoklama')}
@@ -149,6 +152,7 @@ export default function PanelApp() {
         <Route path="kargo" element={<Kargo />} />
         <Route path="sozlesmeler" element={<Sozlesmeler />} />
         <Route path="faturalar" element={<Faturalar />} />
+        <Route path="masraflar" element={<Masraflar />} />
         <Route path="musteriler" element={<Musteriler />} />
         <Route path="musteriler/:id" element={<MusteriDetay />} />
         <Route path="ortaklar" element={<Ortaklar />} />

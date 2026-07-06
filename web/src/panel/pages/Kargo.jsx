@@ -7,6 +7,7 @@ const emptyForm = () => ({
   received_date: new Date().toISOString().slice(0, 10),
   status: 'geldi', shelf: '', photo_url: '',
   forward_carrier: '', forward_tracking: '', delivered_to: '', delivered_at: '', notes: '',
+  notify: true, // yeni girişte müşteriye otomatik bildirim
 })
 
 export default function Kargo() {
@@ -36,8 +37,19 @@ export default function Kargo() {
   }), [rows, q, fType, fStatus])
 
   const save = async (form) => {
-    if (modal.mode === 'new') await mail.create(form)
-    else await mail.update(modal.data.id, form)
+    const { notify, ...rest } = form
+    if (modal.mode === 'new') {
+      // bildirim gidiyorsa kayıt doğrudan 'bildirildi' durumuna düşer
+      const data = notify && rest.status === 'geldi' ? { ...rest, status: 'bildirildi' } : rest
+      await mail.create(data)
+      if (notify) {
+        const cust = custs.find((c) => c.id === data.customer_id)
+        if (cust) {
+          const ev = data.type === 'tebligat' ? 'tebligat_arrived' : 'mail_arrived'
+          await notifyEvent(ev, cust, { tur: data.type, gonderen: data.sender || '—' })
+        }
+      }
+    } else await mail.update(modal.data.id, rest)
     setModal(null); load()
   }
   const del = async (id) => { if (confirm('Bu gönderi silinsin mi?')) { await mail.remove(id); load() } }
@@ -260,6 +272,14 @@ function KargoForm({ modal, custs, onClose, onSave }) {
           <label>Not</label>
           <textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="ör. Yönlendirme adresi, aciliyet…" />
         </div>
+        {modal.mode === 'new' && (
+          <div className="pl-field">
+            <label className="pl-chk" style={{ display: 'inline-flex' }}>
+              <input type="checkbox" checked={!!f.notify} onChange={(e) => set('notify', e.target.checked)} />
+              Müşteriye hemen bildir (kayıt "bildirildi" durumuna geçer)
+            </label>
+          </div>
+        )}
       </form>
     </Modal>
   )

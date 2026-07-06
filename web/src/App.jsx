@@ -27,19 +27,45 @@ const services = [
 ]
 
 const steps = [
-  { n: '1', t: 'Paketini seç', d: 'İhtiyacına uygun planı dakikalar içinde belirle.' },
-  { n: '2', t: 'Evrakları ilet', d: 'Gerekli belgeleri topla; gerisini biz takip ederiz.' },
-  { n: '3', t: 'Adresin hazır', d: 'Yasal iş adresin ve hizmetlerin aktif olur.' },
-  { n: '4', t: 'İşine odaklan', d: 'Sen işini büyüt, idari yükü bize bırak.' },
+  { n: '1', ic: 'pick', t: 'Paketini seç', d: 'İhtiyacına uygun planı dakikalar içinde belirle, online öde.' },
+  { n: '2', ic: 'docs', t: 'Evrakları ilet', d: 'Gerekli belgeleri yükle; gerisini biz takip ederiz.' },
+  { n: '3', ic: 'address', t: 'Adresin hazır', d: 'Yasal iş adresin ve hizmetlerin aktif olur, kodun panele düşer.' },
+  { n: '4', ic: 'focus', t: 'İşine odaklan', d: 'Sen işini büyüt, posta-tebligat-idari yükü bize bırak.' },
 ]
+const stepIcons = {
+  pick: <><path d="M9 12l2 2 4-4" /><rect x="4" y="4" width="16" height="16" rx="2.5" /></>,
+  docs: <><path d="M14 3v5h5" /><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M9 13h6M9 17h4" /></>,
+  address: <><path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10Z" /><circle cx="12" cy="11" r="2.3" /></>,
+  focus: <><circle cx="12" cy="12" r="7.5" /><circle cx="12" cy="12" r="2.6" /><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" /></>,
+}
 
 const tiers = [
-  { name: 'Başlangıç', m: '499', y: '416', per: '₺ / ay', feat: false, items: ['Yasal iş adresi', 'Posta bildirimi', 'Aylık 2 saat toplantı odası'] },
-  { name: 'Pro', m: '899', y: '749', per: '₺ / ay', feat: true, items: ['Başlangıç’taki her şey', 'Telefon karşılama', 'Kargo yönlendirme', 'Aylık 8 saat toplantı odası', 'Öncelikli destek'] },
+  { name: 'Başlangıç', m: '799', y: '666', per: '₺ / ay', feat: false, items: ['Yasal iş adresi', 'Posta & tebligat bildirimi', 'Müşteri paneli + belge kasası', 'Aylık 2 saat toplantı odası'] },
+  { name: 'Pro', m: '1.499', y: '1.249', per: '₺ / ay', feat: true, items: ['Başlangıç’taki her şey', 'Telefon karşılama', 'Kargo yönlendirme (aylık 2 gönderi)', 'Aylık 8 saat toplantı odası', 'Öncelikli destek'] },
   { name: 'Kurumsal', m: 'Teklif', y: 'Teklif', per: '', custom: true, items: ['Pro’daki her şey', 'Mali müşavir paketi', 'Sınırsız toplantı odası', 'Özel hesap yöneticisi'] },
 ]
 
 const marqueeItems = ['Yasal İş Adresi', 'Posta & Kargo', 'Telefon Karşılama', 'Toplantı Odası', 'Mali Müşavir']
+
+/* Müşteri yorumları — Google değerlendirmesi görünümü.
+   ⚠️ YER TUTUCU: Yayına almadan önce GERÇEK Google/işletme yorumlarıyla
+   değiştirin (ya da Google Places API'den çekin). Uydurma yorum yayınlamak
+   yanıltıcıdır. `googleUrl`'ü kendi işletme profilinizin linkiyle güncelleyin. */
+const googleReviewUrl = 'https://www.google.com/maps' // TODO: GANU işletme profili linki
+const reviews = [
+  { name: 'Merve A.', initials: 'MA', color: '#0A7C6B', stars: 5, when: '2 hafta önce', local: true,
+    text: 'Şirketi kurarken adres derdine hiç girmedim. Kargolarım aynı gün panele düşüyor, tebligat gelince anında haber veriyorlar. Kavacık adresi de müşterilere güven veriyor.' },
+  { name: 'Kaan D.', initials: 'KD', color: '#B4530A', stars: 5, when: '1 ay önce', local: false,
+    text: 'E-ticaret için aldım. Posta yönetimi ve yönlendirme kusursuz. Panelden faturamı görüp kartla ödedim, muhasebe tarafı çok rahatladı.' },
+  { name: 'Selin I.', initials: 'SI', color: '#5B3AA6', stars: 5, when: '1 ay önce', local: true,
+    text: 'Yıllarca farklı firmalarla uğraştım, ilk kez her şey tek panelde. Yoklama gününde bile aradılar, hazırladılar. Fiyatı da bölgeye göre çok makul.' },
+  { name: 'Emre T.', initials: 'ET', color: '#0A5AA6', stars: 5, when: '2 ay önce', local: false,
+    text: 'Serbest çalışıyorum, prestijli adres lazımdı. Başvuru + ödeme 5 dakika sürdü, ertesi gün adresim hazırdı. Destek ekibi gerçekten hızlı.' },
+  { name: 'Zeynep K.', initials: 'ZK', color: '#A60A4E', stars: 5, when: '3 ay önce', local: true,
+    text: 'Belgelerim belge kasasında, sözleşmem panelde, her şey düzenli. Telefon karşılama hizmeti sayesinde tek çağrı kaçırmadım. Tavsiye ederim.' },
+  { name: 'Burak Ş.', initials: 'BŞ', color: '#0A7C6B', stars: 4, when: '3 ay önce', local: false,
+    text: 'Fiyat/performans çok iyi. Toplantı odasını da ara sıra kullanıyorum. Tek dileğim mobil uygulama olması, gerisi harika.' },
+]
 
 const faqs = [
   {
@@ -74,6 +100,12 @@ const faqs = [
     q: 'Sözleşme süresi ve iptal nasıl işliyor?',
     a: 'Paketler aylık veya yıllık seçilebilir; yıllık ödemede iki ay avantajlıdır. Yenileme tarihleri ' +
       'panelde takip edilir ve öncesinde hatırlatılır. Koşulların ayrıntısını sözleşmede şeffaf biçimde paylaşırız.',
+  },
+  {
+    q: 'Kira stopajı ödeyecek miyim?',
+    a: 'Hayır. Hizmeti şirketimizden KDV’li fatura karşılığı aldığınız için, gerçek kişiden ofis ' +
+      'kiralamadaki gibi aylık kira stopajı beyan etme yükümlülüğünüz doğmaz. Faturayı doğrudan gider ' +
+      'yazarsınız — muhasebeniz sadeleşir. (Kendi durumunuz için mali müşavirinize danışmanızı öneririz.)',
   },
 ]
 
@@ -124,7 +156,12 @@ function Nav() {
           <a href="#nasil" onClick={close}>Süreç</a>
           <a href="#paketler" onClick={close}>Paketler</a>
           <a href="/is-ortakligi" onClick={close}>İş Ortaklığı</a>
-          <a href="#iletisim" className="mast-cta" onClick={close}>Adresini al →</a>
+          <a href="/musteri" className="mast-login" onClick={close} aria-label="Müşteri girişi">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 5 }}>
+              <circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+            </svg>Giriş
+          </a>
+          <a href="/satin-al" className="mast-cta" onClick={close}>Satın al →</a>
         </div>
       </div>
     </motion.nav>
@@ -303,12 +340,18 @@ function Steps() {
           <motion.span className="kicker" variants={rise}>Süreç</motion.span>
           <motion.h2 variants={rise}>Dört adımda<br />iş adresin hazır<span className="dot">.</span></motion.h2>
         </motion.div>
-        <motion.div className="steps" {...reveal} variants={stagger}>
+        <motion.div className="flow" {...reveal} variants={stagger}>
+          <motion.span className="flow-rail" variants={wipe} aria-hidden="true" />
           {steps.map((s) => (
-            <motion.div className="step" key={s.n} variants={rise}>
-              <div className="step-num">{s.n}</div>
-              <h3>{s.t}</h3>
-              <p>{s.d}</p>
+            <motion.div className="flow-step" key={s.n} variants={rise}>
+              <div className="flow-node">
+                <svg className="flow-ic" viewBox="0 0 24 24" aria-hidden="true">{stepIcons[s.ic]}</svg>
+                <span className="flow-n">{s.n}</span>
+              </div>
+              <div className="flow-body">
+                <h3>{s.t}</h3>
+                <p>{s.d}</p>
+              </div>
             </motion.div>
           ))}
         </motion.div>
@@ -380,8 +423,8 @@ function Pricing() {
                   <li key={i}><Check /><span>{i}</span></li>
                 ))}
               </ul>
-              <a href="#iletisim" className={`btn ${t.feat ? 'btn-solid' : 'btn-line'}`}>
-                {t.custom ? 'Teklif al' : 'Seç'}
+              <a href={`/satin-al?paket=${encodeURIComponent(t.name)}`} className={`btn ${t.feat ? 'btn-solid' : 'btn-line'}`}>
+                {t.custom ? 'Teklif al →' : 'Satın al →'}
               </a>
             </motion.div>
           ))}
@@ -430,8 +473,11 @@ function CtaBand() {
       <div className="wrap">
         <motion.div className="cta-band" {...reveal} variants={stagger}>
           <motion.h2 variants={rise}>Şirketine<br /><em>prestijli</em> bir adres<span className="dot">.</span></motion.h2>
-          <motion.p variants={rise}>Bugün başla; yasal adresin yarın hazır. Evrakları biz takip ederiz, sen işine bak.</motion.p>
-          <motion.a variants={rise} href="mailto:merhaba@ganu.com.tr" className="btn btn-solid big">merhaba@ganu.com.tr →</motion.a>
+          <motion.p variants={rise}>Bugün başla; yasal adresin yarın hazır. 30 saniyede satın al, evrakları biz takip edelim.</motion.p>
+          <motion.a variants={rise} href="/satin-al" className="btn btn-solid big">Satın almaya başla →</motion.a>
+          <motion.p variants={rise} style={{ marginTop: 12, fontSize: 14, opacity: 0.75 }}>
+            Sorunuz mu var? <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a>
+          </motion.p>
         </motion.div>
       </div>
     </section>
@@ -468,10 +514,10 @@ function Footer() {
           <div>
             <h4>Kurumsal</h4>
             <ul>
-              <li><a href="#nasil">Süreç</a></li>
+              <li><a href="/musteri"><b>Müşteri girişi</b></a></li>
+              <li><a href="/satin-al">Satın al</a></li>
               <li><a href="#paketler">Paketler</a></li>
               <li><a href="#sss">SSS</a></li>
-              <li><a href="#iletisim">İletişim</a></li>
             </ul>
           </div>
           <div>
@@ -497,6 +543,69 @@ function Footer() {
   )
 }
 
+/* Google "G" logo — inline, çok renkli */
+const GoogleG = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z" />
+    <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z" />
+    <path fill="#FBBC05" d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z" />
+    <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z" />
+  </svg>
+)
+const Stars = ({ n = 5, size = 15 }) => (
+  <span aria-label={`${n} / 5 yıldız`} style={{ display: 'inline-flex', gap: 1 }}>
+    {[1, 2, 3, 4, 5].map((i) => (
+      <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+        fill={i <= n ? '#FBBC05' : '#dbe2ea'}>
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+      </svg>
+    ))}
+  </span>
+)
+
+function ReviewCard({ r }) {
+  return (
+    <figure className="rv-card">
+      <div className="rv-top">
+        <span className="rv-av" style={{ background: r.color }}>{r.initials}</span>
+        <div className="rv-who">
+          <figcaption className="rv-name">{r.name}</figcaption>
+          <span className="rv-meta">{r.local ? 'Yerel Rehber · ' : ''}{r.when}</span>
+        </div>
+        <span className="rv-g" title="Google değerlendirmesi"><GoogleG /></span>
+      </div>
+      <Stars n={r.stars} />
+      <blockquote className="rv-text">{r.text}</blockquote>
+    </figure>
+  )
+}
+
+function Reviews() {
+  const loop = [...reviews, ...reviews] // kesintisiz kayış için iki kopya
+  const avg = (reviews.reduce((s, r) => s + r.stars, 0) / reviews.length).toFixed(1)
+  return (
+    <section className="section reviews-sec" id="yorumlar" aria-label="Müşteri yorumları">
+      <div className="wrap">
+        <motion.div className="shead" {...reveal} variants={stagger}>
+          <motion.span className="kicker" variants={rise}>Müşteri Deneyimi</motion.span>
+          <motion.h2 variants={rise}>Kullananlar ne diyor<span className="dot">?</span></motion.h2>
+        </motion.div>
+        <motion.a className="rv-rating" href={googleReviewUrl} target="_blank" rel="noreferrer" {...reveal} variants={rise}>
+          <GoogleG size={22} />
+          <b>{avg}</b>
+          <Stars n={Math.round(avg)} size={17} />
+          <span className="rv-rating-meta">Google değerlendirmeleri · <span className="rv-link">Yorum yaz →</span></span>
+        </motion.a>
+      </div>
+      <div className="rv-marquee" aria-hidden="false">
+        <div className="rv-track">
+          {loop.map((r, i) => <ReviewCard key={i} r={r} />)}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export default function App() {
   return (
     <MotionConfig reducedMotion="user">
@@ -509,6 +618,7 @@ export default function App() {
         <Services />
         <Steps />
         <Trust />
+        <Reviews />
         <Pricing />
         <Faq />
         <CtaBand />

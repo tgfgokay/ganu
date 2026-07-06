@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
-  customers, contracts, mail, invoices, documents, requests,
-  fileToStoredUrl, DOC_TYPES, REQUEST_STATUS,
+  customers, contracts, mail, invoices, documents, requests, inspections,
+  fileToStoredUrl, invStatus, onboardingSteps, activateAfterPayment,
+  DOC_TYPES, REQUEST_STATUS, PACKAGES, PACKAGE_PRICES,
 } from '../lib/store.js'
 import { Modal, StatusBadge, TypeBadge, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
+import { TalepSohbet } from '../MusteriPortal.jsx'
 
 const docLabel = (v) => (DOC_TYPES.find((d) => d.v === v) || {}).l || v
 
@@ -16,19 +18,23 @@ export default function MusteriDetay() {
   const [inv, setInv] = useState([])
   const [docs, setDocs] = useState([])
   const [reqs, setReqs] = useState([])
+  const [insp, setInsp] = useState([])
   const [docModal, setDocModal] = useState(false)
+  const [chatReq, setChatReq] = useState(null)
+  const [lightbox, setLightbox] = useState(null)
   const [notFound, setNotFound] = useState(false)
 
   const load = async () => {
     const cust = await customers.get(id)
     if (!cust) { setNotFound(true); return }
     setC(cust)
-    const [a, b, d, e, r] = await Promise.all([contracts.list(), mail.list(), invoices.list(), documents.list(), requests.list()])
+    const [a, b, d, e, r, ins] = await Promise.all([contracts.list(), mail.list(), invoices.list(), documents.list(), requests.list(), inspections.list()])
     setCt(a.filter((x) => x.customer_id === id))
     setMl(b.filter((x) => x.customer_id === id))
     setInv(d.filter((x) => x.customer_id === id))
     setDocs(e.filter((x) => x.customer_id === id))
     setReqs(r.filter((x) => x.customer_id === id))
+    setInsp(ins.filter((x) => x.customer_id === id))
   }
   useEffect(() => { load() }, [id])
 
@@ -42,6 +48,38 @@ export default function MusteriDetay() {
   const revenue = inv.filter((i) => i.status === 'ödendi').reduce((s, i) => s + (Number(i.amount) || 0), 0)
   const outstanding = inv.filter((i) => i.status !== 'ödendi').reduce((s, i) => s + (Number(i.amount) || 0), 0)
   const openReq = reqs.filter((r) => r.status === 'yeni' || r.status === 'işlemde')
+
+  const steps = onboardingSteps(c, { contracts: ct, documents: docs, invoices: inv, inspections: insp })
+  const doneCount = steps.filter((s) => s.done).length
+  const genCode = async () => {
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase()
+    await customers.update(id, { access_code: code }); load()
+  }
+  const activate = async () => { await customers.update(id, { status: 'aktif' }); load() }
+  const clearClaim = async () => {
+    if (!confirm('Ödeme bildirimini temizle? (dekont ve tutar bilgisi silinir)')) return
+    await customers.update(id, { payment_claimed_at: '', payment_receipt_url: '', payment_expected: 0, payment_pkg: '', payment_sender: '' })
+    load()
+  }
+
+  /* Ödeme onayı: para hesaba geçti / kartla ödendi → sözleşme + ödendi
+     faturası + kod + aktif durum tek tıkla. Paket, başvuru notundan gelir. */
+  const noteMatch = (c.notes || '').match(/İstenen paket:\s*(\S+)/)
+  const wantedPkg = PACKAGES.includes(noteMatch?.[1]) ? noteMatch[1] : 'Başlangıç'
+  const paymentReceived = async () => {
+    const pkg = prompt(`Hangi paket için ödeme alındı? (${PACKAGES.join(' / ')})`, wantedPkg)
+    if (!pkg || !PACKAGES.includes(pkg)) return
+    let price = PACKAGE_PRICES[pkg]
+    if (!price) { // Kurumsal — özel teklif tutarı elle girilir
+      const v = prompt('Kurumsal paket için anlaşılan YILLIK tutarı girin (₺):', '24990')
+      price = Number((v || '').replace(/\D/g, ''))
+      if (!price) return
+    }
+    if (!confirm(`${pkg} paketi (₺${price.toLocaleString('tr-TR')}) için ödeme onaylanacak:\n• 1 yıllık sözleşme açılır\n• ₺${price.toLocaleString('tr-TR')} ÖDENDİ faturası kesilir\n• Erişim kodu üretilir, müşteri AKTİF olur\n• Müşteriye bildirim gider\n\nDevam?`)) return
+    const updated = await activateAfterPayment(c, pkg, price)
+    alert(`Kurulum tamamlandı ✓\nPortal erişim kodu: ${updated.access_code}\nKodu müşteriye iletin.`)
+    load()
+  }
 
   return (
     <div>
@@ -75,6 +113,79 @@ export default function MusteriDetay() {
         <div className="pl-stat"><div className={`lab`}>Açık talep</div><div className={`val${openReq.length ? ' warn' : ''}`}>{openReq.length}</div></div>
       </div>
 
+      {/* ödeme onayı — aday müşteri için tek tıkla kurulum */}
+      {c.status === 'aday' && (
+        <div className="pl-card" style={{ marginBottom: 20, borderColor: c.payment_claimed_at ? 'var(--teal)' : undefined }}>
+          <div className="pl-card-h">
+            <h2>💰 Ödeme Onayı</h2>
+            {c.payment_claimed_at && <span className="pl-badge b-warn">dekont bildirimi bekliyor</span>}
+          </div>
+          <div className="pl-card-b">
+            {c.payment_claimed_at ? (
+              <div className="pl-kv" style={{ marginBottom: 14 }}>
+                <div><span className="k">Bildirim</span><span className="v">{fmtDate(c.payment_claimed_at)} · {new Date(c.payment_claimed_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                <div><span className="k">Beklenen tutar</span><span className="v"><b>{fmtTL(c.payment_expected || 0)}</b> · {c.payment_pkg || wantedPkg}</span></div>
+                <div><span className="k">Gönderen (beyan)</span><span className="v">{c.payment_sender || c.title}</span></div>
+              </div>
+            ) : (
+              <p className="t2" style={{ marginBottom: 12 }}>Müşteri henüz ödeme bildirmedi. Havale/kart ulaştıysa aşağıdan tek tıkla kurulumu tamamlayabilirsiniz.</p>
+            )}
+
+            {c.payment_receipt_url && (
+              <div style={{ marginBottom: 14 }}>
+                <div className="t2" style={{ marginBottom: 6 }}>Yüklenen dekont:</div>
+                {c.payment_receipt_url.startsWith('data:image') || /\.(png|jpe?g|webp)$/i.test(c.payment_receipt_url)
+                  ? <img src={c.payment_receipt_url} alt="dekont" onClick={() => setLightbox(c.payment_receipt_url)}
+                      style={{ maxHeight: 160, borderRadius: 6, border: '1px solid #e4e9ef', cursor: 'zoom-in' }} />
+                  : <a className="pl-btn pl-btn-ghost pl-btn-sm" href={c.payment_receipt_url} target="_blank" rel="noreferrer">📄 Dekontu aç (PDF)</a>}
+              </div>
+            )}
+
+            <div className="pl-actions">
+              <button className="pl-btn pl-btn-teal" onClick={paymentReceived}>Ödeme doğru → kurulumu tamamla</button>
+              {c.payment_claimed_at && <button className="pl-btn pl-btn-ghost" onClick={clearClaim}>Bildirimi temizle</button>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* kurulum adımları — satın alma sonrası süreç; tamamlanınca gizlenir */}
+      {doneCount < steps.length && (
+        <div className="pl-card" style={{ marginBottom: 20 }}>
+          <div className="pl-card-h">
+            <h2>Kurulum Adımları</h2>
+            <span className="count">{doneCount}/{steps.length} tamam</span>
+          </div>
+          <div className="pl-card-b">
+            {steps.map((s, i) => (
+              <div className="pl-row" key={s.key}>
+                <span aria-hidden="true" style={{
+                  width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, fontWeight: 700,
+                  background: s.done ? 'var(--teal, #00D4B2)' : '#eef2f6',
+                  color: s.done ? '#04352c' : '#64748b',
+                }}>{s.done ? '✓' : i + 1}</span>
+                <div className="grow">
+                  <div className="t1" style={s.done ? { textDecoration: 'line-through', opacity: 0.6 } : undefined}>{s.label}</div>
+                  {!s.done && <div className="t2">{s.hint}</div>}
+                </div>
+                {!s.done && s.key === 'portal' && !c.access_code && (
+                  <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={genCode}>Kod üret</button>
+                )}
+                {!s.done && s.key === 'aktif' && (
+                  <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={activate}>Aktif yap</button>
+                )}
+                {!s.done && s.key === 'belge' && (
+                  <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setDocModal(true)}>Belge ekle</button>
+                )}
+                {!s.done && s.to && <Link className="pl-btn pl-btn-ghost pl-btn-sm" to={s.to}>Git →</Link>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* açık talepler */}
       {openReq.length > 0 && (
         <div className="pl-card" style={{ marginBottom: 20 }}>
@@ -87,6 +198,7 @@ export default function MusteriDetay() {
                   <div className="t1">{r.note || '—'}</div>
                   <div className="t2">{fmtDate(r.created_at)}</div>
                 </div>
+                <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setChatReq(r)}>Yanıtla</button>
                 <select value={r.status} onChange={(e) => setReqStatus(r, e.target.value)}
                   style={{ font: 'inherit', fontSize: 13, padding: '5px 8px', border: '1.5px solid #e4e9ef', borderRadius: 8 }}>
                   {REQUEST_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -124,9 +236,9 @@ export default function MusteriDetay() {
               <div className="pl-row" key={x.id}>
                 <div className="grow">
                   <div className="t1">{fmtTL(x.amount)}</div>
-                  <div className="t2">{fmtDate(x.issue_date)} · {x.status}</div>
+                  <div className="t2">{fmtDate(x.issue_date)} · {invStatus(x)}</div>
                 </div>
-                <span className={`pl-badge ${x.status === 'ödendi' ? 'b-ok' : x.status === 'gecikti' ? 'b-danger' : 'b-warn'}`}>{x.status}</span>
+                <span className={`pl-badge ${invStatus(x) === 'ödendi' ? 'b-ok' : invStatus(x) === 'gecikti' ? 'b-danger' : 'b-warn'}`}>{invStatus(x)}</span>
               </div>
             ))}
             {outstanding > 0 && <div className="pl-row"><div className="grow"><div className="t2">Bekleyen toplam: <b>{fmtTL(outstanding)}</b></div></div></div>}
@@ -175,6 +287,12 @@ export default function MusteriDetay() {
       </div>
 
       {docModal && <BelgeForm onClose={() => setDocModal(false)} onSave={saveDoc} />}
+      {chatReq && <TalepSohbet req={chatReq} from="ganu" onClose={() => setChatReq(null)} />}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24, cursor: 'zoom-out' }}>
+          <img src={lightbox} alt="dekont" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }} />
+        </div>
+      )}
     </div>
   )
 }

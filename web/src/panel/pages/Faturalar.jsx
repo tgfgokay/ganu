@@ -1,11 +1,11 @@
 import { useEffect, useState, useMemo } from 'react'
-import { invoices, customers, withCustomerNames, revenueByMonth, issueEInvoice, getConfig, setConfig, INVOICE_STATUS, EFATURA_PROVIDERS } from '../lib/store.js'
+import { invoices, customers, withCustomerNames, revenueByMonth, issueEInvoice, notifyEvent, invStatus, getConfig, setConfig, INVOICE_STATUS, EFATURA_PROVIDERS } from '../lib/store.js'
 import { Modal, fmtDate, fmtTL } from './_ui.jsx'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const emptyForm = () => ({
   customer_id: '', amount: '', status: 'bekliyor',
-  issue_date: today(), due_date: '', paid_date: '', note: '',
+  issue_date: today(), due_date: '', paid_date: '', note: '', payment_link: '', notify: true,
 })
 
 const INV_CLS = { bekliyor: 'b-warn', 'ödendi': 'b-ok', gecikti: 'b-danger' }
@@ -31,7 +31,7 @@ export default function Faturalar() {
   useEffect(() => { load() }, [])
 
   const filtered = useMemo(() => rows.filter((r) => {
-    if (fStatus && r.status !== fStatus) return false
+    if (fStatus && invStatus(r) !== fStatus) return false
     if (q) {
       const s = ((r.customer?.title || '') + ' ' + (r.note || '')).toLowerCase()
       if (!s.includes(q.toLowerCase())) return false
@@ -40,17 +40,23 @@ export default function Faturalar() {
   }).sort((a, b) => (b.issue_date || '').localeCompare(a.issue_date || '')), [rows, q, fStatus])
 
   const totals = useMemo(() => {
-    const paid = rows.filter((r) => r.status === 'ödendi').reduce((s, r) => s + (Number(r.amount) || 0), 0)
-    const wait = rows.filter((r) => r.status === 'bekliyor').reduce((s, r) => s + (Number(r.amount) || 0), 0)
-    const late = rows.filter((r) => r.status === 'gecikti').reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    const paid = rows.filter((r) => invStatus(r) === 'ödendi').reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    const wait = rows.filter((r) => invStatus(r) === 'bekliyor').reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    const late = rows.filter((r) => invStatus(r) === 'gecikti').reduce((s, r) => s + (Number(r.amount) || 0), 0)
     return { paid, wait, late }
   }, [rows])
 
   const save = async (form) => {
-    const data = { ...form, amount: Number(form.amount) || 0 }
+    const { notify, ...rest } = form
+    const data = { ...rest, amount: Number(rest.amount) || 0 }
     if (data.status === 'ödendi' && !data.paid_date) data.paid_date = today()
-    if (modal.mode === 'new') await invoices.create(data)
-    else await invoices.update(modal.data.id, data)
+    if (modal.mode === 'new') {
+      await invoices.create(data)
+      if (notify) {
+        const cust = custs.find((c) => c.id === data.customer_id)
+        if (cust) await notifyEvent('invoice_issued', cust, { tutar: fmtTL(data.amount), tarih: fmtDate(data.issue_date) })
+      }
+    } else await invoices.update(modal.data.id, data)
     setModal(null); load()
   }
   const del = async (id) => { if (confirm('Bu fatura silinsin mi?')) { await invoices.remove(id); load() } }
@@ -168,12 +174,12 @@ export default function Faturalar() {
                 <td>
                   <span className="strong">{r.customer?.title || '—'}</span>
                   {r.note && <div className="sub">{r.note}</div>}
-                  {r.einvoice_status && <div className="sub">e-Belge: {r.einvoice_no || r.einvoice_uuid} · {r.einvoice_status}</div>}
+                  {r.einvoice_status && <div className="sub">e-Belge: {r.einvoice_no || r.einvoice_uuid} · {r.einvoice_status}{r.einvoice_pdf && <> · <a className="pl-link" href={r.einvoice_pdf} target="_blank" rel="noreferrer">PDF</a></>}</div>}
                 </td>
                 <td className="pl-num strong">{fmtTL(r.amount)}</td>
                 <td className="pl-num">{fmtDate(r.issue_date)}</td>
                 <td className="pl-num">{fmtDate(r.due_date)}</td>
-                <td><InvBadge s={r.status} /></td>
+                <td><InvBadge s={invStatus(r)} /></td>
                 <td>
                   <div className="pl-actions">
                     {r.status !== 'ödendi' && <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => markPaid(r)}>Ödendi</button>}
@@ -243,6 +249,18 @@ function FaturaForm({ modal, custs, onClose, onSave }) {
           <label>Not</label>
           <textarea value={f.note || ''} onChange={(e) => set('note', e.target.value)} placeholder="ör. Yıllık sanal ofis bedeli" />
         </div>
+        <div className="pl-field">
+          <label>Kartla ödeme linki (opsiyonel)</label>
+          <input value={f.payment_link || ''} onChange={(e) => set('payment_link', e.target.value)} placeholder="iyzico/PayTR ödeme linki — müşteri portalında 'Kartla öde' olarak çıkar" />
+        </div>
+        {modal.mode === 'new' && (
+          <div className="pl-field">
+            <label className="pl-chk" style={{ display: 'inline-flex' }}>
+              <input type="checkbox" checked={!!f.notify} onChange={(e) => set('notify', e.target.checked)} />
+              Müşteriye bildirim gönder (fatura oluşturuldu)
+            </label>
+          </div>
+        )}
       </form>
     </Modal>
   )

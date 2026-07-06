@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { changePass, authMode } from '../lib/auth.js'
-import { verifyMigration } from '../lib/store.js'
+import { verifyMigration, getConfig, setConfig } from '../lib/store.js'
 
 export default function Ayarlar() {
   const cloud = authMode === 'supabase'
@@ -69,6 +69,8 @@ export default function Ayarlar() {
         </div>
       </div>
 
+      <PaymentSettings />
+
       <div className="pl-card" style={{ marginTop: 20 }}>
         <div className="pl-card-h"><h2>Müşteri portalı</h2></div>
         <div className="pl-form">
@@ -89,6 +91,54 @@ export default function Ayarlar() {
         <span className="msg">
           <b>Buluta geçiş:</b> Supabase projesi açıp <code>.env</code> dosyasına anahtarları girince veriler tüm cihazlarda ortak olur; bu yönetim paneli gerçek e-posta + parola girişine (Supabase Auth) geçer, müşteri paneli de aynı altyapıyı kullanır. Adımlar proje kökündeki <b>SUPABASE-KURULUM.md</b> dosyasında.
         </span>
+      </div>
+    </div>
+  )
+}
+
+/* ---- ödeme bilgileri — müşteri portalındaki "Öde" ekranında gösterilir ---- */
+function PaymentSettings() {
+  const [cfg, setCfg] = useState(getConfig())
+  const save = (patch) => setCfg(setConfig(patch))
+  return (
+    <div className="pl-card" style={{ marginTop: 20 }}>
+      <div className="pl-card-h"><h2>Ödeme bilgileri (havale/EFT)</h2></div>
+      <div className="pl-form">
+        <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6 }}>
+          Müşteri portalındaki <b>Öde</b> butonuna basan müşteriye bu bilgiler gösterilir.
+          Kartla online ödeme için ileride sanal POS (iyzico/PayTR) bağlanabilir; o zamana dek
+          fatura bazında "ödeme linki" alanını da kullanabilirsiniz (Fatura düzenle ekranı).
+        </p>
+        <div className="two">
+          <div className="pl-field">
+            <label>Banka adı</label>
+            <input value={cfg.payment_bank} onChange={(e) => save({ payment_bank: e.target.value })} placeholder="ör. Ziraat Bankası" />
+          </div>
+          <div className="pl-field">
+            <label>Hesap sahibi / alıcı ünvanı</label>
+            <input value={cfg.payment_recipient} onChange={(e) => save({ payment_recipient: e.target.value })} placeholder="ör. GANU Sanal Ofis Ltd. Şti." />
+          </div>
+        </div>
+        <div className="pl-field">
+          <label>IBAN</label>
+          <input value={cfg.payment_iban} onChange={(e) => save({ payment_iban: e.target.value.toUpperCase() })} placeholder="TR__ ____ ____ ____ ____ ____ __" />
+        </div>
+        <div className="pl-field">
+          <label>Kartla ödeme sayfası (sanal POS linki)</label>
+          <input value={cfg.payment_page_link} onChange={(e) => save({ payment_page_link: e.target.value })}
+            placeholder="iyzico link / PayTR ödeme sayfası URL'si — sitede ve portalda 'Kartla öde' olarak çıkar" />
+        </div>
+        <div className="pl-field" style={{ marginTop: 4 }}>
+          <label className="pl-chk" style={{ display: 'inline-flex' }}>
+            <input type="checkbox" checked={!!cfg.auto_activate_receipt} onChange={(e) => save({ auto_activate_receipt: e.target.checked })} />
+            Havalede dekont yüklenince <b style={{ margin: '0 4px' }}>otomatik aktive et</b> (manuel onay yok)
+          </label>
+          <div className="t2" style={{ marginTop: 6, color: cfg.auto_activate_receipt ? '#b45309' : 'var(--muted)' }}>
+            {cfg.auto_activate_receipt
+              ? '⚠️ Açık: Dekont yükleyen müşteri anında aktive olur (para gelmeden). Sahte dekont riski size ait. Güvenli yol: kartla ödeme veya banka API entegrasyonu.'
+              : 'Kapalı: Havale dekontu sizin onayınıza düşer (müşteri detayında dekontu görüp onaylarsınız). Kart ödemesi her hâlükârda otomatiktir.'}
+          </div>
+        </div>
       </div>
     </div>
   )

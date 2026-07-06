@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { customers, contracts, mail, partners, CUSTOMER_STATUS } from '../lib/store.js'
+import { customers, contracts, mail, partners, invoices, requests, documents, CUSTOMER_STATUS } from '../lib/store.js'
 import { Modal, fmtDate } from './_ui.jsx'
 
 const randCode = () => Math.random().toString(36).slice(2, 8).toUpperCase()
 const emptyForm = () => ({ title: '', contact: '', email: '', phone: '', tax_no: '', tax_office: '', tc: '', status: 'aktif', access_code: randCode(), partner_id: '', notes: '' })
 
-const CU_CLS = { aktif: 'b-aktif', 'askıda': 'b-warn', 'ayrıldı': 'b-danger' }
+const CU_CLS = { aday: 'b-mektup', aktif: 'b-aktif', 'askıda': 'b-warn', 'ayrıldı': 'b-danger' }
 const CuBadge = ({ s }) => <span className={`pl-badge ${CU_CLS[s] || 'b-aktif'}`}>{s || 'aktif'}</span>
 
 export default function Musteriler() {
@@ -31,13 +31,45 @@ export default function Musteriler() {
   ), [rows, q])
 
   const save = async (form) => {
+    // iletişim alanları doluysa biçimi doğru olmalı
+    const phoneDigits = (form.phone || '').replace(/\D/g, '')
+    if (phoneDigits && !/^5\d{9}$/.test(phoneDigits) && !/^0\d{10}$/.test(phoneDigits)) {
+      alert('Telefon numarası eksik/hatalı görünüyor — 05xx xxx xx xx biçiminde 11 hane girin.')
+      return
+    }
+    if ((form.email || '').trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) {
+      alert('E-posta adresi hatalı görünüyor — ör. ad@firma.com')
+      return
+    }
+    // erişim kodu benzersiz olmalı — başka müşteri ya da iş ortağıyla çakışamaz
+    const code = (form.access_code || '').trim().toUpperCase()
+    if (code) {
+      const selfId = modal.mode === 'edit' ? modal.data.id : null
+      const clashCust = rows.find((c) => c.id !== selfId && (c.access_code || '').toUpperCase() === code)
+      const clashPart = pts.find((p) => (p.access_code || '').toUpperCase() === code)
+      if (clashCust || clashPart) {
+        alert(`Bu erişim kodu zaten kullanımda (${clashCust ? clashCust.title : clashPart.name}). "Üret" ile yeni kod alın.`)
+        return
+      }
+    }
     if (modal.mode === 'new') await customers.create(form)
     else await customers.update(modal.data.id, form)
     setModal(null); load()
   }
   const del = async (r) => {
+    const [inv, rq, docs] = await Promise.all([invoices.list(), requests.list(), documents.list()])
     const cc = counts[r.id] || { soz: 0, kargo: 0 }
-    if (cc.soz || cc.kargo) { alert(`Bu müşterinin ${cc.soz} sözleşmesi ve ${cc.kargo} gönderisi var. Önce onları silmelisin.`); return }
+    const bag = {
+      'sözleşme': cc.soz, 'gönderi': cc.kargo,
+      'fatura': inv.filter((x) => x.customer_id === r.id).length,
+      'talep': rq.filter((x) => x.customer_id === r.id).length,
+      'belge': docs.filter((x) => x.customer_id === r.id).length,
+    }
+    const blockers = Object.entries(bag).filter(([, n]) => n > 0)
+    if (blockers.length) {
+      alert(`Bu müşterinin bağlı kayıtları var: ${blockers.map(([k, n]) => `${n} ${k}`).join(', ')}. Önce onları silmelisin (ya da müşteriyi "ayrıldı" yapıp saklamalısın).`)
+      return
+    }
     if (confirm('Müşteri silinsin mi?')) { await customers.remove(r.id); load() }
   }
 
@@ -69,7 +101,9 @@ export default function Musteriler() {
                 <td className="pl-num">{counts[r.id]?.kargo ?? 0}</td>
                 <td>
                   <div className="pl-actions">
-                    <Link to={`/panel/musteriler/${r.id}`} className="pl-btn pl-btn-ghost pl-btn-sm">Detay</Link>
+                    {r.status === 'aday'
+                      ? <Link to={`/panel/musteriler/${r.id}`} className="pl-btn pl-btn-teal pl-btn-sm">Kuruluma başla →</Link>
+                      : <Link to={`/panel/musteriler/${r.id}`} className="pl-btn pl-btn-ghost pl-btn-sm">Detay</Link>}
                     <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setModal({ mode: 'edit', data: { ...r } })}>Düzenle</button>
                     <button className="pl-btn pl-btn-danger pl-btn-sm" onClick={() => del(r)}>Sil</button>
                   </div>

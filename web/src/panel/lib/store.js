@@ -16,6 +16,7 @@ const TABLE = {
   customers: 'customers', contracts: 'contracts', mail_items: 'mail_items',
   invoices: 'invoices', documents: 'documents', notifications: 'notifications',
   requests: 'requests', inspections: 'inspections', partners: 'partners',
+  expenses: 'expenses', request_messages: 'request_messages',
 }
 
 /* Panel yapılandırması (bildirim kanalları, API anahtarları) — ayrı anahtar */
@@ -33,6 +34,15 @@ const DEFAULT_CFG = {
   efatura_user: '',
   efatura_mode: 'e-arsiv', // e-arsiv | e-fatura
   efatura_enabled: false,
+  // ödeme bilgileri (müşteri portalındaki "Öde" ekranında gösterilir)
+  payment_recipient: 'GANU Sanal Ofis', // hesap sahibi / alıcı ünvanı
+  payment_bank: '',                     // banka adı (ör. Ziraat Bankası)
+  payment_iban: '',
+  payment_page_link: '', // sanal POS genel ödeme sayfası (iyzico link / PayTR) — sitede "kartla öde"
+  // havale: dekont yüklenince ONAY BEKLEMEDEN otomatik aktive et.
+  // Varsayılan KAPALI — para geldikten sonra yönetici dekonta bakıp
+  // müşteri detayından onaylar. (Açılırsa sahte dekont riski yöneticiye ait.)
+  auto_activate_receipt: false,
 }
 export function getConfig() {
   try { return { ...DEFAULT_CFG, ...(JSON.parse(localStorage.getItem(CFG_KEY)) || {}) } }
@@ -90,9 +100,9 @@ function seed() {
       { id: c3, title: 'Işık Danışmanlık', contact: 'Selin Işık', email: 'selin@isikdan.com', phone: '0555 777 88 99', tax_no: '', tax_office: '', tc: '11111111111', status: 'aktif', access_code: 'ISIK03', partner_id: '', notes: '', created_at: now() },
     ],
     contracts: [
-      { id: uid(), customer_id: c1, package: 'Pro', start_date: addDays(-350), end_date: addDays(15), price: 899, status: 'aktif', auto_renew: false, created_at: now() },
-      { id: uid(), customer_id: c2, package: 'Kurumsal', start_date: addDays(-360), end_date: addDays(5), price: 1499, status: 'aktif', auto_renew: true, created_at: now() },
-      { id: uid(), customer_id: c3, package: 'Başlangıç', start_date: addDays(-120), end_date: addDays(245), price: 499, status: 'aktif', auto_renew: false, created_at: now() },
+      { id: uid(), customer_id: c1, package: 'Pro', start_date: addDays(-350), end_date: addDays(15), price: 14990, status: 'aktif', auto_renew: false, created_at: now() },
+      { id: uid(), customer_id: c2, package: 'Kurumsal', start_date: addDays(-360), end_date: addDays(5), price: 24990, status: 'aktif', auto_renew: true, created_at: now() },
+      { id: uid(), customer_id: c3, package: 'Başlangıç', start_date: addDays(-120), end_date: addDays(245), price: 7990, status: 'aktif', auto_renew: false, created_at: now() },
     ],
     mail_items: [
       { id: uid(), customer_id: c1, type: 'kargo', sender: 'Trendyol', received_date: iso(today), status: 'geldi', photo_url: '', shelf: 'Raf A-3', forward_tracking: '', delivered_to: '', delivered_at: '', notes: '', created_at: now() },
@@ -101,9 +111,9 @@ function seed() {
       { id: uid(), customer_id: c3, type: 'kargo', sender: 'Aras Kargo', received_date: addDays(-1), status: 'yönlendirildi', photo_url: '', shelf: '', forward_tracking: '7350012345', delivered_to: '', delivered_at: '', notes: 'Kadıköy adresine', created_at: now() },
     ],
     invoices: [
-      { id: uid(), customer_id: c1, amount: 899, status: 'ödendi', issue_date: addDays(-20), due_date: addDays(-5), paid_date: addDays(-8), note: 'Pro yıllık', created_at: now() },
-      { id: uid(), customer_id: c2, amount: 1499, status: 'bekliyor', issue_date: addDays(-3), due_date: addDays(12), paid_date: '', note: 'Kurumsal yıllık', created_at: now() },
-      { id: uid(), customer_id: c3, amount: 499, status: 'gecikti', issue_date: addDays(-40), due_date: addDays(-10), paid_date: '', note: 'Başlangıç yıllık', created_at: now() },
+      { id: uid(), customer_id: c1, amount: 14990, status: 'ödendi', issue_date: addDays(-20), due_date: addDays(-5), paid_date: addDays(-8), note: 'Pro yıllık', created_at: now() },
+      { id: uid(), customer_id: c2, amount: 24990, status: 'bekliyor', issue_date: addDays(-3), due_date: addDays(12), paid_date: '', note: 'Kurumsal yıllık', created_at: now() },
+      { id: uid(), customer_id: c3, amount: 7990, status: 'gecikti', issue_date: addDays(-40), due_date: addDays(-10), paid_date: '', note: 'Başlangıç yıllık', created_at: now() },
     ],
     documents: [
       { id: uid(), customer_id: c1, name: 'İmza Sirküleri', type: 'imza_sirkuleri', file_url: '', note: '2026', created_at: now() },
@@ -116,6 +126,11 @@ function seed() {
     inspections: [
       { id: uid(), customer_id: c1, date: addDays(-30), result: 'olumlu', officer: '', attendee: 'Merve Aydın', note: 'Açılış yoklaması, sorun yok.', created_at: now() },
     ],
+    expenses: [
+      { id: uid(), date: addDays(-15), category: 'kira', amount: 25000, customer_id: '', billable: false, note: 'Temmuz ofis kirası', created_at: now() },
+      { id: uid(), date: addDays(-5), category: 'kargo', amount: 180, customer_id: c3, billable: true, note: 'Kadıköy yönlendirme kargo ücreti', created_at: now() },
+    ],
+    request_messages: [],
   }
 }
 
@@ -198,7 +213,22 @@ export const notifications = collection('notifications')
 export const requests = collection('requests')
 export const inspections = collection('inspections')
 export const partners = collection('partners')
+export const expenses = collection('expenses')
+export const requestMessages = collection('request_messages')
 export { usingSupabase }
+
+/* ---------- talep mesajlaşması (panel ↔ müşteri) ----------
+   Her talep bir konuşma dizisi taşır; from: 'ganu' | 'musteri'. */
+export async function requestThread(requestId) {
+  const all = await requestMessages.list()
+  return all.filter((m) => m.request_id === requestId)
+    .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
+}
+export async function sendRequestMessage({ request_id, from, text }) {
+  const t = (text || '').trim()
+  if (!t) return null
+  return requestMessages.create({ request_id, from, text: t })
+}
 
 /* ---------- iş ortağı özeti (komisyon dahil) ----------
    Her ortak için: yönlendirdiği (getirdiği) müşteriler + hakediş.
@@ -254,11 +284,80 @@ export async function partnerLogin(code) {
 
 /* ---------- müşteri portalı girişi (Faz 2) ----------
    Yerel modda: müşteriye özel erişim kodu ile giriş.
-   Bulut modunda: Supabase Auth (auth_uid) ile değiştirilecek. */
+   Bulut modunda: Supabase Auth (auth_uid) ile değiştirilecek.
+   Güvenlik: yalnız 'aktif' ve 'askıda' müşteriler girebilir; 'ayrıldı'
+   ve 'aday' giremez. Boş kod hiçbir kayda eşleşmez. */
 export async function customerLogin(code) {
+  const q = (code || '').trim().toUpperCase()
+  if (!q) return null
   const cs = await customers.list()
-  const c = cs.find((x) => (x.access_code || '').toUpperCase() === (code || '').trim().toUpperCase())
-  return c || null
+  const c = cs.find((x) => (x.access_code || '').toUpperCase() === q)
+  if (!c) return null
+  if (c.status === 'ayrıldı' || c.status === 'aday') return null
+  return c
+}
+
+/* Müşteri girişi: E-POSTA + ŞİFRE (standart akış).
+   - Kimlik: e-posta (yoksa erişim kodu da kabul — telefonla kaydolanlar için)
+   - Şifre: müşterinin belirlediği portal_password, yoksa erişim kodu (ilk şifre)
+   Dönüş: { ok, customer } | { ok:false, error } */
+export async function customerLoginEmail({ email = '', password = '' } = {}) {
+  const id = (email || '').trim().toLowerCase()
+  const pw = (password || '').trim()
+  if (!id || !pw) return { ok: false, error: 'E-posta ve şifre gerekli.' }
+  const cs = await customers.list()
+  const c = cs.find((x) =>
+    (x.email || '').trim().toLowerCase() === id ||
+    (x.access_code || '').toLowerCase() === id)
+  if (!c) return { ok: false, error: 'E-posta veya şifre hatalı.' }
+  if (c.status === 'aday') return { ok: false, error: 'Hesabınız henüz aktif değil — ödeme/aktivasyon bekleniyor.' }
+  if (c.status === 'ayrıldı') return { ok: false, error: 'Hesabınız aktif değil. Bilgi için bize ulaşın.' }
+  const valid = pw === (c.portal_password || '') || pw.toUpperCase() === (c.access_code || '').toUpperCase()
+  if (!valid) return { ok: false, error: 'E-posta veya şifre hatalı.' }
+  return { ok: true, customer: c }
+}
+
+/* Müşteri portal şifresini değiştir (mevcut şifre doğrulanır) */
+export async function customerChangePassword(customerId, oldPass, newPass) {
+  const c = await customers.get(customerId)
+  if (!c) return { ok: false, error: 'Kayıt bulunamadı.' }
+  const cur = c.portal_password || c.access_code || ''
+  if ((oldPass || '').trim().toUpperCase() !== cur.toUpperCase()) return { ok: false, error: 'Mevcut şifre hatalı.' }
+  if ((newPass || '').trim().length < 4) return { ok: false, error: 'Yeni şifre en az 4 karakter olmalı.' }
+  await customers.update(customerId, { portal_password: newPass.trim() })
+  return { ok: true }
+}
+
+/* ---------- havale dekontu bildirimi ----------
+   Müşteri /satin-al havale sekmesinden dekont yükler. Kayıt 'aday'
+   kalır; panelde onay kuyruğuna düşer (dashboard.paymentClaims).
+   Yönetici dekontu görüp "Ödeme geldi" ile aktive eder.
+   (Gerçek otomatik eşleşme banka API'si gerektirir — ileride.) */
+export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount = 0, pkg = '', sender = '' } = {}) {
+  return customers.update(customerId, {
+    payment_receipt_url: receiptUrl,
+    payment_claimed_at: new Date().toISOString(),
+    payment_expected: Number(amount) || 0,
+    payment_pkg: pkg,
+    payment_sender: sender,
+  })
+}
+
+/* ---------- online müşteri başvurusu ----------
+   Sitedeki formdan gelir; 'aday' durumunda oluşur, portala giremez.
+   Panelden durumu 'aktif' yapılınca müşteriye dönüşür. */
+export async function customerApply(form) {
+  return customers.create({
+    title: (form.title || '').trim(),
+    contact: (form.contact || '').trim(),
+    email: (form.email || '').trim(),
+    phone: (form.phone || '').trim(),
+    tax_no: '', tax_office: '', tc: '',
+    status: 'aday',
+    access_code: '',
+    partner_id: '',
+    notes: [form.package ? `İstenen paket: ${form.package}` : '', (form.notes || '').trim()].filter(Boolean).join(' · '),
+  })
 }
 
 /* ---------- türetilmiş sorgular (dashboard) ---------- */
@@ -285,6 +384,8 @@ export async function dashboard() {
       .sort((a, b) => a._days - b._days)
   )
   const openRequests = withCustomer(rq.filter((r) => r.status === 'yeni' || r.status === 'işlemde'))
+  const applicants = cs.filter((c) => c.status === 'aday')
+  const paymentClaims = applicants.filter((c) => c.payment_claimed_at || (c.notes || '').includes('Ödeme bildirimi'))
 
   // gelir/ödeme özeti
   const paid = inv.filter((i) => i.status === 'ödendi')
@@ -299,6 +400,8 @@ export async function dashboard() {
     tebligat,
     renewals,
     openRequests,
+    applicants,
+    paymentClaims,
     finance: { revenue, outstandingTotal, outstandingCount: outstanding.length },
   }
 }
@@ -331,8 +434,22 @@ export async function withCustomerNames(rows) {
 export const MAIL_TYPES = ['mektup', 'kargo', 'tebligat']
 export const MAIL_STATUS = ['geldi', 'bildirildi', 'teslim', 'yönlendirildi', 'imha']
 export const PACKAGES = ['Başlangıç', 'Pro', 'Kurumsal']
+/* Tarife (03.07.2026 rakip analizi — pazar-arastirma/rakip-fiyat-analizi-2026-07.md)
+   KDV DAHİL. Satın alma yıllık peşin tahsil edilir (≈%17 indirimli).
+   Kurumsal: özel teklif — sabit fiyatı yok. */
+export const PACKAGE_MONTHLY = { 'Başlangıç': 799, 'Pro': 1499 }   // aylık, ₺
+export const PACKAGE_PRICES = { 'Başlangıç': 7990, 'Pro': 14990 }  // yıllık peşin, ₺
 export const INVOICE_STATUS = ['bekliyor', 'ödendi', 'gecikti']
-export const CUSTOMER_STATUS = ['aktif', 'askıda', 'ayrıldı']
+export const CUSTOMER_STATUS = ['aday', 'aktif', 'askıda', 'ayrıldı']
+
+/* Etkin fatura durumu: 'bekliyor' + vadesi geçmiş → 'gecikti' (türetilmiş).
+   Kayıt değiştirilmez; tüm ekranlar gösterimde bunu kullanır. */
+export function invStatus(inv) {
+  if (inv?.status === 'bekliyor' && inv.due_date && inv.due_date < new Date().toISOString().slice(0, 10)) {
+    return 'gecikti'
+  }
+  return inv?.status || 'bekliyor'
+}
 export const PARTNER_STATUS = ['başvuru', 'aktif', 'pasif']
 export const PARTNER_PROFESSIONS = ['Mali müşavir', 'Avukat', 'Marka & patent vekili', 'Şirket kuruluşu danışmanı', 'Diğer']
 export const DOC_TYPES = [
@@ -343,7 +460,17 @@ export const DOC_TYPES = [
   { v: 'isyeri_kullanim', l: 'İşyeri/Adres Kullanım Belgesi' },
   { v: 'diger', l: 'Diğer' },
 ]
-export const REQUEST_KINDS = ['yönlendirme', 'gel-al', 'tara', 'imha', 'diğer']
+export const REQUEST_KINDS = ['yönlendirme', 'gel-al', 'tara', 'imha', 'destek', 'diğer']
+export const EXPENSE_CATEGORIES = [
+  { v: 'kira', l: 'Kira' },
+  { v: 'aidat', l: 'Aidat / ortak gider' },
+  { v: 'fatura', l: 'Elektrik / su / internet' },
+  { v: 'kargo', l: 'Kargo / posta gideri' },
+  { v: 'harc', l: 'Resmî harç / vergi' },
+  { v: 'kirtasiye', l: 'Kırtasiye / sarf' },
+  { v: 'personel', l: 'Personel / hizmet' },
+  { v: 'diger', l: 'Diğer' },
+]
 export const REQUEST_STATUS = ['yeni', 'işlemde', 'tamamlandı', 'reddedildi']
 export const INSPECTION_RESULT = ['bekleniyor', 'olumlu', 'olumsuz']
 export const CHANNELS = ['email', 'sms', 'whatsapp']
@@ -558,11 +685,125 @@ export async function issueEInvoice(invoice, customer) {
       einvoice_uuid: data?.uuid || '',
       einvoice_no: data?.number || '',
       einvoice_status: data?.status || 'kesildi',
+      einvoice_pdf: data?.pdf_url || '',
     })
     return { ok: true, ...data }
   } catch (e) {
     return { ok: false, reason: String(e?.message || e) }
   }
+}
+
+/* ---------- kurulum adımları (onboarding) ----------
+   Satın alma/başvuru sonrası süreç. Ayrı bir durum alanı YOK —
+   her adım mevcut kayıtlardan türetilir; kayıt girildikçe kendiliğinden
+   işaretlenir. Dönüş: [{ key, label, done, hint, to }] */
+export function onboardingSteps(c, { contracts: ct = [], documents: docs = [], invoices: inv = [], inspections: insp = [] } = {}) {
+  const my = (rows) => rows.filter((x) => x.customer_id === c.id)
+  const myDocs = my(docs), myInv = my(inv)
+  const contract = my(ct).find((x) => x.status === 'aktif')
+  const signedDoc = myDocs.find((d) => d.type === 'sozlesme')
+  const idDoc = myDocs.find((d) => ['kimlik', 'imza_sirkuleri', 'vergi_levhasi'].includes(d.type))
+  const firstInv = myInv[0]
+  const paidInv = myInv.find((i) => i.status === 'ödendi')
+  const inspOk = my(insp).find((i) => i.result === 'olumlu')
+  return [
+    { key: 'iletisim', label: 'İletişim + vergi bilgileri', done: !!(c.phone || c.email) && !!(c.tax_no || c.tc),
+      hint: 'Telefon/e-posta ve VKN ya da TC girilmeli (e-belge için zorunlu)', to: '' },
+    { key: 'belge', label: 'Kimlik / imza belgeleri (MASAK-UBO)', done: !!idDoc,
+      hint: 'Kimlik, imza sirküleri veya vergi levhası → Belge Kasası', to: '' },
+    { key: 'sozlesme', label: 'Hizmet sözleşmesi', done: !!contract && !!signedDoc,
+      hint: contract ? 'İmzalı nüshayı Belge Kasası\'na "Sözleşme" türüyle yükle' : 'Sözleşme kaydı oluştur (paket + süre + ücret)', to: '/panel/sozlesmeler' },
+    { key: 'fatura', label: 'İlk fatura + tahsilat', done: !!paidInv,
+      hint: firstInv ? 'Fatura kesildi — ödeme bekleniyor' : 'Fatura & Gelir → Yeni fatura', to: '/panel/faturalar' },
+    { key: 'portal', label: 'Portal erişimi + KVKK onayı', done: !!c.access_code && !!c.kvkk_consent_at,
+      hint: c.access_code ? `Kod verildi (${c.access_code}) — müşteri ilk girişte KVKK onaylayacak` : 'Erişim kodu üret ve müşteriye ilet', to: '' },
+    { key: 'aktif', label: 'Müşteri aktif', done: c.status === 'aktif',
+      hint: 'Sözleşme + ödeme tamamsa durumu "aktif" yap', to: '' },
+    { key: 'yoklama', label: 'Vergi dairesi yoklaması (olumlu)', done: !!inspOk,
+      hint: 'Kuruluş/adres nakli sonrası yoklamayı karşıla ve sonucu kaydet', to: '/panel/yoklama' },
+  ]
+}
+
+/* ---------- ödeme onayı → kurulumu otomatik ilerlet ----------
+   "Para hesaba geçti / kartla ödendi" onayı tek işlemde:
+   sözleşme (1 yıl) + ÖDENDİ faturası + erişim kodu + aktif durum + bildirim.
+   Kalan tek elle iş: belgeler ve yoklama. */
+export async function activateAfterPayment(customer, pkg, amount) {
+  const price = Number(amount) || PACKAGE_PRICES[pkg] || 0
+  const today = new Date()
+  const todayIso = isoLocal(today)
+  const end = new Date(today); end.setFullYear(end.getFullYear() + 1)
+
+  await contracts.create({
+    customer_id: customer.id, package: pkg, price,
+    start_date: todayIso, end_date: isoLocal(end), status: 'aktif', auto_renew: true,
+  })
+  await invoices.create({
+    customer_id: customer.id, amount: price, status: 'ödendi',
+    issue_date: todayIso, due_date: todayIso, paid_date: todayIso,
+    note: `${pkg} yıllık — peşin tahsilat`,
+  })
+  const patch = { status: 'aktif' }
+  if (!customer.access_code) {
+    patch.access_code = Math.random().toString(36).slice(2, 8).toUpperCase()
+  }
+  const updated = await customers.update(customer.id, patch)
+  const cust = updated || { ...customer, ...patch }
+  await notifyEvent('invoice_issued', cust, { tutar: `${price} ₺`, tarih: fmtTrDate(todayIso) })
+  return cust
+}
+
+/* ---------- otomasyon: sözleşme yenileme + hatırlatma ----------
+   Panel her açıldığında (Dashboard) çalışır; iki iş yapar:
+   1) Süresi DOLMUŞ + oto-yenile işaretli sözleşme: 1 yıl uzatılır,
+      yenileme faturası kesilir, müşteriye bildirim düşer.
+   2) 15 gün içinde bitecek sözleşme: müşteriye yenileme hatırlatması
+      gönderilir (7 günde bir en fazla; auto_reminders açıksa).
+   Dönüş: { renewed, reminded, invoiced } sayaçları. */
+export async function runAutoTasks() {
+  const cfg = getConfig()
+  const [ct, cs] = await Promise.all([contracts.list(), customers.list()])
+  const byId = Object.fromEntries(cs.map((c) => [c.id, c]))
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const out = { renewed: 0, reminded: 0, invoiced: 0 }
+
+  for (const c of ct) {
+    if (c.status !== 'aktif') continue
+    const cust = byId[c.customer_id]
+    const days = daysLeft(c.end_date)
+
+    if (days < 0 && c.auto_renew) {
+      // yeni dönem: bitişten itibaren +1 yıl (yerel tarih — UTC kaymasına düşme)
+      const [y, m, dd] = c.end_date.split('-')
+      const newEnd = `${Number(y) + 1}-${m}-${dd}`
+      const due = new Date(); due.setDate(due.getDate() + 15)
+      await contracts.update(c.id, { start_date: c.end_date, end_date: newEnd, reminded_at: '' })
+      await invoices.create({
+        customer_id: c.customer_id, amount: Number(c.price) || 0, status: 'bekliyor',
+        issue_date: todayIso, due_date: isoLocal(due), paid_date: '',
+        note: `${c.package} yenileme (${fmtTrDate(c.end_date)} → ${fmtTrDate(newEnd)})`,
+      })
+      out.renewed++; out.invoiced++
+      if (cust) await notifyEvent('invoice_issued', cust, { tutar: `${Number(c.price) || 0} ₺`, tarih: fmtTrDate(todayIso) })
+    } else if (days >= 0 && days <= 15 && cfg.auto_reminders && cust) {
+      const last = c.reminded_at ? new Date(c.reminded_at).getTime() : 0
+      if (Date.now() - last > 7 * 86400000) {
+        await notifyEvent('renewal_due', cust, { paket: c.package, gun: String(days), tarih: fmtTrDate(c.end_date) })
+        await contracts.update(c.id, { reminded_at: new Date().toISOString() })
+        out.reminded++
+      }
+    }
+  }
+  return out
+}
+function fmtTrDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso + 'T00:00:00')
+  return isNaN(d) ? iso : d.toLocaleDateString('tr-TR')
+}
+/* Yerel takvim gününü YYYY-MM-DD üretir (toISOString UTC'ye kaydırır — kullanma) */
+function isoLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /* ---------- geçiş (Supabase) doğrulama ----------
@@ -573,6 +814,7 @@ export const TABLE_LABELS = {
   customers: 'Müşteriler', contracts: 'Sözleşmeler', mail_items: 'Kargo & Posta',
   invoices: 'Faturalar', documents: 'Belgeler', notifications: 'Bildirim kaydı',
   requests: 'Talepler', inspections: 'Yoklama', partners: 'İş ortakları',
+  expenses: 'Masraflar', request_messages: 'Talep mesajları',
 }
 
 export async function verifyMigration() {

@@ -5,6 +5,7 @@ import App from './App.jsx'
 import Avukat from './Avukat.jsx'
 import MaliMusavir from './MaliMusavir.jsx'
 import IsOrtakligi from './IsOrtakligi.jsx'
+import SatinAl from './SatinAl.jsx'
 import PanelApp from './panel/PanelApp.jsx'
 import MusteriPortal from './panel/MusteriPortal.jsx'
 import OrtakPortal from './panel/OrtakPortal.jsx'
@@ -18,6 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/avukat" element={<Avukat />} />
         <Route path="/mali-musavir" element={<MaliMusavir />} />
         <Route path="/is-ortakligi" element={<IsOrtakligi />} />
+        <Route path="/satin-al" element={<SatinAl />} />
         <Route path="/panel/*" element={<PanelApp />} />
         <Route path="/musteri/*" element={<MusteriPortal />} />
         <Route path="/ortak/*" element={<OrtakPortal />} />

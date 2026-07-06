@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { dashboard } from '../lib/store.js'
+import { dashboard, runAutoTasks } from '../lib/store.js'
 import { StatusBadge, TypeBadge, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
 
 export default function Dashboard() {
   const [d, setD] = useState(null)
-  useEffect(() => { dashboard().then(setD) }, [])
+  const [auto, setAuto] = useState(null)
+  useEffect(() => {
+    // önce otomasyon (yenileme + hatırlatma), sonra panoyu güncel veriyle çiz
+    runAutoTasks()
+      .then((a) => { if (a.renewed || a.reminded) setAuto(a) })
+      .catch(() => {})
+      .finally(() => dashboard().then(setD))
+  }, [])
   if (!d) return <div className="pl-empty">Yükleniyor…</div>
 
   const critical = d.renewals.filter((r) => r._days <= 7)
@@ -19,6 +26,37 @@ export default function Dashboard() {
         </div>
         <Link to="/panel/kargo" className="pl-btn pl-btn-teal">+ Kargo girişi</Link>
       </div>
+
+      {auto && (
+        <div className="pl-alert">
+          <span className="ic" aria-hidden="true">🤖</span>
+          <span className="msg">
+            Otomasyon: {auto.renewed > 0 && <><b>{auto.renewed} sözleşme yenilendi</b>, yenileme faturası kesildi. </>}
+            {auto.reminded > 0 && <><b>{auto.reminded} müşteriye</b> yenileme hatırlatması gönderildi.</>}
+          </span>
+        </div>
+      )}
+
+      {d.paymentClaims?.length > 0 && (
+        <div className="pl-alert crit">
+          <span className="ic" aria-hidden="true">💰</span>
+          <span className="msg">
+            <b>{d.paymentClaims.length} aday ödeme yaptığını bildirdi</b> ({d.paymentClaims.map((a) => a.title).slice(0, 3).join(', ')}{d.paymentClaims.length > 3 ? '…' : ''}) —
+            dekontu kontrol edip kurulumu tamamla, müşteriyi bekletme!{' '}
+            <Link to="/panel/musteriler" style={{ color: '#b91c1c', fontWeight: 700 }}>Müşterilere git →</Link>
+          </span>
+        </div>
+      )}
+
+      {(d.applicants?.length || 0) > (d.paymentClaims?.length || 0) && (
+        <div className="pl-alert">
+          <span className="ic" aria-hidden="true">📝</span>
+          <span className="msg">
+            <b>{d.applicants.length - (d.paymentClaims?.length || 0)} yeni müşteri başvurusu</b> onay bekliyor.{' '}
+            <Link to="/panel/musteriler" style={{ fontWeight: 700 }}>Müşterilere git →</Link>
+          </span>
+        </div>
+      )}
 
       {d.tebligat?.length > 0 && (
         <div className="pl-alert crit">
