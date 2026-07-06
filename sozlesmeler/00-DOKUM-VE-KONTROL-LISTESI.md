@@ -23,7 +23,7 @@
 | 6 | KVKK aydınlatma + açık rıza | [03-kvkk-aydinlatma-ve-riza.md](03-kvkk-aydinlatma-ve-riza.md) | ✅ Hazır |
 | 7 | **Tebligat + posta tarama açık rıza (TCK 132)** | [07-tebligat-posta-tarama-riza.md](07-tebligat-posta-tarama-riza.md) | ✅ Hazır |
 | 8 | **MASAK gerçek faydalanıcı (UBO) beyanı** | [08-masak-ubo-beyan.md](08-masak-ubo-beyan.md) | ✅ Hazır |
-| 9 | **EK-1 hizmet paketleri + fiyat tarifesi** | [09-ek1-hizmet-paketleri-ve-fiyat.md](09-ek1-hizmet-paketleri-ve-fiyat.md) | ⚠️ Fiyatlar boş |
+| 9 | **EK-1 hizmet paketleri + fiyat tarifesi** | [09-ek1-hizmet-paketleri-ve-fiyat.md](09-ek1-hizmet-paketleri-ve-fiyat.md) | ✅ Hazır (03.07.2026 tarifesi; IBAN alanı hesap açılınca) |
 
 ---
 
