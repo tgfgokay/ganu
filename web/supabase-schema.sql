@@ -85,7 +85,8 @@ alter table public.invoices add column if not exists einvoice_pdf text;
 alter table public.invoices add column if not exists payment_link text;      -- kartla ödeme linki (sanal POS)
 alter table public.customers add column if not exists kvkk_consent_at timestamptz; -- portal KVKK onay zamanı
 alter table public.contracts add column if not exists reminded_at timestamptz;     -- son yenileme hatırlatması
-alter table public.expenses add column if not exists invoice_id uuid references public.invoices(id) on delete set null; -- yansıtılan fatura
+-- NOT: expenses.invoice_id alter'ı, expenses tablosu aşağıda oluşturulduktan SONRA
+-- eklenir (bu satırda henüz tablo yok → "relation does not exist" hatasını önler).
 
 -- Belgeler (belge kasası)
 create table if not exists public.documents (
@@ -141,6 +142,8 @@ create table if not exists public.expenses (
   note text,
   created_at timestamptz not null default now()
 );
+-- yansıtılan fatura bağı (expenses tablosu var olduktan sonra — fresh install güvenli)
+alter table public.expenses add column if not exists invoice_id uuid references public.invoices(id) on delete set null;
 
 -- Yoklama kayıtları (vergi dairesi adres yoklaması · VUK 127)
 create table if not exists public.inspections (
