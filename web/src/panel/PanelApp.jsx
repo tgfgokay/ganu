@@ -12,6 +12,7 @@ import MusteriDetay from './pages/MusteriDetay.jsx'
 import Bildirimler from './pages/Bildirimler.jsx'
 import Yoklama from './pages/Yoklama.jsx'
 import Ortaklar from './pages/Ortaklar.jsx'
+import ToplantiOdasi from './pages/ToplantiOdasi.jsx'
 import Ayarlar from './pages/Ayarlar.jsx'
 import './panel.css'
 
@@ -26,6 +27,7 @@ const ICONS = {
   clip: <svg viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1M9 11l2 2 4-4"/></svg>,
   handshake: <svg viewBox="0 0 24 24"><path d="M11 17l2 2 4-4M3 10l4-4 5 4 5-4 4 4M7 6v6l4 4M17 6v6"/></svg>,
   wallet: <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg>,
+  calendar: <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M8 17h6"/></svg>,
 }
 
 function LoginGate({ onOk }) {
@@ -88,7 +90,7 @@ function LoginGate({ onOk }) {
             <button type="button" className="pl-linkbtn" onClick={forgot}>parolamı unuttum</button>
           </span>
         ) : (
-          <span className="pl-login-hint">İlk giriş parolası: <code>ganu2026</code> · Ayarlar'dan değiştir</span>
+          <span className="pl-login-hint">Parolanızı Ayarlar'dan değiştirebilirsiniz</span>
         )}
       </form>
     </div>
@@ -116,6 +118,7 @@ function Shell({ children }) {
           {link('/panel/masraflar', ICONS.wallet, 'Masraflar')}
           {link('/panel/musteriler', ICONS.users, 'Müşteriler')}
           {link('/panel/ortaklar', ICONS.handshake, 'İş Ortakları')}
+          {link('/panel/toplanti-odasi', ICONS.calendar, 'Toplantı Odası')}
           {link('/panel/yoklama', ICONS.clip, 'Yoklama')}
           {link('/panel/bildirimler', ICONS.bell, 'Bildirimler')}
           {link('/panel/ayarlar', ICONS.gear, 'Ayarlar')}
@@ -156,6 +159,7 @@ export default function PanelApp() {
         <Route path="musteriler" element={<Musteriler />} />
         <Route path="musteriler/:id" element={<MusteriDetay />} />
         <Route path="ortaklar" element={<Ortaklar />} />
+        <Route path="toplanti-odasi" element={<ToplantiOdasi />} />
         <Route path="yoklama" element={<Yoklama />} />
         <Route path="bildirimler" element={<Bildirimler />} />
         <Route path="ayarlar" element={<Ayarlar />} />

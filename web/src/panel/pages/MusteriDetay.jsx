@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import {
   customers, contracts, mail, invoices, documents, requests, inspections,
   fileToStoredUrl, invStatus, onboardingSteps, activateAfterPayment,
-  DOC_TYPES, REQUEST_STATUS, PACKAGES, PACKAGE_PRICES,
+  DOC_TYPES, REQUEST_STATUS, PACKAGES, PACKAGE_PRICES, BNI_INDIRIM, bniPrice,
 } from '../lib/store.js'
 import { Modal, StatusBadge, TypeBadge, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
 import { TalepSohbet } from '../MusteriPortal.jsx'
@@ -66,6 +66,7 @@ export default function MusteriDetay() {
      faturası + kod + aktif durum tek tıkla. Paket, başvuru notundan gelir. */
   const noteMatch = (c.notes || '').match(/İstenen paket:\s*(\S+)/)
   const wantedPkg = PACKAGES.includes(noteMatch?.[1]) ? noteMatch[1] : 'Başlangıç'
+  const toggleBni = async () => { await customers.update(id, { bni: !c.bni }); load() }
   const paymentReceived = async () => {
     const pkg = prompt(`Hangi paket için ödeme alındı? (${PACKAGES.join(' / ')})`, wantedPkg)
     if (!pkg || !PACKAGES.includes(pkg)) return
@@ -75,9 +76,17 @@ export default function MusteriDetay() {
       price = Number((v || '').replace(/\D/g, ''))
       if (!price) return
     }
-    if (!confirm(`${pkg} paketi (₺${price.toLocaleString('tr-TR')}) için ödeme onaylanacak:\n• 1 yıllık sözleşme açılır\n• ₺${price.toLocaleString('tr-TR')} ÖDENDİ faturası kesilir\n• Erişim kodu üretilir, müşteri AKTİF olur\n• Müşteriye bildirim gider\n\nDevam?`)) return
-    const updated = await activateAfterPayment(c, pkg, price)
-    alert(`Kurulum tamamlandı ✓\nPortal erişim kodu: ${updated.access_code}\nKodu müşteriye iletin.`)
+    const finalPrice = c.bni ? bniPrice(price) : price
+    const bniLine = c.bni
+      ? `\n• BNI Nişantaşı indirimi (−%${BNI_INDIRIM}): ₺${price.toLocaleString('tr-TR')} → ₺${finalPrice.toLocaleString('tr-TR')}`
+      : ''
+    if (!confirm(`${pkg} paketi (₺${finalPrice.toLocaleString('tr-TR')}) için ödeme onaylanacak:${bniLine}\n• 1 yıllık sözleşme açılır\n• ₺${finalPrice.toLocaleString('tr-TR')} ÖDENDİ faturası kesilir\n• Erişim kodu üretilir, müşteri AKTİF olur\n• Müşteriye bildirim gider\n\nDevam?`)) return
+    const updated = await activateAfterPayment(c, pkg, finalPrice, { bniPct: c.bni ? BNI_INDIRIM : 0 })
+    const ei = updated._einvoice
+    const eiMsg = ei ? (ei.ok
+      ? `\ne-Belge kesildi ✓${ei.mailed ? ' ve müşteriye maillendi ✓' : ''}`
+      : `\ne-Belge kesilemedi: ${ei.reason || 'bilinmeyen hata'} — Faturalar'dan tekrar deneyin.`) : ''
+    alert(`Kurulum tamamlandı ✓\nPortal erişim kodu: ${updated.access_code}\nKodu müşteriye iletin.${eiMsg}`)
     load()
   }
 
@@ -140,6 +149,11 @@ export default function MusteriDetay() {
                   : <a className="pl-btn pl-btn-ghost pl-btn-sm" href={c.payment_receipt_url} target="_blank" rel="noreferrer">📄 Dekontu aç (PDF)</a>}
               </div>
             )}
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, cursor: 'pointer', fontSize: 14 }}>
+              <input type="checkbox" checked={!!c.bni} onChange={toggleBni} />
+              <span>BNI Nişantaşı müşterisi <span className="t2">— ödeme onayında %{BNI_INDIRIM} indirim uygulanır</span></span>
+            </label>
 
             <div className="pl-actions">
               <button className="pl-btn pl-btn-teal" onClick={paymentReceived}>Ödeme doğru → kurulumu tamamla</button>

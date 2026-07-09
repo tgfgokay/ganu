@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import GanuMark from './GanuMark'
-import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, PACKAGES, PACKAGE_PRICES } from './panel/lib/store.js'
+import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar } from './panel/lib/store.js'
 
 /* ============================================================
    /satin-al — 3 adımlı satın alma sayfası
@@ -54,16 +54,21 @@ const labelS = { fontSize: 13, fontWeight: 700, color: 'var(--navy, #0A2540)' }
 export default function SatinAl() {
   const [params] = useSearchParams()
   const urlPkg = params.get('paket')
+  const refCode = (params.get('ref') || '').trim().toUpperCase() // iş ortağı yönlendirme kodu
   const [pkg, setPkg] = useState(PACKAGES.includes(urlPkg) ? urlPkg : 'Başlangıç')
   const [step, setStep] = useState(1)
-  const [f, setF] = useState({ title: '', email: '', phone: '' })
+  const [f, setF] = useState({ title: '', email: '', phone: '', tax_no: '', tax_office: '' })
   const [err, setErr] = useState('')
   const [cust, setCust] = useState(null)       // adım 1'de oluşan aday kaydı
   const [payTab, setPayTab] = useState('kart') // kart | havale
   const [result, setResult] = useState(null)   // { mode:'kart', code } | { mode:'havale' }
+  const [codeInput, setCodeInput] = useState('') // müşterinin girdiği indirim kodu
+  const [discount, setDiscount] = useState(null) // { code, pct } | null
+  const [codeMsg, setCodeMsg] = useState('')     // kod geri bildirimi
   const cfg = getConfig()
-  const price = PACKAGE_PRICES[pkg]
+  const listPrice = PACKAGE_PRICES[pkg]
   const isCorp = pkg === 'Kurumsal'
+  const price = discount && listPrice ? indirimliTutar(listPrice, discount.pct) : listPrice
 
   useEffect(() => { document.title = 'GANU · Satın Al'; window.scrollTo(0, 0) }, [])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [step])
@@ -73,6 +78,15 @@ export default function SatinAl() {
     setF((s) => ({ ...s, [k]: k === 'phone' ? fmtPhoneInput(e.target.value) : e.target.value }))
   }
 
+  /* indirim kodu uygula — kod sahibi (ör. BNI üyesi) kendi girer */
+  const applyCode = () => {
+    const d = indirimCoz(codeInput)
+    if (d) { setDiscount(d); setCodeMsg(`✓ %${d.pct} indirim uygulandı`) }
+    else { setDiscount(null); setCodeMsg('Kod geçersiz.') }
+  }
+  const clearCode = () => { setDiscount(null); setCodeInput(''); setCodeMsg('') }
+  const bniPct = discount ? discount.pct : 0
+
   /* Adım 1 → 2: aday kaydı oluştur */
   const submitInfo = async (e) => {
     e.preventDefault()
@@ -81,7 +95,9 @@ export default function SatinAl() {
     if (!email && !phone) return setErr('E-posta ya da telefondan en az birini yazın.')
     if (phone && !validPhone(phone)) return setErr('Telefon eksik/hatalı — 05xx xxx xx xx biçiminde 11 hane yazın.')
     if (email && !validEmail(email)) return setErr('E-posta hatalı görünüyor — ör. ad@firma.com')
-    const row = await customerApply({ ...f, package: pkg })
+    const vkn = f.tax_no.replace(/\D/g, '')
+    if (!isCorp && vkn.length !== 10 && vkn.length !== 11) return setErr('Vergi no (10 hane) ya da TC kimlik no (11 hane) zorunlu — faturanız otomatik kesilir.')
+    const row = await customerApply({ ...f, package: pkg, ref: refCode, bni: !!discount })
     setCust(row)
     if (isCorp) { setResult({ mode: 'teklif' }); setStep(3) }
     else setStep(2)
@@ -89,7 +105,7 @@ export default function SatinAl() {
 
   /* Kart ödemesi (SİMÜLASYON) başarılı → kurulum otomatik tamamlanır */
   const onCardPaid = async () => {
-    const updated = await activateAfterPayment(cust, pkg, price)
+    const updated = await activateAfterPayment(cust, pkg, price, { bniPct })
     setResult({ mode: 'kart', code: updated.access_code })
     setStep(3)
   }
@@ -102,7 +118,7 @@ export default function SatinAl() {
       try {
         // dekontu da kaydet, sonra aktive et
         await submitPaymentReceipt(cust.id, { receiptUrl, amount: price, pkg, sender: f.title })
-        const updated = await activateAfterPayment(cust, pkg, price)
+        const updated = await activateAfterPayment(cust, pkg, price, { bniPct })
         setResult({ mode: 'kart', code: updated.access_code })
         setStep(3)
         return
@@ -135,8 +151,15 @@ export default function SatinAl() {
             <div style={{ fontSize: 13, opacity: 0.65 }}>{isCorp ? 'ihtiyaca göre fiyatlanır' : `yıllık peşin · ≈₺${Math.round(price / 12).toLocaleString('tr-TR')}/ay'a gelir`}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontWeight: 800, fontSize: 20 }}>{isCorp ? 'Özel teklif' : `₺${price.toLocaleString('tr-TR')}`}</div>
-            {!isCorp && <div style={{ fontSize: 12, opacity: 0.6 }}>/ yıl · KDV dahil</div>}
+            {isCorp ? (
+              <div style={{ fontWeight: 800, fontSize: 20 }}>Özel teklif</div>
+            ) : (
+              <>
+                {discount && <div style={{ fontSize: 13, opacity: 0.5, textDecoration: 'line-through' }}>₺{listPrice.toLocaleString('tr-TR')}</div>}
+                <div style={{ fontWeight: 800, fontSize: 20, color: discount ? 'var(--teal-dark, #04352c)' : undefined }}>₺{price.toLocaleString('tr-TR')}</div>
+                <div style={{ fontSize: 12, opacity: 0.6 }}>{discount ? `${discount.code} · −%${discount.pct} · KDV dahil` : '/ yıl · KDV dahil'}</div>
+              </>
+            )}
           </div>
           {step === 1 && (
             <select value={pkg} onChange={(e) => setPkg(e.target.value)} aria-label="Paket değiştir"
@@ -145,6 +168,29 @@ export default function SatinAl() {
             </select>
           )}
         </div>
+
+        {step === 1 && !isCorp && (
+          <div style={{ background: '#fff', border: '2px solid var(--line, #dbe2ea)', borderRadius: 4, padding: '14px 18px', marginBottom: 22 }}>
+            <label style={{ ...labelS, display: 'block', marginBottom: 8 }}>İndirim kodunuz var mı?</label>
+            {discount ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--teal-dark, #04352c)' }}>✓ {discount.code} — %{discount.pct} indirim uygulandı</span>
+                <button type="button" className="btn btn-line" style={{ padding: '5px 12px', fontSize: 13 }} onClick={clearCode}>Kaldır</button>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <input className="sa-in" value={codeInput} style={{ flex: 1, minWidth: 160, textTransform: 'uppercase' }}
+                    placeholder="ör. üye kodunuz" aria-label="İndirim kodu"
+                    onChange={(e) => { setCodeMsg(''); setCodeInput(e.target.value) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyCode() } }} />
+                  <button type="button" className="btn btn-line" style={{ padding: '0 18px' }} onClick={applyCode} disabled={!codeInput.trim()}>Uygula</button>
+                </div>
+                {codeMsg && <span style={{ display: 'block', marginTop: 8, fontSize: 13, fontWeight: 600, color: '#b91c1c' }}>{codeMsg}</span>}
+              </>
+            )}
+          </div>
+        )}
 
         {step === 1 && (
           <form onSubmit={submitInfo} style={{ display: 'grid', gap: 14, background: '#fff', border: '2px solid var(--line, #dbe2ea)', borderRadius: 4, padding: 22 }}>
@@ -162,6 +208,20 @@ export default function SatinAl() {
                 <input id="sa-tel" className="sa-in" type="tel" inputMode="tel" value={f.phone} onChange={set('phone')} placeholder="05xx xxx xx xx" />
               </div>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div style={field}>
+                <label style={labelS} htmlFor="sa-vkn">Vergi no / TC kimlik no {isCorp ? '' : '*'}</label>
+                <input id="sa-vkn" className="sa-in" inputMode="numeric" maxLength={11} value={f.tax_no}
+                  onChange={set('tax_no')} placeholder="10 ya da 11 hane" required={!isCorp} />
+              </div>
+              <div style={field}>
+                <label style={labelS} htmlFor="sa-vd">Vergi dairesi</label>
+                <input id="sa-vd" className="sa-in" value={f.tax_office} onChange={set('tax_office')} placeholder="ör. Beykoz VD" />
+              </div>
+            </div>
+            <span style={{ fontSize: 12.5, opacity: 0.65, marginTop: -6 }}>
+              Bu bilgilerle faturanız ödemenin ardından otomatik düzenlenip e-postanıza gönderilir.
+            </span>
             {err && <span style={{ color: '#b91c1c', fontSize: 14, fontWeight: 600 }}>{err}</span>}
             <button type="submit" className="btn btn-solid big" style={{ width: '100%' }}>
               {isCorp ? 'Teklif iste →' : 'Ödemeye geç →'}
@@ -173,14 +233,11 @@ export default function SatinAl() {
         {step === 2 && (
           <div style={{ background: '#fff', border: '2px solid var(--line, #dbe2ea)', borderRadius: 4, padding: 22 }}>
             {/* ödeme yöntemi sekmeleri */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-              {[['kart', '💳 Kredi kartı'], ['havale', '🏦 Havale / EFT']].map(([k, l]) => (
-                <button key={k} type="button" onClick={() => setPayTab(k)} style={{
-                  flex: 1, font: 'inherit', fontWeight: 700, fontSize: 14, padding: '10px 8px', cursor: 'pointer',
-                  borderRadius: 4, border: '2px solid var(--navy, #0A2540)',
-                  background: payTab === k ? 'var(--navy, #0A2540)' : 'transparent',
-                  color: payTab === k ? '#fff' : 'var(--navy, #0A2540)',
-                }}>{l}</button>
+            <div className="pay-tabs">
+              {[['kart', '💳', 'Kredi kartı'], ['havale', '🏦', 'Havale / EFT']].map(([k, ic, l]) => (
+                <button key={k} type="button" onClick={() => setPayTab(k)} className={`pay-tab${payTab === k ? ' on' : ''}`}>
+                  <span aria-hidden="true">{ic}</span>{l}
+                </button>
               ))}
             </div>
             {payTab === 'kart'
@@ -248,6 +305,92 @@ export default function SatinAl() {
           transition: border-color .2s;
         }
         .sa-in:focus { outline: none; border-color: var(--teal, #00D4B2); }
+
+        /* ---- Ödeme adımı ---- */
+        .pay-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .pay-tab {
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          font: inherit; font-weight: 700; cursor: pointer;
+          padding: 13px 12px; border-radius: 10px;
+          background: #fff; color: var(--navy, #0A2540);
+          border: 2px solid var(--line, #dbe2ea); transition: all .18s;
+        }
+        .pay-tab span { font-size: 18px; }
+        .pay-tab:hover { border-color: var(--teal, #00D4B2); }
+        .pay-tab.on {
+          border-color: var(--teal, #00D4B2);
+          background: rgba(0,212,178,.08);
+          box-shadow: 0 0 0 3px rgba(0,212,178,.12);
+        }
+
+        .pay-card { perspective: 1200px; width: 100%; max-width: 380px; margin: 0 auto; aspect-ratio: 1.586; }
+        .pay-card-inner {
+          position: relative; width: 100%; height: 100%;
+          transition: transform .6s cubic-bezier(.4,.2,.2,1);
+          transform-style: preserve-3d;
+        }
+        .pay-card.flip .pay-card-inner { transform: rotateY(180deg); }
+        .pay-face {
+          position: absolute; inset: 0; border-radius: 16px;
+          backface-visibility: hidden; -webkit-backface-visibility: hidden;
+          color: #fff; overflow: hidden;
+          box-shadow: 0 18px 40px -12px rgba(10,37,64,.55);
+        }
+        .pay-face-front {
+          padding: 20px 22px;
+          display: flex; flex-direction: column; justify-content: space-between;
+          background: linear-gradient(135deg, #0A2540 0%, #04352c 55%, #00D4B2 160%);
+        }
+        .pay-face-back {
+          transform: rotateY(180deg);
+          background: linear-gradient(135deg, #0A2540 0%, #04352c 100%);
+        }
+        .pay-glow {
+          position: absolute; top: -60%; right: -30%;
+          width: 320px; height: 320px; border-radius: 50%;
+          background: radial-gradient(circle, rgba(0,212,178,.45) 0%, transparent 70%);
+          pointer-events: none;
+        }
+        .pay-chip {
+          width: 42px; height: 32px; border-radius: 6px;
+          background: linear-gradient(135deg, #f5d67b, #d9a93a);
+          box-shadow: inset 0 0 0 1px rgba(0,0,0,.18);
+        }
+        .pay-num {
+          font-family: ui-monospace, Menlo, monospace;
+          font-size: 20px; letter-spacing: 3px; font-weight: 600;
+          text-shadow: 0 1px 2px rgba(0,0,0,.3);
+        }
+
+        .pay-lab { display: block; font-size: 13px; font-weight: 600; color: var(--navy, #0A2540); margin-bottom: 6px; }
+        .pay-field {
+          display: flex; align-items: center; gap: 8px;
+          background: #fff; border: 2px solid var(--line, #dbe2ea);
+          border-radius: 10px; padding: 0 12px; transition: all .18s;
+        }
+        .pay-field:focus-within {
+          border-color: var(--teal, #00D4B2);
+          box-shadow: 0 0 0 3px rgba(0,212,178,.12);
+        }
+        .pay-ic { font-size: 16px; opacity: .8; }
+        .pay-in2 {
+          font: inherit; color: var(--navy, #0A2540); width: 100%;
+          padding: 13px 4px; border: 0; outline: none; background: transparent;
+        }
+
+        .pay-btn {
+          font: inherit; font-weight: 800; font-size: 16px; color: #fff; cursor: pointer;
+          padding: 15px 18px; border: 0; border-radius: 12px;
+          background: linear-gradient(135deg, #00D4B2, #04352c);
+          box-shadow: 0 12px 26px -10px rgba(0,212,178,.7);
+          transition: transform .12s, box-shadow .18s, filter .18s;
+        }
+        .pay-btn:hover { filter: brightness(1.05); box-shadow: 0 16px 30px -10px rgba(0,212,178,.8); }
+        .pay-btn:active { transform: translateY(1px); }
+        .pay-btn:disabled { opacity: .65; cursor: default; filter: grayscale(.2); box-shadow: none; }
+
+        .pay-badges { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; }
+        .pay-badge { font-size: 12px; font-weight: 600; color: #5b6b7a; }
       `}</style>
     </div>
   )
@@ -258,6 +401,7 @@ function CardPay({ amount, onPaid }) {
   const [c, setC] = useState({ no: '', name: '', exp: '', cvv: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [flip, setFlip] = useState(false)
   const set = (k, fmt) => (e) => { setErr(''); setC((s) => ({ ...s, [k]: fmt ? fmt(e.target.value) : e.target.value })) }
 
   const pay = async (e) => {
@@ -272,38 +416,92 @@ function CardPay({ amount, onPaid }) {
     onPaid()
   }
 
+  const digits = c.no.replace(/\D/g, '')
+  const shownNo = [0, 1, 2, 3].map((i) => digits.slice(i * 4, i * 4 + 4).padEnd(4, '•')).join(' ')
+  const brand = /^4/.test(digits) ? 'VISA' : /^(5[1-5]|2[2-7])/.test(digits) ? 'MASTERCARD' : /^(9|65)/.test(digits) ? 'TROY' : ''
+
   return (
-    <form onSubmit={pay} style={{ display: 'grid', gap: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff7e6', border: '1.5px solid #f0c36d', borderRadius: 4, padding: '8px 12px', fontSize: 13, fontWeight: 600 }}>
-        🧪 TEST MODU — gerçek tahsilat yapılmaz. Sanal POS (iyzico/PayTR) bağlanınca bu ekran gerçek ödemeye döner.
+    <form onSubmit={pay} style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff7e6', border: '1.5px solid #f0c36d', borderRadius: 10, padding: '10px 14px', fontSize: 13, fontWeight: 600, color: '#7a5b12' }}>
+        🧪 TEST MODU — gerçek tahsilat yapılmaz. Sanal POS (iyzico/PayTR) bağlanınca gerçek ödemeye döner.
       </div>
-      <div style={field}>
-        <label style={labelS} htmlFor="cp-no">Kart numarası</label>
-        <input id="cp-no" className="sa-in" inputMode="numeric" autoComplete="cc-number" placeholder="4242 4242 4242 4242"
-          value={c.no} onChange={set('no', fmtCardNo)} style={{ letterSpacing: 2 }} />
+
+      {/* canlı kart önizleme */}
+      <div className={`pay-card${flip ? ' flip' : ''}`} aria-hidden="true">
+        <div className="pay-card-inner">
+          <div className="pay-face pay-face-front">
+            <div className="pay-glow" />
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="pay-chip" />
+              <span style={{ fontWeight: 800, fontStyle: 'italic', letterSpacing: 1, fontSize: 15 }}>{brand || 'ganu'}</span>
+            </div>
+            <div className="pay-num" style={{ position: 'relative' }}>{shownNo}</div>
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 9, opacity: 0.55, letterSpacing: 1.2 }}>KART SAHİBİ</div>
+                <div style={{ fontSize: 14, fontWeight: 600, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name || 'AD SOYAD'}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 9, opacity: 0.55, letterSpacing: 1.2 }}>AA/YY</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{c.exp || '••/••'}</div>
+              </div>
+            </div>
+          </div>
+          <div className="pay-face pay-face-back">
+            <div style={{ height: 40, background: '#04101d', marginTop: 20 }} />
+            <div style={{ padding: '14px 22px' }}>
+              <div style={{ background: '#fff', borderRadius: 4, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 12px', color: '#0A2540', fontFamily: 'ui-monospace, Menlo, monospace', letterSpacing: 3, fontWeight: 700 }}>{c.cvv || '•••'}</div>
+              <div style={{ fontSize: 10, opacity: 0.55, marginTop: 8, textAlign: 'right' }}>CVV / güvenlik kodu</div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div style={field}>
-        <label style={labelS} htmlFor="cp-name">Kart üzerindeki isim</label>
-        <input id="cp-name" className="sa-in" autoComplete="cc-name" placeholder="AD SOYAD"
-          value={c.name} onChange={set('name', (v) => v.toUpperCase())} />
+
+      {/* alanlar */}
+      <div>
+        <label className="pay-lab" htmlFor="cp-no">Kart numarası</label>
+        <div className="pay-field">
+          <span className="pay-ic">💳</span>
+          <input id="cp-no" className="pay-in2" inputMode="numeric" autoComplete="cc-number" placeholder="4242 4242 4242 4242"
+            value={c.no} onChange={set('no', fmtCardNo)} onFocus={() => setFlip(false)} style={{ letterSpacing: 2 }} />
+        </div>
+      </div>
+      <div>
+        <label className="pay-lab" htmlFor="cp-name">Kart üzerindeki isim</label>
+        <div className="pay-field">
+          <span className="pay-ic">👤</span>
+          <input id="cp-name" className="pay-in2" autoComplete="cc-name" placeholder="AD SOYAD"
+            value={c.name} onChange={set('name', (v) => v.toUpperCase())} onFocus={() => setFlip(false)} />
+        </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div style={field}>
-          <label style={labelS} htmlFor="cp-exp">Son kullanma (AA/YY)</label>
-          <input id="cp-exp" className="sa-in" inputMode="numeric" autoComplete="cc-exp" placeholder="12/28"
-            value={c.exp} onChange={set('exp', fmtExpiry)} />
+        <div>
+          <label className="pay-lab" htmlFor="cp-exp">Son kullanma</label>
+          <div className="pay-field">
+            <span className="pay-ic">📅</span>
+            <input id="cp-exp" className="pay-in2" inputMode="numeric" autoComplete="cc-exp" placeholder="AA/YY"
+              value={c.exp} onChange={set('exp', fmtExpiry)} onFocus={() => setFlip(false)} />
+          </div>
         </div>
-        <div style={field}>
-          <label style={labelS} htmlFor="cp-cvv">CVV</label>
-          <input id="cp-cvv" className="sa-in" inputMode="numeric" autoComplete="cc-csc" placeholder="123" type="password"
-            value={c.cvv} onChange={set('cvv', (v) => v.replace(/\D/g, '').slice(0, 4))} />
+        <div>
+          <label className="pay-lab" htmlFor="cp-cvv">CVV</label>
+          <div className="pay-field">
+            <span className="pay-ic">🔒</span>
+            <input id="cp-cvv" className="pay-in2" inputMode="numeric" autoComplete="cc-csc" placeholder="123" type="password"
+              value={c.cvv} onChange={set('cvv', (v) => v.replace(/\D/g, '').slice(0, 4))}
+              onFocus={() => setFlip(true)} onBlur={() => setFlip(false)} />
+          </div>
         </div>
       </div>
       {err && <span style={{ color: '#b91c1c', fontSize: 14, fontWeight: 600 }}>{err}</span>}
-      <button type="submit" className="btn btn-solid big" style={{ width: '100%' }} disabled={busy}>
-        {busy ? 'Banka onayı bekleniyor…' : `₺${(amount || 0).toLocaleString('tr-TR')} öde →`}
+      <button type="submit" className="pay-btn" disabled={busy}>
+        {busy ? 'Banka onayı bekleniyor…' : `🔒 ₺${(amount || 0).toLocaleString('tr-TR')} güvenle öde →`}
       </button>
-      <span style={{ fontSize: 12.5, opacity: 0.6, textAlign: 'center' }}>🔒 256-bit SSL · Kart bilgileriniz saklanmaz · 3D Secure</span>
+      <div className="pay-badges">
+        <span className="pay-badge">🔒 256-bit SSL</span>
+        <span className="pay-badge">🛡️ 3D Secure</span>
+        <span className="pay-badge">🚫 Kart saklanmaz</span>
+      </div>
     </form>
   )
 }

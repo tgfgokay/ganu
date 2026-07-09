@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { partners, partnerSummary, PARTNER_STATUS, PARTNER_PROFESSIONS } from '../lib/store.js'
+import { partners, partnerSummary, recordCommissionPayment, PARTNER_STATUS, PARTNER_PROFESSIONS } from '../lib/store.js'
 import { Modal, fmtTL } from './_ui.jsx'
 
 const emptyForm = () => ({
@@ -18,6 +18,7 @@ const genCode = (name) => {
 export default function Ortaklar() {
   const [rows, setRows] = useState([])
   const [modal, setModal] = useState(null)
+  const [payModal, setPayModal] = useState(null)
 
   const load = async () => { setRows(await partnerSummary()) }
   useEffect(() => { load() }, [])
@@ -27,6 +28,8 @@ export default function Ortaklar() {
     pending: rows.filter((r) => r.status === 'başvuru').length,
     customers: rows.reduce((s, r) => s + r.customerCount, 0),
     commission: rows.reduce((s, r) => s + (r.commissionEarned || 0), 0),
+    paid: rows.reduce((s, r) => s + (r.commissionPaid || 0), 0),
+    due: rows.reduce((s, r) => s + (r.commissionDue || 0), 0),
   }), [rows])
 
   const save = async (form) => {
@@ -69,6 +72,8 @@ export default function Ortaklar() {
         <div className="pl-stat"><div className="lab">Bekleyen başvuru</div><div className="val">{totals.pending}</div></div>
         <div className="pl-stat"><div className="lab">Getirilen müşteri</div><div className="val teal">{totals.customers}</div></div>
         <div className="pl-stat"><div className="lab">Toplam hakediş</div><div className="val teal">{fmtTL(totals.commission)}</div></div>
+        <div className="pl-stat"><div className="lab">Ödenen komisyon</div><div className="val">{fmtTL(totals.paid)}</div></div>
+        <div className="pl-stat"><div className="lab">Kalan hakediş</div><div className="val teal">{fmtTL(totals.due)}</div></div>
       </div>
 
       <div className="pl-tablewrap">
@@ -91,13 +96,16 @@ export default function Ortaklar() {
                 <td className="pl-num">{r.customerCount}</td>
                 <td className="pl-num">
                   <span className="strong">{fmtTL(r.commissionEarned)}</span>
-                  <div className="sub">%{r.commissionRate}</div>
+                  <div className="sub">%{r.commissionRate} · ödenen {fmtTL(r.commissionPaid || 0)} · kalan <b>{fmtTL(r.commissionDue || 0)}</b></div>
                 </td>
                 <td><span className={`pl-badge ${P_BADGE[r.status] || 'b-warn'}`}>{r.status}</span></td>
                 <td>
                   <div className="pl-actions">
                     {r.status === 'başvuru' && (
                       <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => approve(r)}>Onayla</button>
+                    )}
+                    {(r.commissionDue || 0) > 0 && (
+                      <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => setPayModal(r)}>Ödeme</button>
                     )}
                     <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setModal({ mode: 'edit', data: { ...r } })}>Düzenle</button>
                     <button className="pl-btn pl-btn-danger pl-btn-sm" onClick={() => del(r.id)}>Sil</button>
@@ -110,7 +118,45 @@ export default function Ortaklar() {
       </div>
 
       {modal && <OrtakForm modal={modal} onClose={() => setModal(null)} onSave={save} />}
+      {payModal && <OdemeForm partner={payModal} onClose={() => setPayModal(null)} onDone={() => { setPayModal(null); load() }} />}
     </div>
+  )
+}
+
+function OdemeForm({ partner, onClose, onDone }) {
+  const [amount, setAmount] = useState(partner.commissionDue || 0)
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [note, setNote] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async (e) => {
+    e.preventDefault()
+    const a = Number(amount)
+    if (!a || a <= 0) { setErr('Tutar girin'); return }
+    if (a > (partner.commissionDue || 0) + 0.01) { setErr(`Kalan hakedişten fazla: en çok ${fmtTL(partner.commissionDue)}`); return }
+    setBusy(true)
+    try { await recordCommissionPayment(partner, { amount: a, date, note }); onDone() }
+    catch (ex) { setErr(ex.message || 'Kayıt başarısız'); setBusy(false) }
+  }
+  return (
+    <Modal title={`Komisyon ödemesi — ${partner.name}`} onClose={onClose}
+      footer={<>
+        <button className="pl-btn pl-btn-ghost" onClick={onClose}>Vazgeç</button>
+        <button className="pl-btn pl-btn-solid" form="compay-form" type="submit" disabled={busy}>{busy ? 'Kaydediliyor…' : 'Ödemeyi kaydet'}</button>
+      </>}>
+      <form id="compay-form" className="pl-form" onSubmit={submit}>
+        <div className="pl-alert" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
+          <span className="msg">Kalan hakediş: <b>{fmtTL(partner.commissionDue || 0)}</b>{partner.iban ? <> · IBAN: <code>{partner.iban}</code></> : ' · IBAN kayıtlı değil'}</span>
+        </div>
+        <div className="two">
+          <div className="pl-field"><label>Tutar (₺) *</label><input type="number" min="0" step="0.01" value={amount} onChange={(e) => { setAmount(e.target.value); setErr('') }} required /></div>
+          <div className="pl-field"><label>Tarih</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
+        </div>
+        <div className="pl-field"><label>Not</label><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="ör. Haziran dönemi hakedişi" /></div>
+        {err && <span className="pl-login-err">{err}</span>}
+        <p className="sub" style={{ margin: 0 }}>Kayıt, masraflara "İş ortağı komisyonu" kalemi olarak işlenir ve ortak portalında "ödendi" görünür.</p>
+      </form>
+    </Modal>
   )
 }
 

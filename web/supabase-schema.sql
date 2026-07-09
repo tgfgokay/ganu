@@ -154,7 +154,23 @@ create table if not exists public.inspections (
   created_at timestamptz not null default now()
 );
 
+-- Toplantı odası rezervasyonları (randevu takvimi)
+create table if not exists public.bookings (
+  id uuid primary key default gen_random_uuid(),
+  customer_id uuid not null references public.customers(id) on delete cascade,
+  date date not null default current_date,
+  start text not null default '10:00',          -- HH:MM
+  "end" text not null default '11:00',          -- HH:MM
+  attendees int not null default 1,
+  note text,
+  status text not null default 'talep',         -- talep | onaylandı | reddedildi | iptal
+  created_by text not null default 'ganu',      -- ganu | musteri
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_contracts_customer on public.contracts(customer_id);
+create index if not exists idx_bookings_date on public.bookings(date);
+create index if not exists idx_bookings_customer on public.bookings(customer_id);
 create index if not exists idx_requests_customer on public.requests(customer_id);
 create index if not exists idx_inspections_customer on public.inspections(customer_id);
 create index if not exists idx_contracts_end on public.contracts(end_date);
@@ -183,6 +199,7 @@ alter table public.requests      enable row level security;
 alter table public.inspections   enable row level security;
 alter table public.request_messages enable row level security;
 alter table public.expenses      enable row level security;
+alter table public.bookings      enable row level security;
 
 create policy "staff_all_partners"      on public.partners      for all to authenticated using (true) with check (true);
 create policy "staff_all_customers"     on public.customers     for all to authenticated using (true) with check (true);
@@ -195,16 +212,252 @@ create policy "staff_all_requests"      on public.requests      for all to authe
 create policy "staff_all_inspections"   on public.inspections   for all to authenticated using (true) with check (true);
 create policy "staff_all_reqmsg"        on public.request_messages for all to authenticated using (true) with check (true);
 create policy "staff_all_expenses"      on public.expenses      for all to authenticated using (true) with check (true);
+create policy "staff_all_bookings"      on public.bookings      for all to authenticated using (true) with check (true);
 
 -- Sitedeki online başvuru formu: anonim ziyaretçi yalnız 'aday' kaydı EKLEYEBİLİR
 -- (okuyamaz, güncelleyemez; erişim kodu boş geldiğinden portala giremez)
 create policy "public_apply_customers" on public.customers
   for insert to anon with check (status = 'aday' and access_code = '');
 
--- NOT: Faz 2'de müşteri girişi eklenince, müşterinin SADECE kendi
--- kayıtlarını görmesi için ek policy'ler tanımlanacak (auth_uid eşleşmesi).
+-- ============================================================
+-- ŞEMA KAYMASI DÜZELTMELERİ (store.js'in kullandığı kolonlar)
+-- ============================================================
+alter table public.partners  add column if not exists profession text;
+alter table public.partners  add column if not exists iban text;
+alter table public.partners  add column if not exists tax_no text;
+alter table public.partners  add column if not exists commission_rate numeric not null default 0;
+alter table public.partners  add column if not exists access_code text;
+
+alter table public.customers add column if not exists portal_password text;
+alter table public.customers add column if not exists payment_receipt_url text;
+alter table public.customers add column if not exists payment_claimed_at timestamptz;
+alter table public.customers add column if not exists payment_expected numeric;
+alter table public.customers add column if not exists payment_pkg text;
+alter table public.customers add column if not exists payment_sender text;
+alter table public.customers add column if not exists bni boolean default false; -- BNI Nişantaşı kaynaklı: ödeme onayında %indirim uygulanır
+
+alter table public.mail_items add column if not exists sla_reminded_at timestamptz; -- SLA ikinci bildirim damgası
 
 -- ------------------------------------------------------------
--- Fotoğraf depolama için (opsiyonel, kargo etiketi):
--- Storage → New bucket → "mail-photos" (private) oluştur.
+-- Komisyon ödemeleri (iş ortağı hakediş ödemesi — dönem kesimi)
+-- ------------------------------------------------------------
+create table if not exists public.commission_payments (
+  id uuid primary key default gen_random_uuid(),
+  partner_id uuid not null references public.partners(id) on delete cascade,
+  amount numeric not null default 0,
+  date date not null default current_date,
+  note text,
+  expense_id uuid references public.expenses(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_compay_partner on public.commission_payments(partner_id);
+alter table public.commission_payments enable row level security;
+create policy "staff_all_compay" on public.commission_payments for all to authenticated using (true) with check (true);
+
+-- ------------------------------------------------------------
+-- İş ortaklığı başvuru formu (anon INSERT — sadece 'başvuru' statüsü)
+-- ------------------------------------------------------------
+create policy "public_apply_partners" on public.partners
+  for insert to anon with check (status = 'başvuru' and access_code = '' and commission_rate = 0);
+
+-- ============================================================
+-- PORTAL RPC KATMANI (anon erişim — RLS'i delmeden, kod doğrulamalı)
+-- Müşteri/ortak portalları tabloları doğrudan OKUMAZ; bu SECURITY
+-- DEFINER fonksiyonlar erişim kodu/parola doğrulayıp sadece ilgili
+-- müşterinin/ortağın verisini döner.
+-- ============================================================
+create extension if not exists pgcrypto;
+
+-- parola eşleşmesi: 'sha256:<hex>' hash veya düz metin (eski kayıt) desteği
+create or replace function public._pw_match(stored text, given text)
+returns boolean language sql immutable as $$
+  select case
+    when stored is null or stored = '' then false
+    when stored like 'sha256:%' then stored = 'sha256:' || encode(digest(given, 'sha256'), 'hex')
+    else stored = given
+  end
+$$;
+
+-- müşteri girişi: e-posta + (portal parolası VEYA erişim kodu) → müşteri satırı
+create or replace function public.portal_login(p_email text, p_pass text)
+returns setof public.customers
+language plpgsql security definer set search_path = public as $$
+begin
+  return query
+    select c.* from customers c
+    where lower(c.email) = lower(p_email)
+      and c.status <> 'ayrıldı'
+      and ( _pw_match(c.portal_password, p_pass)
+            or (coalesce(c.access_code,'') <> '' and upper(c.access_code) = upper(p_pass)) );
+end $$;
+
+-- müşteri portal verisi (tek pakette): kod doğrula → ilgili kayıtlar
+create or replace function public.portal_bundle(p_customer_id uuid, p_code text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare c customers%rowtype;
+begin
+  select * into c from customers where id = p_customer_id;
+  if not found or coalesce(c.access_code,'') = '' or upper(c.access_code) <> upper(p_code) then
+    return null;
+  end if;
+  return jsonb_build_object(
+    'customer',  to_jsonb(c),
+    'contracts', coalesce((select jsonb_agg(to_jsonb(x)) from contracts x where x.customer_id = c.id), '[]'::jsonb),
+    'mail',      coalesce((select jsonb_agg(to_jsonb(x)) from mail_items x where x.customer_id = c.id), '[]'::jsonb),
+    'invoices',  coalesce((select jsonb_agg(to_jsonb(x)) from invoices x where x.customer_id = c.id), '[]'::jsonb),
+    'documents', coalesce((select jsonb_agg(to_jsonb(x)) from documents x where x.customer_id = c.id), '[]'::jsonb),
+    'requests',  coalesce((select jsonb_agg(to_jsonb(x)) from requests x where x.customer_id = c.id), '[]'::jsonb),
+    'messages',  coalesce((select jsonb_agg(to_jsonb(m)) from request_messages m
+                            join requests r on r.id = m.request_id where r.customer_id = c.id), '[]'::jsonb),
+    'bookings',  coalesce((select jsonb_agg(to_jsonb(x)) from bookings x where x.customer_id = c.id), '[]'::jsonb)
+  );
+end $$;
+
+-- müşteri talebi aç
+create or replace function public.portal_create_request(p_customer_id uuid, p_code text, p_mail_id uuid, p_kind text, p_note text)
+returns setof public.requests
+language plpgsql security definer set search_path = public as $$
+declare c customers%rowtype;
+begin
+  select * into c from customers where id = p_customer_id;
+  if not found or coalesce(c.access_code,'') = '' or upper(c.access_code) <> upper(p_code) then return; end if;
+  return query
+    insert into requests (customer_id, mail_id, kind, note, status)
+    values (c.id, p_mail_id, coalesce(p_kind,'yönlendirme'), p_note, 'yeni') returning *;
+end $$;
+
+-- talep mesajı gönder
+create or replace function public.portal_send_message(p_customer_id uuid, p_code text, p_request_id uuid, p_text text)
+returns setof public.request_messages
+language plpgsql security definer set search_path = public as $$
+declare c customers%rowtype;
+begin
+  select * into c from customers where id = p_customer_id;
+  if not found or coalesce(c.access_code,'') = '' or upper(c.access_code) <> upper(p_code) then return; end if;
+  if not exists (select 1 from requests r where r.id = p_request_id and r.customer_id = c.id) then return; end if;
+  return query
+    insert into request_messages (request_id, "from", text)
+    values (p_request_id, 'musteri', p_text) returning *;
+end $$;
+
+-- toplantı odası talebi
+create or replace function public.portal_create_booking(p_customer_id uuid, p_code text, p_date date, p_start text, p_end text, p_attendees int, p_note text)
+returns setof public.bookings
+language plpgsql security definer set search_path = public as $$
+declare c customers%rowtype;
+begin
+  select * into c from customers where id = p_customer_id;
+  if not found or coalesce(c.access_code,'') = '' or upper(c.access_code) <> upper(p_code) then return; end if;
+  return query
+    insert into bookings (customer_id, date, start, "end", attendees, note, status, created_by)
+    values (c.id, p_date, coalesce(p_start,'10:00'), coalesce(p_end,'11:00'), coalesce(p_attendees,1), p_note, 'talep', 'musteri') returning *;
+end $$;
+
+-- KVKK onayı
+create or replace function public.portal_set_kvkk(p_customer_id uuid, p_code text)
+returns boolean
+language plpgsql security definer set search_path = public as $$
+declare c customers%rowtype;
+begin
+  select * into c from customers where id = p_customer_id;
+  if not found or coalesce(c.access_code,'') = '' or upper(c.access_code) <> upper(p_code) then return false; end if;
+  update customers set kvkk_consent_at = now() where id = c.id and kvkk_consent_at is null;
+  return true;
+end $$;
+
+-- portal parolası değiştir (hash'lenerek saklanır)
+create or replace function public.portal_change_password(p_customer_id uuid, p_old text, p_new text)
+returns boolean
+language plpgsql security definer set search_path = public as $$
+declare c customers%rowtype;
+begin
+  select * into c from customers where id = p_customer_id;
+  if not found then return false; end if;
+  if not ( _pw_match(c.portal_password, p_old)
+           or (coalesce(c.access_code,'') <> '' and upper(c.access_code) = upper(p_old)) ) then
+    return false;
+  end if;
+  update customers set portal_password = 'sha256:' || encode(digest(p_new, 'sha256'), 'hex') where id = c.id;
+  return true;
+end $$;
+
+-- havale dekontu bildir
+create or replace function public.portal_submit_receipt(p_customer_id uuid, p_code text, p_url text, p_expected numeric, p_pkg text, p_sender text)
+returns boolean
+language plpgsql security definer set search_path = public as $$
+declare c customers%rowtype;
+begin
+  select * into c from customers where id = p_customer_id;
+  if not found or coalesce(c.access_code,'') = '' or upper(c.access_code) <> upper(p_code) then return false; end if;
+  update customers set payment_receipt_url = p_url, payment_claimed_at = now(),
+    payment_expected = p_expected, payment_pkg = p_pkg, payment_sender = p_sender
+  where id = c.id;
+  return true;
+end $$;
+
+-- erişim koduyla müşteri girişi (eski akış desteği)
+create or replace function public.portal_login_code(p_code text)
+returns setof public.customers
+language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(trim(p_code),'') = '' then return; end if;
+  return query
+    select c.* from customers c
+    where coalesce(c.access_code,'') <> '' and upper(c.access_code) = upper(trim(p_code))
+      and c.status not in ('ayrıldı','aday');
+end $$;
+
+-- satın alma akışı: yeni 'aday' kaydına dekont bildirimi (henüz kodu yok)
+create or replace function public.purchase_submit_receipt(p_customer_id uuid, p_url text, p_expected numeric, p_pkg text, p_sender text)
+returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  update customers set payment_receipt_url = p_url, payment_claimed_at = now(),
+    payment_expected = p_expected, payment_pkg = p_pkg, payment_sender = p_sender
+  where id = p_customer_id and status = 'aday';
+  return found;
+end $$;
+
+-- iş ortağı portal girişi: erişim kodu → ortak + bağlı müşteriler + faturalar + ödemeler
+create or replace function public.partner_portal(p_code text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare p partners%rowtype;
+begin
+  select * into p from partners
+    where coalesce(access_code,'') <> '' and upper(access_code) = upper(p_code) and status = 'aktif';
+  if not found then return null; end if;
+  return jsonb_build_object(
+    'partner',   to_jsonb(p),
+    'customers', coalesce((select jsonb_agg(jsonb_build_object(
+                    'id', c.id, 'title', c.title, 'contact', c.contact, 'phone', c.phone, 'status', c.status))
+                    from customers c where c.partner_id = p.id), '[]'::jsonb),
+    'invoices',  coalesce((select jsonb_agg(jsonb_build_object(
+                    'id', i.id, 'customer_id', i.customer_id, 'amount', i.amount, 'status', i.status, 'paid_date', i.paid_date))
+                    from invoices i join customers c on c.id = i.customer_id
+                    where c.partner_id = p.id and i.status = 'ödendi'), '[]'::jsonb),
+    'payments',  coalesce((select jsonb_agg(jsonb_build_object(
+                    'id', cp.id, 'amount', cp.amount, 'date', cp.date, 'note', cp.note))
+                    from commission_payments cp where cp.partner_id = p.id), '[]'::jsonb)
+  );
+end $$;
+
+-- anon'a sadece RPC izinleri (tablo erişimi yok)
+grant execute on function public.portal_login(text, text) to anon;
+grant execute on function public.portal_login_code(text) to anon;
+grant execute on function public.purchase_submit_receipt(uuid, text, numeric, text, text) to anon;
+grant execute on function public.portal_bundle(uuid, text) to anon;
+grant execute on function public.portal_create_request(uuid, text, uuid, text, text) to anon;
+grant execute on function public.portal_send_message(uuid, text, uuid, text) to anon;
+grant execute on function public.portal_create_booking(uuid, text, date, text, text, int, text) to anon;
+grant execute on function public.portal_set_kvkk(uuid, text) to anon;
+grant execute on function public.portal_change_password(uuid, text, text) to anon;
+grant execute on function public.portal_submit_receipt(uuid, text, text, numeric, text, text) to anon;
+grant execute on function public.partner_portal(text) to anon;
+
+-- ------------------------------------------------------------
+-- Fotoğraf/dekont depolama:
+-- Storage → New bucket → "mail-photos" (public okuma önerilir; dekont
+-- ve kargo fotoğrafları buraya yüklenir, DB'ye sadece URL yazılır).
 -- ------------------------------------------------------------

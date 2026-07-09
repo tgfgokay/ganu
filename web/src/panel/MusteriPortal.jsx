@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import GanuMark from '../GanuMark'
 import {
-  customerLogin, customerLoginEmail, customerChangePassword, customers, contracts, mail, invoices, documents, requests,
+  customerLogin, customerLoginEmail, customerChangePassword,
   requestThread, sendRequestMessage, invStatus, getConfig,
-  REQUEST_KINDS,
+  REQUEST_KINDS, timeSlots,
+  portalBundle, portalCreateRequest, portalSendMessage, portalCreateBooking, portalSetKvkk,
 } from './lib/store.js'
 import { Modal, StatusBadge, TypeBadge, DaysBadge, fmtDate, fmtTL } from './pages/_ui.jsx'
 import './panel.css'
@@ -33,7 +34,7 @@ function KvkkGate({ cust, onAccept, onLogout }) {
   const [busy, setBusy] = useState(false)
   const accept = async () => {
     setBusy(true)
-    const updated = await customers.update(cust.id, { kvkk_consent_at: new Date().toISOString() })
+    const updated = await portalSetKvkk(cust)
     onAccept(updated || { ...cust, kvkk_consent_at: new Date().toISOString() })
   }
   return (
@@ -104,24 +105,32 @@ function PortalHome({ cust, onLogout }) {
   const [inv, setInv] = useState([])
   const [docs, setDocs] = useState([])
   const [reqs, setReqs] = useState([])
+  const [bk, setBk] = useState([])
   const [reqModal, setReqModal] = useState(null) // {mail_id}
   const [chatReq, setChatReq] = useState(null)   // konuşması açık talep
   const [payInv, setPayInv] = useState(null)     // ödeme ekranı açık fatura
   const [pwModal, setPwModal] = useState(false)  // şifre değiştir
+  const [bookModal, setBookModal] = useState(false) // randevu talep
 
   const load = async () => {
-    const [a, b, d, e, r] = await Promise.all([contracts.list(), mail.list(), invoices.list(), documents.list(), requests.list()])
-    setCt(a.filter((x) => x.customer_id === cust.id))
-    setMl(b.filter((x) => x.customer_id === cust.id))
-    setInv(d.filter((x) => x.customer_id === cust.id))
-    setDocs(e.filter((x) => x.customer_id === cust.id))
-    setReqs(r.filter((x) => x.customer_id === cust.id))
+    const b = await portalBundle(cust)
+    setCt(b.contracts || [])
+    setMl(b.mail || [])
+    setInv(b.invoices || [])
+    setDocs(b.documents || [])
+    setReqs(b.requests || [])
+    setBk(b.bookings || [])
   }
   useEffect(() => { load() }, [cust.id])
 
   const sendReq = async ({ kind, note, mail_id }) => {
-    await requests.create({ customer_id: cust.id, mail_id: mail_id || '', kind, note, status: 'yeni' })
+    await portalCreateRequest(cust, { kind, note, mail_id })
     setReqModal(null); load()
+  }
+
+  const sendBooking = async (form) => {
+    await portalCreateBooking(cust, { ...form, attendees: Number(form.attendees) || 1 })
+    setBookModal(false); load()
   }
 
   const outstanding = inv.filter((i) => invStatus(i) !== 'ödendi')
@@ -232,6 +241,26 @@ function PortalHome({ cust, onLogout }) {
           </div>
         </div>
 
+        {/* toplantı odası */}
+        <div className="pl-card" style={{ marginTop: 20 }}>
+          <div className="pl-card-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2>Toplantı Odası</h2>
+            <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => setBookModal(true)}>+ Randevu iste</button>
+          </div>
+          <div className="pl-card-b">
+            {bk.length === 0 && <div className="pl-empty">Henüz randevunuz yok. Toplantı odasını kullanmak için randevu isteyin.</div>}
+            {bk.slice().sort((a, b) => (b.date + b.start).localeCompare(a.date + a.start)).map((b) => (
+              <div className="pl-row" key={b.id}>
+                <div className="grow">
+                  <div className="t1">{fmtDate(b.date)} · {b.start}–{b.end}</div>
+                  <div className="t2">{b.note || 'Toplantı'}{b.attendees ? ` · ${b.attendees} kişi` : ''}</div>
+                </div>
+                <span className={`pl-badge ${b.status === 'onaylandı' ? 'b-ok' : b.status === 'reddedildi' ? 'b-danger' : b.status === 'iptal' ? 'b-mektup' : 'b-warn'}`}>{b.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* taleplerim */}
         <div className="pl-card" style={{ marginTop: 20 }}>
           <div className="pl-card-h"><h2>Taleplerim</h2></div>
@@ -249,8 +278,9 @@ function PortalHome({ cust, onLogout }) {
         </div>
       </div>
 
+      {bookModal && <RandevuForm onClose={() => setBookModal(false)} onSave={sendBooking} />}
       {reqModal && <TalepForm mailId={reqModal.mail_id} onClose={() => setReqModal(null)} onSave={sendReq} />}
-      {chatReq && <TalepSohbet req={chatReq} from="musteri" onClose={() => setChatReq(null)} />}
+      {chatReq && <TalepSohbet req={chatReq} from="musteri" cust={cust} onClose={() => setChatReq(null)} />}
       {payInv && <OdemeModal inv={payInv} cust={cust} onClose={() => setPayInv(null)} />}
       {pwModal && <SifreModal cust={cust} onClose={() => setPwModal(false)} />}
     </div>
@@ -345,16 +375,21 @@ function OdemeModal({ inv, cust, onClose }) {
   )
 }
 
-/* Talep konuşması — panel ve müşteri portalı ortak kullanır (from: 'ganu'|'musteri') */
-export function TalepSohbet({ req, from, onClose }) {
+/* Talep konuşması — panel ve müşteri portalı ortak kullanır (from: 'ganu'|'musteri').
+   Müşteri modunda `cust` verilir; okuma/yazma kod doğrulamalı portal RPC'leriyle yapılır. */
+export function TalepSohbet({ req, from, cust, onClose }) {
   const [msgs, setMsgs] = useState([])
   const [text, setText] = useState('')
-  const load = () => requestThread(req.id).then(setMsgs)
+  const load = () => {
+    if (cust) portalBundle(cust).then((b) => setMsgs((b?.messages || []).filter((m) => m.request_id === req.id)))
+    else requestThread(req.id).then(setMsgs)
+  }
   useEffect(() => { load() }, [req.id])
   const send = async (e) => {
     e.preventDefault()
     if (!text.trim()) return
-    await sendRequestMessage({ request_id: req.id, from, text })
+    if (cust) await portalSendMessage(cust, req.id, text)
+    else await sendRequestMessage({ request_id: req.id, from, text })
     setText(''); load()
   }
   return (
@@ -385,6 +420,61 @@ export function TalepSohbet({ req, from, onClose }) {
           </div>
         </form>
       </div>
+    </Modal>
+  )
+}
+
+/* Müşteri randevu talebi — onay yöneticide (status: 'talep') */
+const BOOK_SLOTS = timeSlots()
+function RandevuForm({ onClose, onSave }) {
+  const [f, setF] = useState({ date: new Date().toISOString().slice(0, 10), start: '10:00', end: '11:00', attendees: 2, note: '' })
+  const [err, setErr] = useState('')
+  const set = (k, v) => { setErr(''); setF((s) => ({ ...s, [k]: v })) }
+  const submit = (e) => {
+    e.preventDefault()
+    if (f.start >= f.end) { setErr('Bitiş saati başlangıçtan sonra olmalı.'); return }
+    onSave(f)
+  }
+  return (
+    <Modal title="Toplantı odası randevusu iste" onClose={onClose}
+      footer={<>
+        <button className="pl-btn pl-btn-ghost" onClick={onClose}>Vazgeç</button>
+        <button className="pl-btn pl-btn-solid" form="randevu-iste" type="submit">Talep gönder</button>
+      </>}>
+      <form id="randevu-iste" className="pl-form" onSubmit={submit}>
+        <div className="two">
+          <div className="pl-field">
+            <label>Tarih *</label>
+            <input type="date" value={f.date} min={new Date().toISOString().slice(0, 10)} onChange={(e) => set('date', e.target.value)} required />
+          </div>
+          <div className="pl-field">
+            <label>Kişi sayısı</label>
+            <input type="number" min="1" max="20" value={f.attendees} onChange={(e) => set('attendees', e.target.value)} />
+          </div>
+        </div>
+        <div className="two">
+          <div className="pl-field">
+            <label>Başlangıç *</label>
+            <select value={f.start} onChange={(e) => set('start', e.target.value)}>
+              {BOOK_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="pl-field">
+            <label>Bitiş *</label>
+            <select value={f.end} onChange={(e) => set('end', e.target.value)}>
+              {BOOK_SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="pl-field">
+          <label>Konu / not</label>
+          <textarea value={f.note} onChange={(e) => set('note', e.target.value)} placeholder="ör. Müşteri görüşmesi, 2 kişi" />
+        </div>
+        {err && <span className="pl-login-err">{err}</span>}
+        <div className="t2" style={{ marginTop: 4, color: 'var(--muted)' }}>
+          Talebiniz onaya düşer; ekibimiz uygunluğu teyit edince durumu "onaylandı" olur.
+        </div>
+      </form>
     </Modal>
   )
 }

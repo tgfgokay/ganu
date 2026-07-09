@@ -16,7 +16,8 @@ const TABLE = {
   customers: 'customers', contracts: 'contracts', mail_items: 'mail_items',
   invoices: 'invoices', documents: 'documents', notifications: 'notifications',
   requests: 'requests', inspections: 'inspections', partners: 'partners',
-  expenses: 'expenses', request_messages: 'request_messages',
+  expenses: 'expenses', request_messages: 'request_messages', bookings: 'bookings',
+  commission_payments: 'commission_payments',
 }
 
 /* Panel yapılandırması (bildirim kanalları, API anahtarları) — ayrı anahtar */
@@ -131,6 +132,10 @@ function seed() {
       { id: uid(), date: addDays(-5), category: 'kargo', amount: 180, customer_id: c3, billable: true, note: 'Kadıköy yönlendirme kargo ücreti', created_at: now() },
     ],
     request_messages: [],
+    bookings: [
+      { id: uid(), customer_id: c1, date: addDays(2), start: '10:00', end: '11:00', attendees: 3, note: 'Yatırımcı sunumu', status: 'onaylandı', created_by: 'ganu', created_at: now() },
+      { id: uid(), customer_id: c2, date: addDays(3), start: '14:00', end: '15:30', attendees: 2, note: 'Müşteri görüşmesi', status: 'talep', created_by: 'musteri', created_at: now() },
+    ],
   }
 }
 
@@ -215,6 +220,8 @@ export const inspections = collection('inspections')
 export const partners = collection('partners')
 export const expenses = collection('expenses')
 export const requestMessages = collection('request_messages')
+export const bookings = collection('bookings')
+export const commissionPayments = collection('commission_payments')
 export { usingSupabase }
 
 /* ---------- talep mesajlaşması (panel ↔ müşteri) ----------
@@ -235,18 +242,42 @@ export async function sendRequestMessage({ request_id, from, text }) {
    Komisyon tabanı = getirdiği müşterilerin ÖDENMİŞ faturaları;
    hakediş = taban × komisyon oranı (%). Şeffaf, tek ekranda. */
 export async function partnerSummary() {
-  const [ps, cs, inv] = await Promise.all([partners.list(), customers.list(), invoices.list()])
-  return ps.map((p) => enrichPartner(p, cs, inv))
+  const [ps, cs, inv, pays] = await Promise.all([partners.list(), customers.list(), invoices.list(), commissionPayments.list()])
+  return ps.map((p) => enrichPartner(p, cs, inv, pays))
 }
 
-function enrichPartner(p, cs, inv) {
+function enrichPartner(p, cs, inv, pays = []) {
   const refs = cs.filter((c) => c.partner_id === p.id)
   const refIds = new Set(refs.map((c) => c.id))
   const paid = inv.filter((i) => refIds.has(i.customer_id) && i.status === 'ödendi')
   const revenueBase = paid.reduce((s, i) => s + (Number(i.amount) || 0), 0)
   const rate = Number(p.commission_rate) || 0
   const commissionEarned = Math.round(revenueBase * rate) / 100 // taban × oran%
-  return { ...p, customerCount: refs.length, customers: refs, revenueBase, commissionRate: rate, commissionEarned }
+  const myPays = pays.filter((x) => x.partner_id === p.id)
+  const commissionPaid = myPays.reduce((s, x) => s + (Number(x.amount) || 0), 0)
+  const commissionDue = Math.round((commissionEarned - commissionPaid) * 100) / 100
+  return {
+    ...p, customerCount: refs.length, customers: refs, revenueBase,
+    commissionRate: rate, commissionEarned, commissionPaid, commissionDue,
+    payments: myPays,
+  }
+}
+
+/* ---------- komisyon ödemesi kaydet (dönem kesimi) ----------
+   Ortağa yapılan hakediş ödemesini kaydeder:
+   1) commission_payments satırı (portalda "ödendi" görünür, kalan düşer)
+   2) masraf kaydı (kategori: komisyon) — gider takibine işlenir */
+export async function recordCommissionPayment(partner, { amount = 0, date = '', note = '' } = {}) {
+  const amt = Number(amount) || 0
+  if (!partner?.id || amt <= 0) return null
+  const d = date || new Date().toISOString().slice(0, 10)
+  const exp = await expenses.create({
+    date: d, category: 'komisyon', amount: amt, customer_id: '', billable: false,
+    note: `İş ortağı komisyon ödemesi — ${partner.name}${note ? ` · ${note}` : ''}`,
+  })
+  return commissionPayments.create({
+    partner_id: partner.id, amount: amt, date: d, note: (note || '').trim(), expense_id: exp?.id || '',
+  })
 }
 
 /* ---------- iş ortağı: herkese açık başvuru (kayıt) ----------
@@ -266,6 +297,12 @@ export async function partnerApply(form) {
     status: 'başvuru',
     notes: (form.notes || '').trim(),
   }
+  if (usingSupabase) {
+    // anon yalnız INSERT yapabilir (SELECT policy yok) — dönüş satırı istenmez
+    const { error } = await supabase.from('partners').insert(row)
+    if (error) throw error
+    return row
+  }
   return partners.create(row)
 }
 
@@ -273,13 +310,24 @@ export async function partnerApply(form) {
    Erişim kodu ile (yalnız 'aktif' ortaklar) — müşteri portalıyla aynı desen.
    Dönüş: hakediş/komisyon ile zenginleştirilmiş ortak kaydı (veya null). */
 export async function partnerLogin(code) {
+  const q = (code || '').trim().toUpperCase()
+  if (!q) return null
+  if (usingSupabase) {
+    // anon tablo okuyamaz — SECURITY DEFINER RPC kod doğrulayıp paketi döner
+    const { data, error } = await supabase.rpc('partner_portal', { p_code: q })
+    if (error || !data) return null
+    const p = data.partner
+    const cs = (data.customers || []).map((c) => ({ ...c, partner_id: p.id }))
+    const inv = data.invoices || []
+    return enrichPartner(p, cs, inv, data.payments || [])
+  }
   const ps = await partners.list()
   const p = ps.find((x) =>
-    (x.access_code || '').toUpperCase() === (code || '').trim().toUpperCase() &&
+    (x.access_code || '').toUpperCase() === q &&
     x.status === 'aktif')
   if (!p) return null
-  const [cs, inv] = await Promise.all([customers.list(), invoices.list()])
-  return enrichPartner(p, cs, inv)
+  const [cs, inv, pays] = await Promise.all([customers.list(), invoices.list(), commissionPayments.list()])
+  return enrichPartner(p, cs, inv, pays)
 }
 
 /* ---------- müşteri portalı girişi (Faz 2) ----------
@@ -290,11 +338,28 @@ export async function partnerLogin(code) {
 export async function customerLogin(code) {
   const q = (code || '').trim().toUpperCase()
   if (!q) return null
+  if (usingSupabase) {
+    const { data } = await supabase.rpc('portal_login_code', { p_code: q })
+    const c = Array.isArray(data) ? data[0] : data
+    return c && c.status !== 'ayrıldı' && c.status !== 'aday' ? c : null
+  }
   const cs = await customers.list()
   const c = cs.find((x) => (x.access_code || '').toUpperCase() === q)
   if (!c) return null
   if (c.status === 'ayrıldı' || c.status === 'aday') return null
   return c
+}
+
+/* ---------- parola özeti (sha256) ----------
+   Saklama biçimi: 'sha256:<hex>' — düz metin eski kayıtlar da doğrulanır. */
+export async function hashPass(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw))
+  return 'sha256:' + Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+async function passMatch(stored, given) {
+  if (!stored) return false
+  if (stored.startsWith('sha256:')) return stored === await hashPass(given)
+  return stored === given // eski düz metin kayıt
 }
 
 /* Müşteri girişi: E-POSTA + ŞİFRE (standart akış).
@@ -305,6 +370,15 @@ export async function customerLoginEmail({ email = '', password = '' } = {}) {
   const id = (email || '').trim().toLowerCase()
   const pw = (password || '').trim()
   if (!id || !pw) return { ok: false, error: 'E-posta ve şifre gerekli.' }
+  if (usingSupabase) {
+    // anon tablo okuyamaz — RPC e-posta + parola/kod doğrular, sadece o kaydı döner
+    const { data, error } = await supabase.rpc('portal_login', { p_email: id, p_pass: pw })
+    if (error) return { ok: false, error: 'Giriş yapılamadı. Tekrar deneyin.' }
+    const c = Array.isArray(data) ? data[0] : data
+    if (!c) return { ok: false, error: 'E-posta veya şifre hatalı.' }
+    if (c.status === 'aday') return { ok: false, error: 'Hesabınız henüz aktif değil — ödeme/aktivasyon bekleniyor.' }
+    return { ok: true, customer: c }
+  }
   const cs = await customers.list()
   const c = cs.find((x) =>
     (x.email || '').trim().toLowerCase() === id ||
@@ -312,19 +386,30 @@ export async function customerLoginEmail({ email = '', password = '' } = {}) {
   if (!c) return { ok: false, error: 'E-posta veya şifre hatalı.' }
   if (c.status === 'aday') return { ok: false, error: 'Hesabınız henüz aktif değil — ödeme/aktivasyon bekleniyor.' }
   if (c.status === 'ayrıldı') return { ok: false, error: 'Hesabınız aktif değil. Bilgi için bize ulaşın.' }
-  const valid = pw === (c.portal_password || '') || pw.toUpperCase() === (c.access_code || '').toUpperCase()
+  const valid = await passMatch(c.portal_password || '', pw) ||
+    pw.toUpperCase() === (c.access_code || '').toUpperCase()
   if (!valid) return { ok: false, error: 'E-posta veya şifre hatalı.' }
   return { ok: true, customer: c }
 }
 
-/* Müşteri portal şifresini değiştir (mevcut şifre doğrulanır) */
+/* Müşteri portal şifresini değiştir (mevcut şifre doğrulanır; yeni şifre HASH'lenir) */
 export async function customerChangePassword(customerId, oldPass, newPass) {
+  const oldP = (oldPass || '').trim()
+  const newP = (newPass || '').trim()
+  if (newP.length < 4) return { ok: false, error: 'Yeni şifre en az 4 karakter olmalı.' }
+  if (usingSupabase) {
+    const { data, error } = await supabase.rpc('portal_change_password', {
+      p_customer_id: customerId, p_old: oldP, p_new: newP,
+    })
+    if (error || !data) return { ok: false, error: 'Mevcut şifre hatalı.' }
+    return { ok: true }
+  }
   const c = await customers.get(customerId)
   if (!c) return { ok: false, error: 'Kayıt bulunamadı.' }
-  const cur = c.portal_password || c.access_code || ''
-  if ((oldPass || '').trim().toUpperCase() !== cur.toUpperCase()) return { ok: false, error: 'Mevcut şifre hatalı.' }
-  if ((newPass || '').trim().length < 4) return { ok: false, error: 'Yeni şifre en az 4 karakter olmalı.' }
-  await customers.update(customerId, { portal_password: newPass.trim() })
+  const valid = await passMatch(c.portal_password || '', oldP) ||
+    oldP.toUpperCase() === (c.access_code || '').toUpperCase()
+  if (!valid) return { ok: false, error: 'Mevcut şifre hatalı.' }
+  await customers.update(customerId, { portal_password: await hashPass(newP) })
   return { ok: true }
 }
 
@@ -334,6 +419,15 @@ export async function customerChangePassword(customerId, oldPass, newPass) {
    Yönetici dekontu görüp "Ödeme geldi" ile aktive eder.
    (Gerçek otomatik eşleşme banka API'si gerektirir — ileride.) */
 export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount = 0, pkg = '', sender = '' } = {}) {
+  if (usingSupabase) {
+    // anon UPDATE yok — RPC yalnız 'aday' kaydına dekont yazar
+    const { data, error } = await supabase.rpc('purchase_submit_receipt', {
+      p_customer_id: customerId, p_url: receiptUrl,
+      p_expected: Number(amount) || 0, p_pkg: pkg, p_sender: sender,
+    })
+    if (error || !data) throw new Error(error?.message || 'Dekont kaydedilemedi.')
+    return true
+  }
   return customers.update(customerId, {
     payment_receipt_url: receiptUrl,
     payment_claimed_at: new Date().toISOString(),
@@ -347,17 +441,118 @@ export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount
    Sitedeki formdan gelir; 'aday' durumunda oluşur, portala giremez.
    Panelden durumu 'aktif' yapılınca müşteriye dönüşür. */
 export async function customerApply(form) {
-  return customers.create({
+  // ortak yönlendirme linki (?ref=KOD) → müşteri-ortak eşleşmesi
+  const ref = (form.ref || '').trim().toUpperCase()
+  let partner_id = ''
+  let refNote = ''
+  if (ref) {
+    if (usingSupabase) {
+      refNote = `Ref: ${ref}` // anon partner okuyamaz — panel onayında eşleştirilir
+    } else {
+      const ps = await partners.list()
+      const p = ps.find((x) => (x.access_code || '').toUpperCase() === ref && x.status === 'aktif')
+      if (p) partner_id = p.id; else refNote = `Ref: ${ref}`
+    }
+  }
+  const row = {
     title: (form.title || '').trim(),
     contact: (form.contact || '').trim(),
     email: (form.email || '').trim(),
     phone: (form.phone || '').trim(),
-    tax_no: '', tax_office: '', tc: '',
+    // VKN (10 hane) / TC (11 hane) — e-belge kesimi için cari bilgisi
+    tax_no: (form.tax_no || '').replace(/\D/g, '').length === 10 ? (form.tax_no || '').replace(/\D/g, '') : '',
+    tc: (form.tax_no || '').replace(/\D/g, '').length === 11 ? (form.tax_no || '').replace(/\D/g, '') : '',
+    tax_office: (form.tax_office || '').trim(),
     status: 'aday',
     access_code: '',
-    partner_id: '',
-    notes: [form.package ? `İstenen paket: ${form.package}` : '', (form.notes || '').trim()].filter(Boolean).join(' · '),
-  })
+    partner_id,
+    bni: !!form.bni,
+    notes: [form.package ? `İstenen paket: ${form.package}` : '', refNote, (form.notes || '').trim()].filter(Boolean).join(' · '),
+  }
+  if (usingSupabase) {
+    // anon INSERT policy dönüş satırı vermez — id'yi istemci üretir
+    const id = crypto.randomUUID()
+    const { error } = await supabase.from('customers').insert({ ...row, id, partner_id: partner_id || null })
+    if (error) throw error
+    return { ...row, id }
+  }
+  return customers.create(row)
+}
+
+/* ---------- müşteri portalı veri katmanı ----------
+   Bulut modunda anon istemci tabloları OKUYAMAZ (RLS). Tüm portal
+   okuma/yazmaları SECURITY DEFINER RPC'ler üzerinden gider; erişim
+   kodu her çağrıda doğrulanır. Yerel modda koleksiyonlardan süzülür. */
+export async function portalBundle(cust) {
+  if (!cust?.id) return null
+  if (usingSupabase) {
+    const { data, error } = await supabase.rpc('portal_bundle', { p_customer_id: cust.id, p_code: cust.access_code || '' })
+    if (error || !data) return null
+    return {
+      customer: data.customer, contracts: data.contracts || [], mail: data.mail || [],
+      invoices: data.invoices || [], documents: data.documents || [],
+      requests: data.requests || [], messages: data.messages || [], bookings: data.bookings || [],
+    }
+  }
+  const [ct, ml, inv, docs, rq, msgs, bk] = await Promise.all([
+    contracts.list(), mail.list(), invoices.list(), documents.list(), requests.list(), requestMessages.list(), bookings.list(),
+  ])
+  const mine = (rows) => rows.filter((x) => x.customer_id === cust.id)
+  const myReqIds = new Set(mine(rq).map((r) => r.id))
+  return {
+    customer: cust, contracts: mine(ct), mail: mine(ml), invoices: mine(inv),
+    documents: mine(docs), requests: mine(rq),
+    messages: msgs.filter((m) => myReqIds.has(m.request_id)), bookings: mine(bk),
+  }
+}
+
+export async function portalCreateRequest(cust, { kind = 'yönlendirme', note = '', mail_id = '' } = {}) {
+  if (usingSupabase) {
+    const { data, error } = await supabase.rpc('portal_create_request', {
+      p_customer_id: cust.id, p_code: cust.access_code || '',
+      p_mail_id: mail_id || null, p_kind: kind, p_note: note,
+    })
+    if (error) throw error
+    return Array.isArray(data) ? data[0] : data
+  }
+  return requests.create({ customer_id: cust.id, mail_id: mail_id || '', kind, note, status: 'yeni' })
+}
+
+export async function portalSendMessage(cust, requestId, text) {
+  const t = (text || '').trim()
+  if (!t) return null
+  if (usingSupabase) {
+    const { data, error } = await supabase.rpc('portal_send_message', {
+      p_customer_id: cust.id, p_code: cust.access_code || '', p_request_id: requestId, p_text: t,
+    })
+    if (error) throw error
+    return Array.isArray(data) ? data[0] : data
+  }
+  return sendRequestMessage({ request_id: requestId, from: 'musteri', text: t })
+}
+
+export async function portalCreateBooking(cust, form) {
+  if (usingSupabase) {
+    const { data, error } = await supabase.rpc('portal_create_booking', {
+      p_customer_id: cust.id, p_code: cust.access_code || '',
+      p_date: form.date, p_start: form.start, p_end: form.end,
+      p_attendees: Number(form.attendees) || 1, p_note: form.note || '',
+    })
+    if (error) throw error
+    return Array.isArray(data) ? data[0] : data
+  }
+  return bookings.create({ customer_id: cust.id, ...form, attendees: Number(form.attendees) || 1, status: 'talep', created_by: 'musteri' })
+}
+
+export async function portalSetKvkk(cust) {
+  const at = new Date().toISOString()
+  if (usingSupabase) {
+    const { error } = await supabase.rpc('portal_set_kvkk', { p_customer_id: cust.id, p_code: cust.access_code || '' })
+    if (error) throw error
+    return { ...cust, kvkk_consent_at: at }
+  }
+  const updated = await customers.update(cust.id, { kvkk_consent_at: at })
+  return updated || { ...cust, kvkk_consent_at: at }
 }
 
 /* ---------- türetilmiş sorgular (dashboard) ---------- */
@@ -439,6 +634,25 @@ export const PACKAGES = ['Başlangıç', 'Pro', 'Kurumsal']
    Kurumsal: özel teklif — sabit fiyatı yok. */
 export const PACKAGE_MONTHLY = { 'Başlangıç': 799, 'Pro': 1499 }   // aylık, ₺
 export const PACKAGE_PRICES = { 'Başlangıç': 7990, 'Pro': 14990 }  // yıllık peşin, ₺
+/* BNI Nişantaşı kaynaklı müşteri indirimi (%). Sitede GÖRÜNMEZ; yalnız panelde,
+   müşteri "BNI" işaretliyse ödeme anında uygulanır. Oran ayda bir elle gözden
+   geçirilir — değişecek tek yer burası. 0 = indirim yok. */
+export const BNI_INDIRIM = 10
+export function bniPrice(amount) {
+  return Math.round((Number(amount) || 0) * (100 - BNI_INDIRIM)) / 100
+}
+/* İndirim kodları — kamuya açık DEĞİL; sahibi (ör. BNI üyesi) müşteriye verir.
+   Müşteri satın alma sayfasında kodu kendi girer. kod → % indirim.
+   Yeni kod eklemek / oranı değiştirmek tek satır; ayda bir gözden geçir. */
+export const INDIRIM_KODLARI = { BNINISANTASI: BNI_INDIRIM }
+export function indirimCoz(code) {
+  const k = String(code || '').trim().toUpperCase().replace(/\s+/g, '')
+  const pct = INDIRIM_KODLARI[k]
+  return pct ? { code: k, pct } : null
+}
+export function indirimliTutar(amount, pct) {
+  return Math.round((Number(amount) || 0) * (100 - (Number(pct) || 0))) / 100
+}
 export const INVOICE_STATUS = ['bekliyor', 'ödendi', 'gecikti']
 export const CUSTOMER_STATUS = ['aday', 'aktif', 'askıda', 'ayrıldı']
 
@@ -469,9 +683,42 @@ export const EXPENSE_CATEGORIES = [
   { v: 'harc', l: 'Resmî harç / vergi' },
   { v: 'kirtasiye', l: 'Kırtasiye / sarf' },
   { v: 'personel', l: 'Personel / hizmet' },
+  { v: 'komisyon', l: 'İş ortağı komisyonu' },
   { v: 'diger', l: 'Diğer' },
 ]
 export const REQUEST_STATUS = ['yeni', 'işlemde', 'tamamlandı', 'reddedildi']
+
+/* ---------- toplantı odası rezervasyonu ----------
+   Randevu durumları + çalışma saatleri (yerel iş kuralı). */
+export const BOOKING_STATUS = ['talep', 'onaylandı', 'reddedildi', 'iptal']
+export const ROOM_OPEN = '09:00'
+export const ROOM_CLOSE = '18:00'
+
+/* 'HH:MM' aralığı üretir (varsayılan 30 dk adım, ofis saatleri) */
+export function timeSlots(open = ROOM_OPEN, close = ROOM_CLOSE, stepMin = 30) {
+  const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
+  const pad = (n) => String(n).padStart(2, '0')
+  const out = []
+  for (let m = toMin(open); m <= toMin(close); m += stepMin) out.push(`${pad(Math.floor(m / 60))}:${pad(m % 60)}`)
+  return out
+}
+
+/* İki zaman aralığı çakışıyor mu (HH:MM sıfır dolgulu → string kıyas geçerli) */
+function overlaps(aStart, aEnd, bStart, bEnd) {
+  return aStart < bEnd && bStart < aEnd
+}
+
+/* Aynı gün + çakışan saat + engelleyici durum (talep/onaylandı) var mı?
+   exceptId: düzenlenen kaydın kendisi hariç tutulur. */
+export function bookingConflict(list, { date, start, end, exceptId } = {}) {
+  if (!date || !start || !end) return null
+  return list.find((b) =>
+    b.id !== exceptId &&
+    b.date === date &&
+    (b.status === 'talep' || b.status === 'onaylandı') &&
+    overlaps(start, end, b.start, b.end)
+  ) || null
+}
 export const INSPECTION_RESULT = ['bekleniyor', 'olumlu', 'olumsuz']
 export const CHANNELS = ['email', 'sms', 'whatsapp']
 export const EFATURA_PROVIDERS = [
@@ -491,6 +738,10 @@ export const NOTIFY_TEMPLATES = {
   delivered:      { label: 'Teslim edildi',            text: 'Sayın {ad}, {tarih} tarihinde gönderiniz teslim edilmiştir. — {firma}' },
   renewal_due:    { label: 'Sözleşme yenileme',         text: 'Sayın {ad}, {paket} sözleşmeniz {gun} gün sonra ({tarih}) sona eriyor. Adresinizin geçerli kalması için yenilemeyi unutmayın. — {firma}' },
   invoice_issued: { label: 'Fatura oluşturuldu',        text: 'Sayın {ad}, {tutar} tutarında faturanız oluşturuldu. — {firma}' },
+  einvoice_ready: { label: 'e-Belge kesildi (PDF)',      text: 'Sayın {ad}, {tutar} tutarındaki e-belgeniz ({belge_no}) düzenlenmiştir. Faturanızı görüntülemek için: {link} — {firma}' },
+  mail_waiting:   { label: 'Bekleyen gönderi hatırlatma', text: 'Sayın {ad}, {tarih} tarihinde gelen {tur} ({gonderen}) hâlâ ofisimizde teslim alınmayı bekliyor. Teslim/yönlendirme için bize ulaşın. — {firma}' },
+  booking_confirmed:{ label: 'Toplantı odası onaylandı', text: 'Sayın {ad}, {tarih} günü {saat} toplantı odası rezervasyonunuz onaylanmıştır. Bekleriz. — {firma}' },
+  booking_rejected: { label: 'Toplantı odası reddedildi', text: 'Sayın {ad}, {tarih} günü {saat} toplantı odası talebiniz maalesef karşılanamadı. Uygun bir saat için bize ulaşın. — {firma}' },
 }
 
 export function renderTemplate(text, vars = {}) {
@@ -507,6 +758,9 @@ export const TEMPLATE_VARS = [
   { key: 'gun',      desc: 'Kalan gün sayısı' },
   { key: 'paket',    desc: 'Sözleşme paketi' },
   { key: 'tutar',    desc: 'Fatura tutarı' },
+  { key: 'saat',     desc: 'Toplantı saati (ör. 10:00–11:00)' },
+  { key: 'link',     desc: 'e-Belge PDF bağlantısı' },
+  { key: 'belge_no', desc: 'e-Belge numarası' },
 ]
 
 /* Önizleme için örnek değerler (canlı önizlemede kullanılır) */
@@ -557,12 +811,32 @@ export function trackingUrl(carrier, code) {
   return c && code ? c.url(code) : ''
 }
 
-/* ---------- dosya/foto → küçültülmüş dataURL (yerel mod) ----------
-   Bulut modunda bu fonksiyon Supabase Storage'a yükleyip URL döndürecek
-   şekilde değiştirilecek. Şimdilik görseli küçültüp dataURL üretir. */
+/* ---------- dosya/foto → depolanabilir URL ----------
+   Yerel mod: görseli küçültüp dataURL üretir (tarayıcıda saklanır).
+   Bulut modu: Supabase Storage 'mail-photos' bucket'ına yükler, public
+   URL döner — DB satırına dev dataURL gömülmez, tablo şişmez. */
+const STORAGE_BUCKET = 'mail-photos'
+
+async function uploadToStorage(blob, ext = 'jpg') {
+  const path = `${new Date().toISOString().slice(0, 10)}/${uid()}.${ext}`
+  const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {
+    contentType: blob.type || 'application/octet-stream', upsert: false,
+  })
+  if (error) throw error
+  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
+  return data?.publicUrl || ''
+}
+
 export async function fileToStoredUrl(file, { maxW = 1000, quality = 0.6 } = {}) {
   if (!file) return ''
   const isImage = file.type.startsWith('image/')
+  if (usingSupabase) {
+    try {
+      if (!isImage) return await uploadToStorage(file, (file.name || '').split('.').pop() || 'bin')
+      const small = await shrinkImage(file, { maxW, quality })
+      return await uploadToStorage(small, 'jpg')
+    } catch { /* Storage kurulmamışsa dataURL'e düş */ }
+  }
   if (!isImage) {
     // görsel değilse (PDF vb.) doğrudan dataURL — yerel modda küçük tut
     return await new Promise((res) => {
@@ -582,6 +856,25 @@ export async function fileToStoredUrl(file, { maxW = 1000, quality = 0.6 } = {})
       res(cv.toDataURL('image/jpeg', quality))
     }
     img.onerror = () => res(dataUrl)
+    img.src = dataUrl
+  })
+}
+
+/* Görseli küçültüp JPEG Blob döndürür (Storage yüklemesi için) */
+async function shrinkImage(file, { maxW = 1000, quality = 0.6 } = {}) {
+  const dataUrl = await new Promise((res) => {
+    const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(file)
+  })
+  return await new Promise((res, rej) => {
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, maxW / img.width)
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale)
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h
+      cv.getContext('2d').drawImage(img, 0, 0, w, h)
+      cv.toBlob((b) => (b ? res(b) : rej(new Error('blob üretilemedi'))), 'image/jpeg', quality)
+    }
+    img.onerror = () => res(file) // küçültme olmazsa orijinali yükle
     img.src = dataUrl
   })
 }
@@ -687,7 +980,20 @@ export async function issueEInvoice(invoice, customer) {
       einvoice_status: data?.status || 'kesildi',
       einvoice_pdf: data?.pdf_url || '',
     })
-    return { ok: true, ...data }
+    // e-belge kesildi → PDF linkiyle müşteriye OTOMATİK e-posta (zincirin son halkası)
+    let mailed = false
+    if (customer?.email) {
+      try {
+        await notifyEvent('einvoice_ready', customer, {
+          tutar: `${Number(invoice.amount) || 0} ₺`,
+          belge_no: data?.number || data?.uuid || '',
+          link: data?.pdf_url || '',
+          tarih: fmtTrDate(invoice.issue_date),
+        })
+        mailed = true
+      } catch { /* bildirim hatası kesimi geri almaz */ }
+    }
+    return { ok: true, mailed, ...data }
   } catch (e) {
     return { ok: false, reason: String(e?.message || e) }
   }
@@ -728,8 +1034,10 @@ export function onboardingSteps(c, { contracts: ct = [], documents: docs = [], i
    "Para hesaba geçti / kartla ödendi" onayı tek işlemde:
    sözleşme (1 yıl) + ÖDENDİ faturası + erişim kodu + aktif durum + bildirim.
    Kalan tek elle iş: belgeler ve yoklama. */
-export async function activateAfterPayment(customer, pkg, amount) {
+export async function activateAfterPayment(customer, pkg, amount, opts = {}) {
   const price = Number(amount) || PACKAGE_PRICES[pkg] || 0
+  const bniPct = Number(opts.bniPct) || 0
+  const noteSuffix = bniPct ? ` · BNI %${bniPct} indirim` : ''
   const today = new Date()
   const todayIso = isoLocal(today)
   const end = new Date(today); end.setFullYear(end.getFullYear() + 1)
@@ -738,10 +1046,10 @@ export async function activateAfterPayment(customer, pkg, amount) {
     customer_id: customer.id, package: pkg, price,
     start_date: todayIso, end_date: isoLocal(end), status: 'aktif', auto_renew: true,
   })
-  await invoices.create({
+  const inv = await invoices.create({
     customer_id: customer.id, amount: price, status: 'ödendi',
     issue_date: todayIso, due_date: todayIso, paid_date: todayIso,
-    note: `${pkg} yıllık — peşin tahsilat`,
+    note: `${pkg} yıllık — peşin tahsilat${noteSuffix}`,
   })
   const patch = { status: 'aktif' }
   if (!customer.access_code) {
@@ -749,8 +1057,20 @@ export async function activateAfterPayment(customer, pkg, amount) {
   }
   const updated = await customers.update(customer.id, patch)
   const cust = updated || { ...customer, ...patch }
-  await notifyEvent('invoice_issued', cust, { tutar: `${price} ₺`, tarih: fmtTrDate(todayIso) })
-  return cust
+
+  // ödeme alındı → e-belge OTOMATİK kesilir (Paraşüt: cari bul/aç + fatura +
+  // e-fatura/e-arşiv) ve issueEInvoice içinde PDF linkiyle müşteriye maillenir.
+  // Kesim başarısızsa aktivasyon geri alınmaz; fatura panelde "kes" ile beklet.
+  let einvoice = null
+  const cfg = getConfig()
+  if (cfg.efatura_enabled && usingSupabase && inv) {
+    try { einvoice = await issueEInvoice(inv, cust) } catch { einvoice = { ok: false } }
+  }
+  // e-belge maili gittiyse ikinci bir "fatura kesildi" bildirimi atma
+  if (!einvoice?.mailed) {
+    await notifyEvent('invoice_issued', cust, { tutar: `${price} ₺`, tarih: fmtTrDate(todayIso) })
+  }
+  return { ...cust, _einvoice: einvoice }
 }
 
 /* ---------- otomasyon: sözleşme yenileme + hatırlatma ----------
@@ -762,10 +1082,10 @@ export async function activateAfterPayment(customer, pkg, amount) {
    Dönüş: { renewed, reminded, invoiced } sayaçları. */
 export async function runAutoTasks() {
   const cfg = getConfig()
-  const [ct, cs] = await Promise.all([contracts.list(), customers.list()])
+  const [ct, cs, ml] = await Promise.all([contracts.list(), customers.list(), mail.list()])
   const byId = Object.fromEntries(cs.map((c) => [c.id, c]))
   const todayIso = new Date().toISOString().slice(0, 10)
-  const out = { renewed: 0, reminded: 0, invoiced: 0 }
+  const out = { renewed: 0, reminded: 0, invoiced: 0, einvoiced: 0, sla: 0 }
 
   for (const c of ct) {
     if (c.status !== 'aktif') continue
@@ -778,13 +1098,18 @@ export async function runAutoTasks() {
       const newEnd = `${Number(y) + 1}-${m}-${dd}`
       const due = new Date(); due.setDate(due.getDate() + 15)
       await contracts.update(c.id, { start_date: c.end_date, end_date: newEnd, reminded_at: '' })
-      await invoices.create({
+      const inv = await invoices.create({
         customer_id: c.customer_id, amount: Number(c.price) || 0, status: 'bekliyor',
         issue_date: todayIso, due_date: isoLocal(due), paid_date: '',
         note: `${c.package} yenileme (${fmtTrDate(c.end_date)} → ${fmtTrDate(newEnd)})`,
       })
       out.renewed++; out.invoiced++
       if (cust) await notifyEvent('invoice_issued', cust, { tutar: `${Number(c.price) || 0} ₺`, tarih: fmtTrDate(todayIso) })
+      // OTOMATİK e-belge: entegrasyon açıksa yenileme faturası kesilir + PDF müşteriye maillenir
+      if (cust && cfg.efatura_enabled && usingSupabase && inv) {
+        const r = await issueEInvoice(inv, cust)
+        if (r?.ok) out.einvoiced++
+      }
     } else if (days >= 0 && days <= 15 && cfg.auto_reminders && cust) {
       const last = c.reminded_at ? new Date(c.reminded_at).getTime() : 0
       if (Date.now() - last > 7 * 86400000) {
@@ -792,6 +1117,26 @@ export async function runAutoTasks() {
         await contracts.update(c.id, { reminded_at: new Date().toISOString() })
         out.reminded++
       }
+    }
+  }
+
+  // KARGO SLA: teslim alınmayan gönderiler için otomatik ikinci bildirim
+  // tebligat: 3 gün sonra (yasal süre kritik), diğer: 7 gün sonra; aynı aralıkla tekrarlanır
+  if (cfg.auto_reminders) {
+    for (const m of ml) {
+      if (m.status !== 'geldi' && m.status !== 'bildirildi') continue
+      const cust = byId[m.customer_id]
+      if (!cust) continue
+      const waitDays = daysLeft(m.received_date) * -1 // geçmiş tarih → pozitif bekleme
+      const threshold = m.type === 'tebligat' ? 3 : 7
+      if (waitDays < threshold) continue
+      const last = m.sla_reminded_at ? new Date(m.sla_reminded_at).getTime() : 0
+      if (Date.now() - last <= threshold * 86400000) continue
+      await notifyEvent('mail_waiting', cust, {
+        tur: m.type, gonderen: m.sender || '', tarih: fmtTrDate(m.received_date),
+      })
+      await mail.update(m.id, { sla_reminded_at: new Date().toISOString() })
+      out.sla++
     }
   }
   return out
@@ -814,7 +1159,7 @@ export const TABLE_LABELS = {
   customers: 'Müşteriler', contracts: 'Sözleşmeler', mail_items: 'Kargo & Posta',
   invoices: 'Faturalar', documents: 'Belgeler', notifications: 'Bildirim kaydı',
   requests: 'Talepler', inspections: 'Yoklama', partners: 'İş ortakları',
-  expenses: 'Masraflar', request_messages: 'Talep mesajları',
+  expenses: 'Masraflar', request_messages: 'Talep mesajları', bookings: 'Toplantı Odası',
 }
 
 export async function verifyMigration() {

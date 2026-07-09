@@ -52,6 +52,11 @@ function PortalLogin({ onOk }) {
 
 function PortalHome({ p, onLogout }) {
   const refs = p.customers || []
+  const refLink = `${window.location.origin}/satin-al?ref=${encodeURIComponent(p.access_code || '')}`
+  const [copied, setCopied] = useState(false)
+  const copyLink = async () => {
+    try { await navigator.clipboard.writeText(refLink); setCopied(true); setTimeout(() => setCopied(false), 1600) } catch { /* pano izni yok */ }
+  }
   const maskIban = (v) => {
     const s = (v || '').replace(/\s+/g, '')
     if (s.length < 8) return v || '—'
@@ -81,7 +86,23 @@ function PortalHome({ p, onLogout }) {
         <div className="pl-stats">
           <div className="pl-stat"><div className="lab">Getirdiğin müşteri</div><div className="val">{p.customerCount}</div></div>
           <div className="pl-stat"><div className="lab">Komisyon oranı</div><div className="val">%{p.commissionRate}</div></div>
-          <div className="pl-stat"><div className="lab">Biriken hakediş</div><div className="val teal">{fmtTL(p.commissionEarned)}</div></div>
+          <div className="pl-stat"><div className="lab">Toplam hakediş</div><div className="val">{fmtTL(p.commissionEarned)}</div></div>
+          <div className="pl-stat"><div className="lab">Ödenen</div><div className="val">{fmtTL(p.commissionPaid || 0)}</div></div>
+          <div className="pl-stat"><div className="lab">Kalan hakediş</div><div className="val teal">{fmtTL(p.commissionDue || 0)}</div></div>
+        </div>
+
+        {/* yönlendirme linki */}
+        <div className="pl-card" style={{ marginTop: 20 }}>
+          <div className="pl-card-h"><h2>Yönlendirme linkin</h2></div>
+          <div className="pl-card-b">
+            <div className="pl-row">
+              <div className="grow">
+                <div className="t1"><code style={{ fontSize: 13 }}>{refLink}</code></div>
+                <div className="t2">Bu linkle gelen müşteriler otomatik sana bağlanır ve komisyonuna işler.</div>
+              </div>
+              <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={copyLink}>{copied ? '✓ Kopyalandı' : 'Kopyala'}</button>
+            </div>
+          </div>
         </div>
 
         {/* getirilen müşteriler */}
@@ -121,6 +142,25 @@ function PortalHome({ p, onLogout }) {
                 Rakamlar ödenmiş faturalar üzerinden, panelde şeffaf hesaplanır.
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* yapılan ödemeler */}
+        <div className="pl-card" style={{ marginTop: 20 }}>
+          <div className="pl-card-h"><h2>Yapılan ödemeler</h2></div>
+          <div className="pl-card-b">
+            {(p.payments || []).length === 0 && (
+              <div className="pl-empty">Henüz komisyon ödemesi yapılmadı.</div>
+            )}
+            {(p.payments || []).map((pay) => (
+              <div className="pl-row" key={pay.id}>
+                <div className="grow">
+                  <div className="t1">{fmtTL(pay.amount)}</div>
+                  <div className="t2">{pay.date}{pay.note ? ` · ${pay.note}` : ''}</div>
+                </div>
+                <span className="pl-badge b-ok">ödendi</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
