@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import GanuMark from './GanuMark'
-import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar } from './panel/lib/store.js'
+import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar } from './panel/lib/store.js'
 
 /* ============================================================
    /satin-al — 3 adımlı satın alma sayfası
@@ -108,6 +108,20 @@ export default function SatinAl() {
     const updated = await activateAfterPayment(cust, pkg, price, { bniPct })
     setResult({ mode: 'kart', code: updated.access_code })
     setStep(3)
+  }
+
+  /* Gerçek sanal POS (PayTR/iyzico) — ayarda pos_enabled AÇIK ise çalışır.
+     Sağlayıcının 3D Secure ekranına yönlendirir; kart bilgisi GANU'ya girmez.
+     Tahsilat sonrası sağlayıcı callback'i DB'yi işaretler, dönüşte panel onaylar. */
+  const startPos = async () => {
+    const provider = cfg.pos_provider || 'paytr'
+    const out = await posPay(provider, {
+      customerId: cust.id, amount: price, pkg,
+      email: f.email, name: f.title, phone: f.phone,
+    })
+    const url = out?.iframe_url || out?.redirect_url || out?.payment_url
+    if (!url) throw new Error('POS yönlendirme adresi alınamadı.')
+    window.location.href = url
   }
 
   /* Havale: dekont yükle + bildirim.
@@ -241,7 +255,9 @@ export default function SatinAl() {
               ))}
             </div>
             {payTab === 'kart'
-              ? <CardPay amount={price} onPaid={onCardPaid} />
+              ? (posEnabled()
+                  ? <PosPay amount={price} provider={cfg.pos_provider || 'paytr'} onStart={startPos} />
+                  : <CardPay amount={price} onPaid={onCardPaid} />)
               : <TransferPay cfg={cfg} applicant={f.title || cust?.title} pkg={pkg} amount={price} onClaim={onTransferClaim} />}
           </div>
         )}
@@ -397,6 +413,37 @@ export default function SatinAl() {
 }
 
 /* ---- Kart ödeme (TEST MODU — tahsilat yok, simülasyon) ---- */
+/* Gerçek sanal POS ödemesi — sağlayıcının güvenli 3D Secure ekranına yönlendirir.
+   Kart bilgisi bu ekrana GİRİLMEZ; sağlayıcıda girilir (PCI-DSS uyumlu). */
+function PosPay({ amount, provider, onStart }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const label = provider === 'iyzico' ? 'iyzico' : 'PayTR'
+
+  const go = async () => {
+    setErr(''); setBusy(true)
+    try { await onStart() } // başarılıysa sayfa yönlenir; buraya dönerse hata var
+    catch (e) { setErr(String(e?.message || e) || 'Ödeme başlatılamadı.'); setBusy(false) }
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#eef7f4', border: '1.5px solid #9fd8cb', borderRadius: 10, padding: '10px 14px', fontSize: 13, fontWeight: 600, color: 'var(--teal-dark, #04352c)' }}>
+        🔒 Güvenli ödeme — kart bilgileriniz {label}'ın 3D Secure ekranında girilir, GANU'ya iletilmez.
+      </div>
+      <div style={{ textAlign: 'center', padding: '8px 0' }}>
+        <div style={{ fontSize: 13, opacity: 0.65, marginBottom: 4 }}>Ödenecek tutar</div>
+        <div style={{ fontWeight: 800, fontSize: 30, color: 'var(--navy, #0A2540)' }}>₺{Number(amount).toLocaleString('tr-TR')}</div>
+      </div>
+      {err && <span style={{ color: '#b91c1c', fontSize: 14, fontWeight: 600, textAlign: 'center' }}>{err}</span>}
+      <button type="button" className="pay-btn" onClick={go} disabled={busy}>
+        {busy ? 'Yönlendiriliyor…' : `${label} ile güvenli öde →`}
+      </button>
+      <span style={{ fontSize: 12.5, opacity: 0.6, textAlign: 'center' }}>Ödeme sonrası bu sayfaya geri dönersiniz; paketiniz otomatik aktive olur.</span>
+    </div>
+  )
+}
+
 function CardPay({ amount, onPaid }) {
   const [c, setC] = useState({ no: '', name: '', exp: '', cvv: '' })
   const [err, setErr] = useState('')

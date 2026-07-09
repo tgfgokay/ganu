@@ -44,6 +44,10 @@ const DEFAULT_CFG = {
   // Varsayılan KAPALI — para geldikten sonra yönetici dekonta bakıp
   // müşteri detayından onaylar. (Açılırsa sahte dekont riski yöneticiye ait.)
   auto_activate_receipt: false,
+  // sanal POS (kart tahsilatı) — açıkken /satin-al kart adımı gerçek
+  // ödemeye (pos-payment Edge Function) yönlenir; kapalıyken simülasyon.
+  pos_enabled: false,
+  pos_provider: 'paytr',                // paytr | iyzico
 }
 export function getConfig() {
   try { return { ...DEFAULT_CFG, ...(JSON.parse(localStorage.getItem(CFG_KEY)) || {}) } }
@@ -435,6 +439,28 @@ export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount
     payment_pkg: pkg,
     payment_sender: sender,
   })
+}
+
+/* ---------- sanal POS (kart tahsilatı) ----------
+   pos-payment Edge Function'ı 'init' ile çağırır; sağlayıcının 3D Secure
+   ekranına yönlendirmek için iframe_url / redirect döner. Yalnız Supabase
+   bağlıyken çalışır (secret'lar sunucuda). Sağlayıcı: 'paytr' | 'iyzico'.
+   Config'te pos_enabled açık değilse UI bu yolu kullanmaz (simülasyon kalır). */
+export async function posPay(provider, { customerId, amount, pkg = '', email = '', name = '', phone = '' } = {}) {
+  if (!usingSupabase) throw new Error('Sanal POS için Supabase bağlı olmalı (yerel modda simülasyon çalışır).')
+  if (!customerId || !(Number(amount) > 0)) throw new Error('customerId ve geçerli tutar zorunlu.')
+  const { data, error } = await supabase.functions.invoke('pos-payment', {
+    body: { action: 'init', provider, customer_id: customerId, amount: Number(amount), pkg, email, name, phone },
+  })
+  if (error) throw new Error(error.message || 'POS başlatılamadı.')
+  if (data?.error) throw new Error(data.error)
+  return data // { provider, mode, token?, iframe_url?, merchant_oid }
+}
+
+/* Config'te sanal POS açık mı? (varsayılan kapalı → kart ekranı simülasyon) */
+export function posEnabled() {
+  const cfg = getConfig()
+  return !!(cfg && cfg.pos_enabled)
 }
 
 /* ---------- online müşteri başvurusu ----------

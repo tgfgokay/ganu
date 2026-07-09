@@ -258,6 +258,26 @@ alter table public.commission_payments enable row level security;
 create policy "staff_all_compay" on public.commission_payments for all to authenticated using (true) with check (true);
 
 -- ------------------------------------------------------------
+-- Sanal POS siparişleri (kart tahsilatı — pos-payment Edge Function)
+-- merchant_oid ↔ customer eşlemesi; callback ödemeyi buradan doğrular.
+-- Tabloya yalnız Edge Function (service role) ve personel erişir; anon ERİŞEMEZ.
+-- ------------------------------------------------------------
+create table if not exists public.pos_orders (
+  id uuid primary key default gen_random_uuid(),
+  merchant_oid text unique not null,          -- sağlayıcı sipariş no
+  customer_id uuid references public.customers(id) on delete set null,
+  amount numeric not null default 0,
+  pkg text,
+  provider text not null default 'paytr',     -- paytr | iyzico
+  status text not null default 'bekliyor',    -- bekliyor | başarılı | başarısız
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_pos_orders_oid on public.pos_orders(merchant_oid);
+create index if not exists idx_pos_orders_customer on public.pos_orders(customer_id);
+alter table public.pos_orders enable row level security;
+create policy "staff_all_pos_orders" on public.pos_orders for all to authenticated using (true) with check (true);
+
+-- ------------------------------------------------------------
 -- İş ortaklığı başvuru formu (anon INSERT — sadece 'başvuru' statüsü)
 -- ------------------------------------------------------------
 create policy "public_apply_partners" on public.partners
