@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import GanuMark from '../GanuMark'
+import { withBase } from '../base'
 import {
   customerLogin, customerLoginEmail, customerChangePassword,
   requestThread, sendRequestMessage, invStatus, getConfig,
@@ -138,7 +139,7 @@ function PortalHome({ cust, onLogout }) {
   return (
     <div className="pl-portal">
       <header className="pl-portal-top">
-        <a href="/" className="pl-brand"><GanuMark /><span>müşteri</span></a>
+        <a href={withBase("/")} className="pl-brand"><GanuMark /><span>müşteri</span></a>
         <div className="pl-portal-user">
           <span>{cust.title}</span>
           <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setPwModal(true)}>Şifre</button>

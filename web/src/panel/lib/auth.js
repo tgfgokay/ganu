@@ -7,6 +7,7 @@
    Tüm API async'tir ve arayüz her iki modda da aynıdır.
    ============================================================ */
 import { supabase, usingSupabase } from './supabase.js'
+import { withBase } from '../../base'
 
 const SESSION_KEY = 'ganu.panel.session'
 const PASS_KEY = 'ganu.panel.pass'
@@ -76,7 +77,7 @@ export async function changePass(oldPass, newPass) {
 export async function resetPassword(email) {
   if (!usingSupabase) return { ok: false, error: 'Bu özellik yalnızca bulut (Supabase) modunda kullanılabilir.' }
   const { error } = await supabase.auth.resetPasswordForEmail((email || '').trim(), {
-    redirectTo: `${window.location.origin}/panel`,
+    redirectTo: `${window.location.origin}${withBase('/panel')}`,
   })
   if (error) return { ok: false, error: cevirHata(error.message) }
   return { ok: true }
