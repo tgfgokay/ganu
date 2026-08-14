@@ -396,21 +396,25 @@ function Pricing() {
   return (
     <section className="section" id="paketler">
       <div className="wrap">
-        <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Fiyat Cetveli — Paketler</motion.span>
-          <motion.h2 variants={rise}>Şeffaf, sade<br /><em>fiyatlandırma</em><span className="dot">.</span></motion.h2>
-        </motion.div>
+        {/* Başlık ve faturalama düğmesi aynı satırda: dikey yığınca kartlar
+            ilk ekranda ortadan kesiliyordu. */}
+        <div className="pricing-head">
+          <motion.div className="shead" {...reveal} variants={stagger}>
+            <motion.span className="kicker" variants={rise}>Fiyat Cetveli — Paketler</motion.span>
+            <motion.h2 variants={rise}>Şeffaf, sade<br /><em>fiyatlandırma</em><span className="dot">.</span></motion.h2>
+          </motion.div>
 
-        <motion.div className="billing" {...reveal} variants={rise}>
-          <button type="button" role="switch" aria-checked={yearly}
-            aria-label="Yıllık faturalandırmaya geç"
-            className={`billing-toggle${yearly ? ' on' : ''}`} onClick={() => setYearly((v) => !v)}>
-            <span className={`opt${yearly ? '' : ' active'}`}>Aylık</span>
-            <span className="knob" aria-hidden="true" />
-            <span className={`opt${yearly ? ' active' : ''}`}>Yıllık</span>
-          </button>
-          <span className="billing-note">Yıllık öde, <b>2 ay bedava</b></span>
-        </motion.div>
+          <motion.div className="billing" {...reveal} variants={rise}>
+            <button type="button" role="switch" aria-checked={yearly}
+              aria-label="Yıllık faturalandırmaya geç"
+              className={`billing-toggle${yearly ? ' on' : ''}`} onClick={() => setYearly((v) => !v)}>
+              <span className={`opt${yearly ? '' : ' active'}`}>Aylık</span>
+              <span className="knob" aria-hidden="true" />
+              <span className={`opt${yearly ? ' active' : ''}`}>Yıllık</span>
+            </button>
+            <span className="billing-note">Yıllık öde, <b>2 ay bedava</b></span>
+          </motion.div>
+        </div>
 
         <motion.div className="tiers" {...reveal} variants={stagger}>
           {tiers.map((t) => (
