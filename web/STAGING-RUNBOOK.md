@@ -14,11 +14,14 @@
 2. `supabase/migrations/0001_pricing_catalog.sql`  — packages, discount_codes, pos_orders fiyat alanları, **pos_settle**
 3. `supabase/migrations/0002_private_storage.sql`  — secure-docs bucket + RLS + owns_secure_object
 4. `supabase/migrations/0003_auth_hardening.sql`   — bcrypt _pw_match, set_portal_password (yetkili), staff_roles, legacy reset
+5. `supabase/migrations/0004_prod_gate.sql`        — prod_gate_proof (service-role) + gate-probe müşteri
 
 Storage bucket: 0002 `insert into storage.buckets` ile açar; Dashboard → Storage'da
 `secure-docs` **public=false** olduğunu teyit et.
 
-Edge Function: `supabase functions deploy pos-payment --no-verify-jwt`
+Edge Function:
+- `supabase functions deploy pos-payment --no-verify-jwt`  (anon/callback erişir)
+- `supabase functions deploy admin-gate`                   (JWT doğrulaması AÇIK — §6)
 Personel: Auth → Users → invite; `insert into public.staff_roles(user_id, role) values ('<uid>','owner');`
 
 ---
@@ -123,14 +126,27 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST "$FN" \
 --   select count(*) as after_cnt from public.pos_orders;   -- before_cnt ile AYNI
 --   select count(*) from public.pos_orders where merchant_oid like 'GANU%'
 --     and created_at > now() - interval '5 min';           -- 0 (yeni sipariş yok)
-#   PayTR çağrısı 0: sipariş insert'i computeOrder'dan SONRA olduğu için, hata
-#   insert ve get-token'dan ÖNCE fırlar → sağlayıcıya hiç gidilmez.
-# 5) Enjeksiyonu KALDIR ve yeniden deploy:
+# 5) İNDİRİM yolu için de (dolu code ŞART — indirim sorgusu yalnız code doluyken çalışır):
+supabase secrets set POS_TEST_FAULT=discount
+supabase functions deploy pos-payment --no-verify-jwt
+curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST "$FN" \
+  -H "content-type: application/json" \
+  -d '{"action":"init","provider":"paytr","customer_id":"<CID>","package_id":"Pro","code":"BNINISANTASI"}'
+#   → BEKLENEN: HTTP 5xx (indirim doğrulanamadı = fail-closed). Boş code ile bu yol
+#     TETİKLENMEZ; bu yüzden test dolu code ile yapılır.
+# 6) Enjeksiyonu KALDIR ve yeniden deploy:
 supabase secrets unset POS_TEST_FAULT
 supabase functions deploy pos-payment --no-verify-jwt
 ```
-Beklenen sonuç: **HTTP 5xx**, **after_cnt == before_cnt (sipariş 0)**, **PayTR çağrısı 0**.
-(Aynısı indirim yolu için `POS_TEST_FAULT=discount`.)
+Beklenen sonuç: **HTTP 5xx** ve **after_cnt == before_cnt (sipariş 0)** — bunlar
+**gözlenmiş** sonuçlardır.
+
+**"PayTR çağrısı 0" — STATİK KONTROL-AKIŞI KANITI (gözlenmiş değil):**
+`paytrInit` içinde sıra kesindir → `computeOrder()` **ilk** çağrılır; hata orada
+fırlar. `pos_orders` insert'i ve `fetch('…/get-token')` (PayTR çağrısı) computeOrder'dan
+**SONRA** yazılıdır; bir istisna fırladığında bu satırlara **erişilmez** (unreachable).
+Yani PayTR'a hiç gidilmemesi runtime gözlemiyle değil, **kod sıralamasıyla** garanti
+edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman diliminde çağrı yok.)
 
 ---
 
@@ -166,6 +182,36 @@ Supabase kurulmaz, gerçek PayTR tahsilatı yapılmaz. Ek zorunlu kapılar:
 
 - **§3a fail-closed:** `POS_TEST_FAULT=catalog` ile HTTP 5xx + sipariş 0 + PayTR 0 görülmeli;
   test sonrası secret KALDIRILMIŞ olmalı (`supabase secrets unset POS_TEST_FAULT`).
-- **admin testi:** staging'de `SKIP` kabul; **production öncesi** gerçek owner/admin
-  auth kullanıcısıyla (`set ganu.test_owner_uid=<uid>`) **PASS** olmak ZORUNDA.
-- **POS_TEST_FAULT** production secret'larında **bulunmamalı** (deploy öncesi doğrula).
+- **admin gate (makine-kontrollü):** aşağıdaki §6 ile gerçek JWT kanıtı üretilmeli;
+  `prod_readiness_gate.sql` PASS vermeli. Kanıt yoksa CI/deploy **DURUR**.
+- **POS_TEST_FAULT** production secret'larında **bulunmamalı** (prod-gate script kontrol eder).
+
+## 6) PROD READINESS GATE — admin RPC gerçek-JWT kanıtı (makine-kontrollü)
+> Amaç: "owner/admin gerçek authenticated JWT ile admin RPC çalıştırabiliyor"
+> kanıtını üretip deploy'u ona bağlamak. Sadece staff_roles kaydı ya da SQL
+> editor'de elle set edilen claim **kanıt sayılmaz** (getUser imza doğrular; kanıt
+> tablosu yalnız service-role'a açık).
+
+**Kurulum (bir kez):**
+1. Migration `0004_prod_gate.sql` uygulanmış olmalı (prod_gate_proof + probe müşteri).
+2. `admin-gate` fonksiyonu **JWT doğrulaması AÇIK** deploy edilir (--no-verify-jwt YOK):
+   `supabase functions deploy admin-gate`
+   Secret: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+3. Gerçek bir **owner** auth kullanıcısı (Auth → invite) + `staff_roles(user_id,'owner')`.
+
+**Kanıt üretimi (gerçek owner access-token ile):**
+```bash
+# owner kullanıcısının access_token'ı (uygulamadan/oturumdan) — repoya KONMAZ:
+curl -s -X POST "$SUPABASE_URL/functions/v1/admin-gate" \
+  -H "Authorization: Bearer <OWNER_ACCESS_TOKEN>" -H "apikey: <ANON_KEY>"
+#   → {"ok":true,"role":"owner","method":"jwt"}   (prod_gate_proof'a kanıt yazılır)
+```
+
+**Gate kontrolü (deploy öncesi / CI):**
+```bash
+DB_URL='postgres://...'  bash web/scripts/prod-gate.sh    # DB_URL yalnız CI secret
+#   → PASS: POS_TEST_FAULT yok + son 24s içinde jwt owner/admin kanıtı var
+#   → FAIL/eksik: non-zero exit → deployment DURUR
+```
+CI şablonu: `web/ci/prod-gate.workflow.yml` (repo köküne `.github/workflows/`
+altına kopyalanır; prod deploy job'ı `needs: gate` ile bağlanır).
