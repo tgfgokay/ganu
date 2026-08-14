@@ -17,6 +17,9 @@ returns jsonb language plpgsql security definer set search_path=public,auth,pg_c
 declare v_uid uuid:=auth.uid(); v_email text; v_count int; c public.customers%rowtype;
 begin
   if v_uid is null then raise exception 'authenticated JWT gerekli'; end if;
+  if exists(select 1 from public.staff_roles r where r.user_id=v_uid) then
+    raise exception 'personel hesabı müşteri hesabına bağlanamaz';
+  end if;
   select public.normalize_customer_email(u.email) into v_email from auth.users u
     where u.id=v_uid and u.email_confirmed_at is not null;
   if v_email is null then raise exception 'doğrulanmış e-posta gerekli'; end if;
@@ -24,12 +27,14 @@ begin
     where public.normalize_customer_email(x.email)=v_email and x.status in ('aktif','askıda');
   if v_count<>1 then raise exception 'müşteri eşleşmesi benzersiz değil'; end if;
   select * into strict c from public.customers x
-    where public.normalize_customer_email(x.email)=v_email and x.status in ('aktif','askıda');
+    where public.normalize_customer_email(x.email)=v_email and x.status in ('aktif','askıda')
+    for update;
   if c.auth_uid is not null and c.auth_uid<>v_uid then raise exception 'müşteri başka kullanıcıya bağlı'; end if;
   if exists(select 1 from public.customers x where x.auth_uid=v_uid and x.id<>c.id) then
     raise exception 'kullanıcı başka müşteriye bağlı'; end if;
-  update public.customers set auth_uid=v_uid where id=c.id and auth_uid is null;
-  select * into c from public.customers where id=c.id;
+  update public.customers set auth_uid=v_uid
+    where id=c.id and (auth_uid is null or auth_uid=v_uid) returning * into c;
+  if not found or c.auth_uid<>v_uid then raise exception 'müşteri bağlama yarışı reddedildi'; end if;
   return to_jsonb(c)-array['access_code','portal_password'];
 end $$;
 
@@ -84,7 +89,7 @@ declare cid uuid;
 begin
  select id into cid from public.customers where auth_uid=auth.uid() and status in ('aktif','askıda');
  if cid is null then raise exception 'müşteri oturumu bağlı değil'; end if;
- if p_date<current_date or p_start!~'^[0-2][0-9]:[0-5][0-9]$' or p_end!~'^[0-2][0-9]:[0-5][0-9]$'
+ if p_date<current_date or p_start!~'^([01][0-9]|2[0-3]):[0-5][0-9]$' or p_end!~'^([01][0-9]|2[0-3]):[0-5][0-9]$'
   or p_start>=p_end or coalesce(p_attendees,0) not between 1 and 20 then raise exception 'geçersiz randevu'; end if;
  return query insert into public.bookings(customer_id,date,start,"end",attendees,note,status,created_by)
   values(cid,p_date,p_start,p_end,p_attendees,p_note,'talep','musteri') returning *;
@@ -112,12 +117,12 @@ grant execute on function public.claim_customer_by_email(),public.customer_me(),
  public.portal_create_booking_jwt(date,text,text,int,text),public.portal_set_kvkk_jwt() to authenticated;
 
 -- Legacy cloud portalı kapat. purchase_submit_receipt satın alma akışıdır.
-revoke execute on function public.portal_login(text,text) from anon,authenticated;
-revoke execute on function public.portal_login_code(text) from anon,authenticated;
-revoke execute on function public.portal_bundle(uuid,text) from anon,authenticated;
-revoke execute on function public.portal_create_request(uuid,text,uuid,text,text) from anon,authenticated;
-revoke execute on function public.portal_send_message(uuid,text,uuid,text) from anon,authenticated;
-revoke execute on function public.portal_create_booking(uuid,text,date,text,text,int,text) from anon,authenticated;
-revoke execute on function public.portal_set_kvkk(uuid,text) from anon,authenticated;
-revoke execute on function public.portal_change_password(uuid,text,text) from anon,authenticated;
-revoke execute on function public.portal_submit_receipt(uuid,text,text,numeric,text,text) from anon,authenticated;
+revoke all on function public.portal_login(text,text) from public,anon,authenticated;
+revoke all on function public.portal_login_code(text) from public,anon,authenticated;
+revoke all on function public.portal_bundle(uuid,text) from public,anon,authenticated;
+revoke all on function public.portal_create_request(uuid,text,uuid,text,text) from public,anon,authenticated;
+revoke all on function public.portal_send_message(uuid,text,uuid,text) from public,anon,authenticated;
+revoke all on function public.portal_create_booking(uuid,text,date,text,text,int,text) from public,anon,authenticated;
+revoke all on function public.portal_set_kvkk(uuid,text) from public,anon,authenticated;
+revoke all on function public.portal_change_password(uuid,text,text) from public,anon,authenticated;
+revoke all on function public.portal_submit_receipt(uuid,text,text,numeric,text,text) from public,anon,authenticated;
