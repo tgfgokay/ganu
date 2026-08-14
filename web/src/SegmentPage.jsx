@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { withBase } from './base'
 import { motion, useScroll, useSpring, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
+import LanguageSwitch from './site/LanguageSwitch.jsx'
+import { tr } from './site/locales/tr.js'
+import RichTitle from './site/RichTitle.jsx'
 
 /* ---------- motion presets (App.jsx ile aynı dil) ---------- */
 const rise = {
@@ -29,7 +32,7 @@ function ScrollBar() {
   return <motion.div className="progress" style={{ scaleX: x, transformOrigin: '0%' }} aria-hidden="true" />
 }
 
-function Nav({ segLabel }) {
+function Nav({ segLabel, locale, chrome }) {
   const [open, setOpen] = useState(false)
   const close = () => setOpen(false)
   return (
@@ -37,26 +40,27 @@ function Nav({ segLabel }) {
       initial={{ y: -60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.7, ease: [0.19, 1, 0.22, 1] }}>
       <div className="wrap mast-inner">
-        <a href={withBase("/")} className="wordmark" onClick={close} aria-label="GANU — ana sayfa"><GanuMark /></a>
+        <a href={withBase(locale==='tr'?'/':'/en')} className="wordmark" onClick={close} aria-label="GANU"><GanuMark /></a>
         <span className="mast-meta">{segLabel} · İstanbul</span>
-        <button className="nav-toggle" aria-label={open ? 'Menüyü kapat' : 'Menüyü aç'}
+        <button className="nav-toggle" aria-label={open ? (locale==='tr'?'Menüyü kapat':'Close menu') : (locale==='tr'?'Menüyü aç':'Open menu')}
           aria-expanded={open} aria-controls="nav-links" onClick={() => setOpen((v) => !v)}>
           {open
             ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
             : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>}
         </button>
         <div className={`links${open ? ' open' : ''}`} id="nav-links">
-          <a href="#neden" onClick={close}>Neden GANU</a>
-          <a href="#nasil" onClick={close}>Süreç</a>
-          <a href={withBase("/#paketler")} onClick={close}>Paketler</a>
-          <a href="#iletisim" className="mast-cta" onClick={close}>İletişim →</a>
+          <a href={`#${locale==='tr'?'neden':'why'}`} onClick={close}>{chrome.why}</a>
+          <a href={`#${locale==='tr'?'nasil':'process'}`} onClick={close}>{chrome.process}</a>
+          <a href={withBase(locale==='tr'?'/#paketler':'/en#plans')} onClick={close}>{chrome.plans}</a>
+          <a href={`#${locale==='tr'?'iletisim':'contact'}`} className="mast-cta" onClick={close}>{chrome.contact} →</a>
+          <LanguageSwitch locale={locale}/>
         </div>
       </div>
     </motion.nav>
   )
 }
 
-function Hero({ hero }) {
+function Hero({ hero, locale, chrome }) {
   return (
     <header className="hero" id="top">
       <div className="wrap">
@@ -78,8 +82,8 @@ function Hero({ hero }) {
           </motion.p>
           <motion.div className="hero-side" variants={rise} initial="hidden" animate="show" custom={3}>
             <div className="hero-cta">
-              <a href="#iletisim" className="btn btn-solid">{hero.cta} →</a>
-              <a href={withBase("/#paketler")} className="btn btn-line">Paketleri gör</a>
+              <a href={`#${locale==='tr'?'iletisim':'contact'}`} className="btn btn-solid">{hero.cta} →</a>
+              <a href={withBase(locale==='tr'?'/#paketler':'/en#plans')} className="btn btn-line">{chrome.plans}</a>
             </div>
             <dl className="stats">
               {hero.stats.map((s) => (
@@ -107,13 +111,13 @@ function Marquee({ items }) {
   )
 }
 
-function Value({ kicker, title, items }) {
+function Value({ kicker, title, items, locale }) {
   return (
-    <section className="section" id="neden">
+    <section className="section" id={locale==='tr'?'neden':'why'}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
           <motion.span className="kicker" variants={rise}>{kicker}</motion.span>
-          <motion.h2 variants={rise} dangerouslySetInnerHTML={{ __html: title }} />
+          <motion.h2 variants={rise}><RichTitle value={title} /></motion.h2>
         </motion.div>
         <motion.ol className="index" {...reveal} variants={stagger}>
           {items.map((s) => (
@@ -129,13 +133,13 @@ function Value({ kicker, title, items }) {
   )
 }
 
-function Steps({ title, steps }) {
+function Steps({ title, steps, locale, chrome }) {
   return (
-    <section className="section dark" id="nasil">
+    <section className="section dark" id={locale==='tr'?'nasil':'process'}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Süreç</motion.span>
-          <motion.h2 variants={rise} dangerouslySetInnerHTML={{ __html: title }} />
+          <motion.span className="kicker" variants={rise}>{chrome.processKicker}</motion.span>
+          <motion.h2 variants={rise}><RichTitle value={title} /></motion.h2>
         </motion.div>
         <motion.div className="steps" {...reveal} variants={stagger}>
           {steps.map((s) => (
@@ -169,12 +173,12 @@ function SegSwitch({ cross }) {
   )
 }
 
-function CtaBand({ cta }) {
+function CtaBand({ cta, locale }) {
   return (
-    <section className="section cta-sec" id="iletisim">
+    <section className="section cta-sec" id={locale==='tr'?'iletisim':'contact'}>
       <div className="wrap">
         <motion.div className="cta-band" {...reveal} variants={stagger}>
-          <motion.h2 variants={rise} dangerouslySetInnerHTML={{ __html: cta.title }} />
+          <motion.h2 variants={rise}><RichTitle value={cta.title} /></motion.h2>
           <motion.p variants={rise}>{cta.text}</motion.p>
           <motion.a variants={rise} href="mailto:merhaba@ganu.com.tr" className="btn btn-solid big">merhaba@ganu.com.tr →</motion.a>
         </motion.div>
@@ -183,35 +187,35 @@ function CtaBand({ cta }) {
   )
 }
 
-function Footer() {
+function Footer({ locale, chrome }) {
   return (
     <footer className="colophon">
       <div className="wrap">
         <div className="colo-mark"><GanuMark /></div>
         <div className="colo-grid">
           <div className="colo-lead">
-            <p>Anahtar teslim sanal ofis &amp; idari sekreterya. Adresin hazır, gerisi bizde.</p>
+            <p>{chrome.lead}</p>
           </div>
           <div>
-            <h4>İş Ortaklığı</h4>
+            <h4>{chrome.partnership}</h4>
             <ul>
-              <li><a href={withBase("/is-ortakligi")}>Ortak ol · komisyon</a></li>
-              <li><a href={withBase("/ortak")}>Ortak girişi</a></li>
-              <li><a href={withBase("/avukat")}>Avukatlar için</a></li>
-              <li><a href={withBase("/mali-musavir")}>Mali müşavirler için</a></li>
-              <li><a href={withBase("/")}>Ana sayfa</a></li>
+              <li><a href={withBase(locale==='tr'?'/is-ortakligi':'/en/partnership')}>{chrome.join}</a></li>
+              {locale==='tr'&&<li><a href={withBase('/ortak')}>{chrome.partnerLogin}</a></li>}
+              <li><a href={withBase(locale==='tr'?'/avukat':'/en/lawyers')}>{chrome.lawyers}</a></li>
+              <li><a href={withBase(locale==='tr'?'/mali-musavir':'/en/accountants')}>{chrome.accountants}</a></li>
+              <li><a href={withBase(locale==='tr'?'/':'/en')}>{locale==='tr'?'Ana sayfa':'Home'}</a></li>
             </ul>
           </div>
           <div>
-            <h4>Kurumsal</h4>
+            <h4>{chrome.corporate}</h4>
             <ul>
-              <li><a href={withBase("/#nasil")}>Süreç</a></li>
-              <li><a href={withBase("/#paketler")}>Paketler</a></li>
-              <li><a href="#iletisim">İletişim</a></li>
+              <li><a href={withBase(locale==='tr'?'/#nasil':'/en#process')}>{chrome.process}</a></li>
+              <li><a href={withBase(locale==='tr'?'/#paketler':'/en#plans')}>{chrome.plans}</a></li>
+              <li><a href={`#${locale==='tr'?'iletisim':'contact'}`}>{chrome.contact}</a></li>
             </ul>
           </div>
           <div>
-            <h4>İletişim</h4>
+            <h4>{chrome.contact}</h4>
             <ul>
               <li>Kavacık Mah. Okul Cad.</li>
               <li>No:29 · Beykoz / İstanbul</li>
@@ -221,33 +225,33 @@ function Footer() {
           </div>
         </div>
         <p className="colo-legal">
-          Yoklama, tebligat ve re’sen terk süreçlerine ilişkin hizmetlerimiz idari destek ve fiziki iş adresi
-          sağlama niteliğindedir; hukuki veya mali danışmanlık hizmeti ya da kesin sonuç garantisi içermez.
+          {chrome.legal}
         </p>
         <div className="colo-bottom">
           <span>© {new Date().getFullYear()} GANU · Sanal Ofis · İstanbul</span>
-          <span>Tüm hakları saklıdır.</span>
+          <LanguageSwitch locale={locale}/><span>{locale==='tr'?'Tüm hakları saklıdır.':'All rights reserved.'}</span>
         </div>
       </div>
     </footer>
   )
 }
 
-export default function SegmentPage({ data }) {
+export default function SegmentPage({ data, locale='tr', content=tr }) {
+  const chrome=content.segmentChrome
   return (
     <MotionConfig reducedMotion="user">
-      <a href="#neden" className="skip">İçeriğe geç</a>
+      <a href={`#${locale==='tr'?'neden':'why'}`} className="skip">{content.chrome.skip}</a>
       <ScrollBar />
-      <Nav segLabel={data.segLabel} />
+      <Nav segLabel={data.segLabel} locale={locale} chrome={chrome}/>
       <main>
-        <Hero hero={data.hero} />
+        <Hero hero={data.hero} locale={locale} chrome={chrome}/>
         <Marquee items={data.marquee} />
-        <Value kicker={data.value.kicker} title={data.value.title} items={data.value.items} />
-        <Steps title={data.steps.title} steps={data.steps.items} />
+        <Value kicker={data.value.kicker} title={data.value.title} items={data.value.items} locale={locale}/>
+        <Steps title={data.steps.title} steps={data.steps.items} locale={locale} chrome={chrome}/>
         <SegSwitch cross={data.cross} />
-        <CtaBand cta={data.cta} />
+        <CtaBand cta={data.cta} locale={locale}/>
       </main>
-      <Footer />
+      <Footer locale={locale} chrome={chrome}/>
     </MotionConfig>
   )
 }
