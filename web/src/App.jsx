@@ -102,7 +102,7 @@ const faqs = [
 const trust = [
   { icon: 'pin', t: 'Gerçek fiziki adres', d: 'Kavacık’ta tabelası, katı ve kapı numarasıyla var olan bir ofis — yoklamaya hazır. Sanal, ama hayali değil.' },
   { icon: 'log', t: 'Her şey kayıt altında', d: 'Gelen posta, tebligat, kargo ve yoklama; tarih-saatiyle tek panele işlenir. Dilediğinde geçmişe bakarsın.' },
-  { icon: 'shield', t: 'Belgelerin güvende', d: 'Erişim kodlu müşteri paneli ve belge kasası; kayıtların yalnızca sana görünür, KVKK’ya uygun saklanır.' },
+  { icon: 'shield', t: 'Belgelerin tek panelde', d: 'Sözleşme, fatura, posta ve tebligat kayıtların erişim kodlu müşteri panelinde derli toplu — istediğin an ulaşırsın.' },
   { icon: 'user', t: 'Tek muhatap', d: 'Farklı firmalarla değil, tek ekiple çalışırsın; adres, posta ve idari işler tek elden yürür.' },
 ]
 
