@@ -277,6 +277,18 @@ create index if not exists idx_pos_orders_customer on public.pos_orders(customer
 alter table public.pos_orders enable row level security;
 create policy "staff_all_pos_orders" on public.pos_orders for all to authenticated using (true) with check (true);
 
+-- Güvenlik olayları (P0.3): POS tutar uyuşmazlığı, bilinmeyen sipariş vb.
+-- Edge Function service-role ile yazar; yalnız personel okur.
+create table if not exists public.security_events (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null,
+  detail jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_security_events_kind on public.security_events(kind);
+alter table public.security_events enable row level security;
+create policy "staff_read_security_events" on public.security_events for select to authenticated using (true);
+
 -- ------------------------------------------------------------
 -- İş ortaklığı başvuru formu (anon INSERT — sadece 'başvuru' statüsü)
 -- ------------------------------------------------------------

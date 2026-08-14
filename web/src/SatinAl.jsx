@@ -126,8 +126,9 @@ export default function SatinAl() {
      Tahsilat sonrası sağlayıcı callback'i DB'yi işaretler, dönüşte panel onaylar. */
   const startPos = async () => {
     const provider = cfg.pos_provider || 'paytr'
+    // P0.3: tutar sunucuda hesaplanır — istemci yalnız paket + izinli indirim kodu iletir.
     const out = await posPay(provider, {
-      customerId: cust.id, amount: price, pkg,
+      customerId: cust.id, pkg, code: discount?.code || '',
       email: f.email, name: f.title, phone: f.phone,
     })
     const url = out?.iframe_url || out?.redirect_url || out?.payment_url

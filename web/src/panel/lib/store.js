@@ -446,15 +446,17 @@ export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount
    ekranına yönlendirmek için iframe_url / redirect döner. Yalnız Supabase
    bağlıyken çalışır (secret'lar sunucuda). Sağlayıcı: 'paytr' | 'iyzico'.
    Config'te pos_enabled açık değilse UI bu yolu kullanmaz (simülasyon kalır). */
-export async function posPay(provider, { customerId, amount, pkg = '', email = '', name = '', phone = '' } = {}) {
+export async function posPay(provider, { customerId, pkg = '', code = '', email = '', name = '', phone = '' } = {}) {
   if (!usingSupabase) throw new Error('Sanal POS için Supabase bağlı olmalı (yerel modda simülasyon çalışır).')
-  if (!customerId || !(Number(amount) > 0)) throw new Error('customerId ve geçerli tutar zorunlu.')
+  if (!customerId || !pkg) throw new Error('customerId ve paket zorunlu.')
+  // P0.3: TUTAR İSTEMCİDEN GÖNDERİLMEZ. Sunucu, package_id + izinli indirim
+  // kodundan fiyatı kendisi hesaplar; istemcinin ilettiği tutar yok sayılır.
   const { data, error } = await supabase.functions.invoke('pos-payment', {
-    body: { action: 'init', provider, customer_id: customerId, amount: Number(amount), pkg, email, name, phone },
+    body: { action: 'init', provider, customer_id: customerId, package_id: pkg, code, email, name, phone },
   })
   if (error) throw new Error(error.message || 'POS başlatılamadı.')
   if (data?.error) throw new Error(data.error)
-  return data // { provider, mode, token?, iframe_url?, merchant_oid }
+  return data // { provider, mode, token?, iframe_url?, merchant_oid, amount }
 }
 
 /* Config'te sanal POS açık mı? (varsayılan kapalı → kart ekranı simülasyon) */
