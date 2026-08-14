@@ -52,25 +52,10 @@ const tiers = [
 
 const marqueeItems = ['Yasal İş Adresi', 'Posta & Kargo', 'Telefon Karşılama', 'Toplantı Odası', 'Mali Müşavir']
 
-/* Müşteri yorumları — Google değerlendirmesi görünümü.
-   ⚠️ YER TUTUCU: Yayına almadan önce GERÇEK Google/işletme yorumlarıyla
-   değiştirin (ya da Google Places API'den çekin). Uydurma yorum yayınlamak
-   yanıltıcıdır. `googleUrl`'ü kendi işletme profilinizin linkiyle güncelleyin. */
-const googleReviewUrl = 'https://www.google.com/maps' // TODO: GANU işletme profili linki
-const reviews = [
-  { name: 'Merve A.', initials: 'MA', color: '#0A7C6B', stars: 5, when: '2 hafta önce', local: true,
-    text: 'Şirketi kurarken adres derdine hiç girmedim. Kargolarım aynı gün panele düşüyor, tebligat gelince anında haber veriyorlar. Kavacık adresi de müşterilere güven veriyor.' },
-  { name: 'Kaan D.', initials: 'KD', color: '#B4530A', stars: 5, when: '1 ay önce', local: false,
-    text: 'E-ticaret için aldım. Posta yönetimi ve yönlendirme kusursuz. Panelden faturamı görüp kartla ödedim, muhasebe tarafı çok rahatladı.' },
-  { name: 'Selin I.', initials: 'SI', color: '#5B3AA6', stars: 5, when: '1 ay önce', local: true,
-    text: 'Yıllarca farklı firmalarla uğraştım, ilk kez her şey tek panelde. Yoklama gününde bile aradılar, hazırladılar. Fiyatı da bölgeye göre çok makul.' },
-  { name: 'Emre T.', initials: 'ET', color: '#0A5AA6', stars: 5, when: '2 ay önce', local: false,
-    text: 'Serbest çalışıyorum, prestijli adres lazımdı. Başvuru + ödeme 5 dakika sürdü, ertesi gün adresim hazırdı. Destek ekibi gerçekten hızlı.' },
-  { name: 'Zeynep K.', initials: 'ZK', color: '#A60A4E', stars: 5, when: '3 ay önce', local: true,
-    text: 'Belgelerim belge kasasında, sözleşmem panelde, her şey düzenli. Telefon karşılama hizmeti sayesinde tek çağrı kaçırmadım. Tavsiye ederim.' },
-  { name: 'Burak Ş.', initials: 'BŞ', color: '#0A7C6B', stars: 4, when: '3 ay önce', local: false,
-    text: 'Fiyat/performans çok iyi. Toplantı odasını da ara sıra kullanıyorum. Tek dileğim mobil uygulama olması, gerisi harika.' },
-]
+/* Müşteri yorumları bölümü KALDIRILDI (P0.7): gerçek, doğrulanmış Google/işletme
+   yorumları ve gerçek işletme profili hazır olana kadar yayınlanmıyor — uydurma
+   isim/puan/"Google yorumu" etiketi göstermek yanıltıcıdır. Gerçek yorumlar
+   (ör. Google Places API'den) gelince bölüm yeniden eklenecek. */
 
 const faqs = [
   {
@@ -548,69 +533,6 @@ function Footer() {
   )
 }
 
-/* Google "G" logo — inline, çok renkli */
-const GoogleG = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
-    <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z" />
-    <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z" />
-    <path fill="#FBBC05" d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z" />
-    <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z" />
-  </svg>
-)
-const Stars = ({ n = 5, size = 15 }) => (
-  <span aria-label={`${n} / 5 yıldız`} style={{ display: 'inline-flex', gap: 1 }}>
-    {[1, 2, 3, 4, 5].map((i) => (
-      <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-        fill={i <= n ? '#FBBC05' : '#dbe2ea'}>
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-      </svg>
-    ))}
-  </span>
-)
-
-function ReviewCard({ r }) {
-  return (
-    <figure className="rv-card">
-      <div className="rv-top">
-        <span className="rv-av" style={{ background: r.color }}>{r.initials}</span>
-        <div className="rv-who">
-          <figcaption className="rv-name">{r.name}</figcaption>
-          <span className="rv-meta">{r.local ? 'Yerel Rehber · ' : ''}{r.when}</span>
-        </div>
-        <span className="rv-g" title="Google değerlendirmesi"><GoogleG /></span>
-      </div>
-      <Stars n={r.stars} />
-      <blockquote className="rv-text">{r.text}</blockquote>
-    </figure>
-  )
-}
-
-function Reviews() {
-  const loop = [...reviews, ...reviews] // kesintisiz kayış için iki kopya
-  const avg = (reviews.reduce((s, r) => s + r.stars, 0) / reviews.length).toFixed(1)
-  return (
-    <section className="section reviews-sec" id="yorumlar" aria-label="Müşteri yorumları">
-      <div className="wrap">
-        <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Müşteri Deneyimi</motion.span>
-          <motion.h2 variants={rise}>Kullananlar ne diyor<span className="dot">?</span></motion.h2>
-        </motion.div>
-        <motion.a className="rv-rating" href={googleReviewUrl} target="_blank" rel="noreferrer" {...reveal} variants={rise}>
-          <GoogleG size={22} />
-          <b>{avg}</b>
-          <Stars n={Math.round(avg)} size={17} />
-          <span className="rv-rating-meta">Google değerlendirmeleri · <span className="rv-link">Yorum yaz →</span></span>
-        </motion.a>
-      </div>
-      <div className="rv-marquee" aria-hidden="false">
-        <div className="rv-track">
-          {loop.map((r, i) => <ReviewCard key={i} r={r} />)}
-        </div>
-      </div>
-    </section>
-  )
-}
-
 export default function App() {
   return (
     <MotionConfig reducedMotion="user">
@@ -623,7 +545,6 @@ export default function App() {
         <Services />
         <Steps />
         <Trust />
-        <Reviews />
         <Pricing />
         <Faq />
         <CtaBand />
