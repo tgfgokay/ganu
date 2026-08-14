@@ -29,6 +29,7 @@ Sırayla uygula (Supabase SQL editor ya da `supabase db push`):
 2. `supabase/migrations/0001_pricing_catalog.sql` — **packages** + **discount_codes** (gizli) + pos_orders fiyat alanları.
 3. `supabase/migrations/0002_private_storage.sql` — **secure-docs** private bucket + RLS + `owns_secure_object`.
 4. `supabase/migrations/0003_auth_hardening.sql` — bcrypt `_pw_match` (düz metin/sha256 RED), `set_portal_password`, `staff_roles` (RBAC).
+5. `supabase/migrations/0004_prod_gate.sql` — production readiness audit tablosu ve izole gate-probe müşterisi.
 
 RLS notları:
 - `packages`: anon yalnız `active` okur; yazma personel.
@@ -56,8 +57,9 @@ RLS notları:
 
 ## 5) Sunucu tarafı fiyat kataloğu
 - **Tek gerçek kaynak:** `packages` tablosu (fiyat, KDV, sürüm, geçerlilik).
-- Edge Function `pos-payment` fiyatı **DB'den** hesaplar (`computeOrder`), tablo yoksa
-  sabit fallback. İstemci tutarı **yok sayılır** (istemci yalnız `package_id`+kod yollar).
+- Edge Function `pos-payment` fiyatı **DB'den** hesaplar (`computeOrder`); katalog veya
+  indirim sorgusu hata verirse **fail-closed** durur, sabit fiyat fallback'i YOKTUR.
+  İstemci tutarı **yok sayılır** (istemci yalnız `package_id`+kod yollar).
 - Sipariş kaydında `price_version`, `list_amount`, `discount_code/pct`, `currency` saklanır.
 - **Kalan (cutover'da):** site/checkout/panel de `packages`'tan beslensin (şu an
   `store.js PACKAGE_PRICES` sabit; Supabase bağlanınca tablodan okunacak biçime alınır).
@@ -71,7 +73,9 @@ supabase db push
 # secret'ları koy (repoya değil):
 supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... SITE_URL=...
 supabase secrets set PAYTR_MERCHANT_ID=... PAYTR_MERCHANT_KEY=... PAYTR_MERCHANT_SALT=... PAYTR_TEST_MODE=1
+supabase secrets set PROD_GATE_HMAC_SECRET=... # en az 32 karakter; CI secret ile aynı
 supabase functions deploy pos-payment --no-verify-jwt
+supabase functions deploy admin-gate           # JWT doğrulaması açık; --no-verify-jwt YOK
 # personel kullanıcısı + rolü:
 #   Auth → Users → invite;  insert into staff_roles(user_id, role) values ('<uid>','owner');
 GANU_BASE=/ganu/ npm run build   # env gömülür → usingSupabase=true

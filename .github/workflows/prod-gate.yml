@@ -1,4 +1,5 @@
-name: prod-gate
+name: prod-readiness-check
+run-name: Production readiness check (deployment yapmaz)
 
 permissions:
   contents: read
@@ -9,9 +10,18 @@ on:
 
 jobs:
   gate:
+    name: Readiness gate (deploy entegrasyonu gerekli)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Require real production deploy integration
+        env:
+          PROD_DEPLOY_INTEGRATED: ${{ vars.PROD_DEPLOY_INTEGRATED }}
+        run: |
+          if [ "$PROD_DEPLOY_INTEGRATED" != "true" ]; then
+            echo "::error::Bu repoda production deploy job'ı gate'e bağlı değil. Readiness PASS/deploy engelleme iddiası geçersiz; entegrasyon tamamlanana kadar hard-fail."
+            exit 4
+          fi
       - uses: supabase/setup-cli@v1
         with:
           version: latest
@@ -27,8 +37,3 @@ jobs:
           PROD_OWNER_ACCESS_TOKEN: ${{ secrets.PROD_OWNER_ACCESS_TOKEN }}
           PROD_GATE_HMAC_SECRET: ${{ secrets.PROD_GATE_HMAC_SECRET }}
         run: bash web/scripts/prod-gate.sh
-
-  # Production deploy aynı workflow'a eklendiğinde mutlaka:
-  # deploy-production:
-  #   needs: gate
-  #   ...

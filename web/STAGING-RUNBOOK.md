@@ -186,7 +186,7 @@ Supabase kurulmaz, gerçek PayTR tahsilatı yapılmaz. Ek zorunlu kapılar:
   PayTR çağrısının erişilemez olduğu kod sıralamasında statik olarak doğrulanmalı;
   test sonrası secret KALDIRILMIŞ olmalı (`supabase secrets unset POS_TEST_FAULT`).
 - **admin gate (makine-kontrollü):** aşağıdaki §6 ile gerçek JWT kanıtı üretilmeli;
-  `prod_readiness_gate.sql` PASS vermeli. Kanıt yoksa CI/deploy **DURUR**.
+  `prod_readiness_gate.sql` PASS vermeli. Kanıt yoksa readiness workflow'u **FAIL** olur.
 - **POS_TEST_FAULT** production secret'larında **bulunmamalı** (prod-gate script kontrol eder).
 
 ## 6) PROD READINESS GATE — admin RPC gerçek-JWT kanıtı (makine-kontrollü)
@@ -218,15 +218,24 @@ curl -s -X POST "$SUPABASE_URL/functions/v1/admin-gate" \
 **Gate kontrolü (deploy öncesi / CI):**
 ```bash
 DB_URL='postgres://...' bash web/scripts/prod-gate.sh
-#   → PASS: remote POS_TEST_FAULT yok + taze JWT/HMAC kanıtı + DB audit var
-#   → FAIL/eksik: non-zero exit → deployment DURUR
+#   → PASS: DB/project-ref aynı hedef + remote fault yok + JWT/HMAC + DB audit var
+#   → FAIL/eksik: non-zero exit; yalnız bağlı deploy job'ını durdurabilir
 ```
 Aktif workflow: repo kökünde `.github/workflows/prod-gate.yml`.
 Production deploy job'ı aynı workflow içindeyse `needs: gate` kullanmalı; başka bir
 workflow ise bunu `workflow_call` ile çağırıp deploy'u başarılı sonuca bağlamalıdır.
+**Mevcut dürüst durum:** repoda production deploy job'ı yoktur; bu workflow tek başına
+deployment yapmaz veya haricî/manual deploy'u engelleyemez. Bu nedenle
+`PROD_DEPLOY_INTEGRATED=true` repository variable'ı yokken workflow bilinçli olarak
+hard-fail verir. Değişken yalnız gerçek deploy job'ı gate'e bağlandıktan ve branch/
+environment koruması o job'ı zorunlu kıldıktan sonra açılmalıdır; salt değişkeni açmak
+entegrasyon kanıtı değildir.
 
 **CI secrets:** `PROD_DB_URL`, `SUPABASE_ACCESS_TOKEN`, `PROD_OWNER_ACCESS_TOKEN`,
 `PROD_GATE_HMAC_SECRET`, `SUPABASE_ANON_KEY`. **CI variable:** `SUPABASE_PROJECT_REF`.
 Owner access token kısa ömürlüdür; manuel production gate öncesi tazelenir ve loglanmaz.
 `SUPABASE_ACCESS_TOKEN`, Supabase CLI'ın hedef projenin gerçek remote secret listesini
 okuyabilmesi içindir; yerel `POS_TEST_FAULT` env kontrolü kanıt sayılmaz.
+`DB_URL` yalnız resmî Supabase direct/dedicated (`db.<ref>.supabase.co`) veya shared
+pooler (`postgres.<ref>@*.pooler.supabase.com`) URI biçiminde kabul edilir; böylece
+DB audit kontrolünün farklı bir Supabase projesine yöneltilmesi fail-closed reddedilir.
