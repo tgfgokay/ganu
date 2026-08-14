@@ -21,6 +21,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 5. `supabase/migrations/0004_prod_gate.sql`        — prod_gate_proof (service-role) + gate-probe müşteri
 6. `supabase/migrations/0005_rbac_auth_storage.sql` — gerçek staff RBAC + JWT/auth_uid private storage
 7. `supabase/migrations/0006_customer_portal_auth.sql` — doğrulanmış magic-link claim + JWT portal RPC; legacy anon portal kapalı
+8. `supabase/migrations/0007_purchase_flow.sql` — güvenli anonim aday/dekont + HMAC token + rate-limit/POS binding
 
 ```bash
 set -euo pipefail
@@ -31,6 +32,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0003_auth_hardening.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0004_prod_gate.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0005_rbac_auth_storage.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0006_customer_portal_auth.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0007_purchase_flow.sql
 ```
 `supabase-schema.sql` migration klasöründe olmadığı için boş bir projede yalnız
 `supabase db push` çalıştırmak ana şemayı kurmaz; yukarıdaki sıra veya SQL Editor şarttır.
@@ -40,6 +42,7 @@ Storage bucket: 0002 `insert into storage.buckets` ile açar; Dashboard → Stor
 
 Edge Function:
 - `supabase functions deploy pos-payment --no-verify-jwt`  (anon/callback erişir)
+- `supabase functions deploy purchase-flow --no-verify-jwt` (anon; token+rate-limit zorunlu)
 - `supabase functions deploy admin-gate`                   (JWT doğrulaması AÇIK — §6)
 - `supabase functions deploy get-file`                     (JWT AÇIK; access_code kabul etmez)
 Personel: Auth → Users → invite; `insert into public.staff_roles(user_id, role) values ('<uid>','owner');`
@@ -113,16 +116,12 @@ delete from public.pos_orders where merchant_oid in ('TEST_OID_1','TEST_OID_2');
 ## 3) Edge Function negatif testleri (curl — fonksiyon deploy sonrası)
 ```bash
 FN="$SUPABASE_URL/functions/v1/pos-payment"
-# (neg) istemci amount enjekte etse bile sunucu YOK SAYAR (fiyat DB'den)
+# Önce purchase-flow create ile üretilmiş, loglanmayan taze token kullan.
+# (neg) istemci amount/customer/package enjekte etse bile token+DB fiyatı geçerlidir
 curl -s -X POST "$FN" -H "content-type: application/json" \
-  -d '{"action":"init","provider":"paytr","customer_id":"<CID>","package_id":"Pro","amount":1}'
+  -d '{"action":"init","provider":"paytr","purchase_token":"<PURCHASE_TOKEN>","customer_id":"sahte","package_id":"YOK","amount":1}'
 #   → dönen amount 18990/100 = 189.90; PayTR tutarı 18990 kuruş. amount:1 etkisiz.
-# (neg) bilinmeyen paket → "Geçersiz paket"
-curl -s -X POST "$FN" -H "content-type: application/json" \
-  -d '{"action":"init","provider":"paytr","customer_id":"<CID>","package_id":"YOK"}'
-# (neg) Kurumsal (is_custom) → "özel tekliftir; online ödeme alınmaz"
-curl -s -X POST "$FN" -H "content-type: application/json" \
-  -d '{"action":"init","provider":"paytr","customer_id":"<CID>","package_id":"Kurumsal"}'
+# bilinmeyen/pasif/özel teklif paketleri purchase-flow create katmanında sınanır (§8).
 # Not: callback idempotency §2 pos_settle ile SQL'de doğrulandı; PayTR hash'i
 #      gerçek callback'te test_mode ile denenir.
 ```
@@ -140,7 +139,7 @@ supabase functions deploy pos-payment --no-verify-jwt
 # 3) init çağır → 5xx beklenir (fiyat kataloğu okunamadı = fail-closed):
 curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST "$FN" \
   -H "content-type: application/json" \
-  -d '{"action":"init","provider":"paytr","customer_id":"<CID>","package_id":"Pro"}'
+  -d '{"action":"init","provider":"paytr","purchase_token":"<Taze_Pro_TOKEN>"}'
 #   → BEKLENEN: HTTP 5xx
 # 4) Kanıt: sipariş EKLENMEDİ + PayTR ÇAĞRILMADI
 --   select count(*) as after_cnt from public.pos_orders;   -- before_cnt ile AYNI
@@ -151,7 +150,7 @@ supabase secrets set POS_TEST_FAULT=discount
 supabase functions deploy pos-payment --no-verify-jwt
 curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST "$FN" \
   -H "content-type: application/json" \
-  -d '{"action":"init","provider":"paytr","customer_id":"<CID>","package_id":"Pro","code":"BNINISANTASI"}'
+  -d '{"action":"init","provider":"paytr","purchase_token":"<Önceden_BNINISANTASI_ile_üretilmiş_TOKEN>"}'
 #   → BEKLENEN: HTTP 5xx (indirim doğrulanamadı = fail-closed). Boş code ile bu yol
 #     TETİKLENMEZ; bu yüzden test dolu code ile yapılır.
 # 6) Enjeksiyonu KALDIR ve yeniden deploy:
@@ -162,8 +161,8 @@ Beklenen sonuç: **HTTP 5xx** ve **after_cnt == before_cnt (sipariş 0)** — bu
 **gözlenmiş** sonuçlardır.
 
 **"PayTR çağrısı 0" — STATİK KONTROL-AKIŞI KANITI (gözlenmiş değil):**
-`paytrInit` içinde sıra kesindir → `computeOrder()` **ilk** çağrılır; hata orada
-fırlar. `pos_orders` insert'i ve `fetch('…/get-token')` (PayTR çağrısı) computeOrder'dan
+`verifyPurchase` içinde `computeOrder()` çağrılır; hata orada fırlar. `paytrInit`
+içindeki `pos_orders` insert'i ve `fetch('…/get-token')` (PayTR çağrısı) doğrulamadan
 **SONRA** yazılıdır; bir istisna fırladığında bu satırlara **erişilmez** (unreachable).
 Yani PayTR'a hiç gidilmemesi runtime gözlemiyle değil, **kod sıralamasıyla** garanti
 edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman diliminde çağrı yok.)
@@ -176,6 +175,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/migrations/0007_purchase_flow.down.sql
 psql "$DB_URL" -f supabase/migrations/0006_customer_portal_auth.down.sql
 psql "$DB_URL" -f supabase/migrations/0005_rbac_auth_storage.down.sql
 psql "$DB_URL" -f supabase/migrations/0004_prod_gate.down.sql
@@ -295,3 +295,42 @@ tam bir aktif/askıda customer eşleşmesi gerekir. Zorunlu negatifler: anon leg
 doğrulanmamış/yanlış e-posta red; duplicate normalize e-posta red; başka auth_uid'ye
 bağlı kayıt red; başka müşterinin talep/mail/dosya erişimi red; customer staff değildir.
 Production öncesi bunların tümü gözlenmiş PASS olmalıdır.
+
+## 8) 0007 anonim satın alma / dekont / POS token testleri
+
+Önce `PURCHASE_FLOW_SECRET` (en az 32 rastgele karakter) hem `purchase-flow` hem
+`pos-payment` secret ortamında bulunmalı; `SITE_URL` staging origin'i olmalıdır.
+`supabase/tests/staging_0007_purchase_flow_tests.sql` tüm satırlarda PASS vermeli.
+
+HTTP zorunlu kapıları (yanıtlardaki token/kimlikleri log veya rapora koyma):
+
+- `purchase-flow create`: geçerli paket → 200, aday + server quote + kısa ömürlü token;
+  bilinmeyen/pasif/katalog hatası → 4xx/5xx ve customer/session sayısı değişmez.
+- İstemci `amount`, `discount_pct`, `customer_id` eklese dahi server quote değişmez.
+- `ref` yalnız `[A-Z0-9_-]`, en fazla 32 karakter denetim notu olarak korunur;
+  anonim partner lookup/bağlama yapılmaz. `bni` yalnız doğrulanmış `BNINISANTASI`
+  indiriminden sunucuda türetilir; istemcinin `bni` alanı yok sayılır.
+- Aynı IP'den saatte 6. create → 429/4xx; DB/RPC hatasında fail-closed.
+- Tokenı bir byte bozma, süresi geçmiş token, başka customer/package ile kullanma → red.
+- Dekont: JPEG/PNG/WebP/PDF ve <=8MB → private `receipts/<cid>/<uuid>`; MIME
+  sahteciliği, executable, >8MB, token/customer mismatch → red ve DB claim oluşmaz.
+- Dekontsuz `action=claim` yalnız geçerli tokenla çalışır; ikinci kullanım red.
+- `pos-payment init`: yalnız purchase token kabul eder; çıplak `customer_id/package_id`
+  red. Token fiyatı DB katalogla yeniden doğrulanır. Aynı tokenla ikinci POS red.
+- Receipt/POS eşzamanlı yarışı: `purchase_sessions` satır kilidiyle yalnız biri PASS.
+- `x-forwarded-for` güvenilir gateway başlığı yoksa create/claim/POS init fail-closed.
+
+POS init state-machine beklentisi: ilk çağrı `new`; eşzamanlı/erken tekrar
+`in_progress`; token DB'ye kaydedildikten sonra tekrar aynı `ready` URL'yi döndürür.
+Order insert kesin hatası transaction'ı geri sarar ve session tekrar kullanılabilir.
+Provider'ın açık red yanıtı `definite_failed` + kontrollü release; timeout/bozuk yanıt/
+token alındıktan sonra DB kayıt hatası `ambiguous` ve **otomatik retry yok**, manuel
+inceleme gerekir. SQL dosyası bu geçişleri sınar; gerçek iki bağlantılı concurrency ve
+provider ağ kesintisi staging'de ayrıca gözlenmelidir.
+
+Rate-limit yalnız kötüye kullanım azaltma katmanıdır, kimlik/yetki sınırı değildir.
+`x-forwarded-for` değerinin istemci tarafından yazılamaması Supabase gateway'in başlığı
+silip yeniden üretmesine bağlıdır; ters proxy değişirse bu varsayım doğrulanmadan canlıya
+alınmaz. HMAC token + DB session binding, IP başlığından bağımsız zorunlu güvenlik sınırıdır.
+
+Canlı Supabase/Edge olmadan bunlar gözlenmiş sayılmaz; build/statik parse yalnız hazırlık kanıtıdır.

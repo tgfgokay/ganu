@@ -66,12 +66,13 @@ export default function SatinAl() {
   const [result, setResult] = useState(null)   // { mode:'kart', code } | { mode:'havale' }
   const [codeInput, setCodeInput] = useState('') // müşterinin girdiği indirim kodu
   const [discount, setDiscount] = useState(null) // { code, pct } | null
+  const [serverQuote, setServerQuote] = useState(null)
   const [codeMsg, setCodeMsg] = useState('')     // kod geri bildirimi
   const cfg = getConfig()
   const listPrice = PACKAGE_PRICES[pkg]
   const isCorp = pkg === 'Kurumsal'
   const catalogUnavailable = !isCorp && !(Number(listPrice) > 0)
-  const price = discount && listPrice ? indirimliTutar(listPrice, discount.pct) : listPrice
+  const price = serverQuote?.amount ?? (discount && listPrice ? indirimliTutar(listPrice, discount.pct) : listPrice)
 
   /* Kart ödeme modu (P0.4 — prod'da demo kesinlikle kapalı):
      - 'pos'  : gerçek sanal POS (pos_enabled açık)
@@ -105,7 +106,7 @@ export default function SatinAl() {
     if (d) { setDiscount(d); setCodeMsg(`✓ %${d.pct} indirim uygulandı`) }
     else { setDiscount(null); setCodeMsg('Kod geçersiz.') }
   }
-  const clearCode = () => { setDiscount(null); setCodeInput(''); setCodeMsg('') }
+  const clearCode = () => { setDiscount(null); setServerQuote(null); setCodeInput(''); setCodeMsg('') }
   const bniPct = discount ? discount.pct : 0
 
   /* Adım 1 → 2: aday kaydı oluştur */
@@ -119,7 +120,14 @@ export default function SatinAl() {
     if (email && !validEmail(email)) return setErr('E-posta hatalı görünüyor — ör. ad@firma.com')
     const vkn = f.tax_no.replace(/\D/g, '')
     if (!isCorp && vkn.length !== 10 && vkn.length !== 11) return setErr('Vergi no (10 hane) ya da TC kimlik no (11 hane) zorunlu — faturanız otomatik kesilir.')
-    const row = await customerApply({ ...f, package: pkg, ref: refCode, bni: !!discount })
+    let row
+    try { row = await customerApply({ ...f, package: pkg, ref: refCode, code: discount?.code || '', bni: !!discount }) }
+    catch (e) { return setErr(e.message || 'Satın alma başlatılamadı.') }
+    if (row.quote) {
+      setServerQuote(row.quote)
+      if (row.quote.discount_pct) setDiscount({ code: row.quote.discount_code, pct: row.quote.discount_pct })
+      else if (discount) { setDiscount(null); setCodeMsg('Kod geçersiz veya pasif; indirim uygulanmadı.') }
+    }
     setCust(row)
     if (isCorp) { setResult({ mode: 'teklif' }); setStep(3) }
     else setStep(2)
@@ -139,7 +147,7 @@ export default function SatinAl() {
     const provider = cfg.pos_provider || 'paytr'
     // P0.3: tutar sunucuda hesaplanır — istemci yalnız paket + izinli indirim kodu iletir.
     const out = await posPay(provider, {
-      customerId: cust.id, pkg, code: discount?.code || '',
+      purchaseToken: cust.purchase_token,
       email: f.email, name: f.title, phone: f.phone,
     })
     const url = out?.iframe_url || out?.redirect_url || out?.payment_url
@@ -150,13 +158,13 @@ export default function SatinAl() {
   /* Havale: dekont yükle + bildirim.
      - Ayarda "dekontla otomatik aktivasyon" AÇIK ve dekont varsa → anında
        aktive et (karttaki gibi kod ekranda). Aksi halde onay kuyruğuna düşer. */
-  const onTransferClaim = async ({ receiptUrl = '' } = {}) => {
+  const onTransferClaim = async ({ receiptUrl = '', receiptFile = null } = {}) => {
     // P0.4: Dekontla otomatik aktivasyon YALNIZCA geliştirmede. Production'da
     // dekont ödeme kanıtı değildir; personel onay kuyruğuna (inceleme) düşer.
-    if (cfg.auto_activate_receipt && import.meta.env.DEV && receiptUrl) {
+    if (!usingSupabase && cfg.auto_activate_receipt && import.meta.env.DEV && receiptUrl) {
       try {
         // dekontu da kaydet, sonra aktive et
-        await submitPaymentReceipt(cust.id, { receiptUrl, amount: price, pkg, sender: f.title })
+        await submitPaymentReceipt(cust.id, { receiptUrl, receiptFile, purchaseToken: cust.purchase_token, amount: price, pkg, sender: f.title })
         const updated = await activateAfterPayment(cust, pkg, price, { bniPct })
         setResult({ mode: 'kart', code: updated.access_code })
         setStep(3)
@@ -164,9 +172,9 @@ export default function SatinAl() {
       } catch { /* hata olursa aşağıdaki kuyruğa düşür */ }
     }
     try {
-      await submitPaymentReceipt(cust.id, { receiptUrl, amount: price, pkg, sender: f.title })
-    } catch { /* bildirim düşmese de müşteri onayını göster */ }
-    setResult({ mode: 'havale', withReceipt: !!receiptUrl })
+      await submitPaymentReceipt(cust.id, { receiptUrl, receiptFile, purchaseToken: cust.purchase_token, amount: price, pkg, sender: f.title })
+    } catch (e) { throw new Error(e.message || 'Ödeme bildirimi kaydedilemedi.') }
+    setResult({ mode: 'havale', withReceipt: !!(receiptUrl || receiptFile) })
     setStep(3)
   }
 
@@ -602,6 +610,7 @@ function CardPay({ amount, onPaid }) {
 function TransferPay({ cfg, applicant, customerId, pkg, amount, onClaim }) {
   const [copied, setCopied] = useState('')
   const [receipt, setReceipt] = useState('')   // yüklenen dekont (dataURL)
+  const [receiptFile, setReceiptFile] = useState(null)
   const [fileName, setFileName] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -615,13 +624,23 @@ function TransferPay({ cfg, applicant, customerId, pkg, amount, onClaim }) {
     if (file.size > 8 * 1024 * 1024) { setErr('Dosya çok büyük (en fazla 8 MB).'); return }
     setErr(''); setBusy(true)
     try {
-      const url = await fileToStoredUrl(file, { maxW: 1600, quality: 0.7, prefix: 'receipts', customerId })
-      setReceipt(url); setFileName(file.name)
+      if (usingSupabase) { setReceiptFile(file); setReceipt(URL.createObjectURL(file)); setFileName(file.name) }
+      else {
+        const url = await fileToStoredUrl(file, { maxW: 1600, quality: 0.7, prefix: 'receipts', customerId })
+        setReceipt(url); setFileName(file.name)
+      }
     } catch { setErr('Dosya yüklenemedi, tekrar deneyin.') }
     setBusy(false)
   }
 
-  const isImg = receipt.startsWith('data:image')
+  const isImg = receiptFile ? receiptFile.type.startsWith('image/') : receipt.startsWith('data:image')
+
+  const claim = async () => {
+    setErr(''); setBusy(true)
+    try { await onClaim({ receiptUrl: usingSupabase ? '' : receipt, receiptFile }) }
+    catch (e) { setErr(e.message || 'Bildirim kaydedilemedi.'); setBusy(false); return }
+    setBusy(false)
+  }
 
   const Row = ({ label, value, tag }) => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--line, #dbe2ea)', flexWrap: 'wrap' }}>
@@ -669,7 +688,7 @@ function TransferPay({ cfg, applicant, customerId, pkg, amount, onClaim }) {
               <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fileName || 'Dekont eklendi'}</div>
               <div style={{ fontSize: 12.5, color: 'var(--teal-dark, #04352c)' }}>✓ Eklendi — göndermeye hazır</div>
             </div>
-            <button type="button" className="btn btn-line" style={{ padding: '4px 10px', fontSize: 13 }} onClick={() => { setReceipt(''); setFileName('') }}>Kaldır</button>
+            <button type="button" className="btn btn-line" style={{ padding: '4px 10px', fontSize: 13 }} onClick={() => { if (receipt.startsWith('blob:')) URL.revokeObjectURL(receipt); setReceipt(''); setReceiptFile(null); setFileName('') }}>Kaldır</button>
           </div>
         ) : (
           <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, border: '2px dashed rgba(10,37,64,.35)', borderRadius: 4, padding: '22px 14px', cursor: 'pointer', background: '#fff', textAlign: 'center' }}>
@@ -683,7 +702,7 @@ function TransferPay({ cfg, applicant, customerId, pkg, amount, onClaim }) {
       </div>
 
       <button type="button" className="btn btn-solid big" style={{ width: '100%' }}
-        onClick={() => onClaim({ receiptUrl: receipt })} disabled={busy}>
+        onClick={claim} disabled={busy}>
         {receipt ? 'Dekontu gönder ve ödemeyi bildir ✓' : 'Dekontsuz bildir (sonra iletirim)'}
       </button>
       <span style={{ fontSize: 13, opacity: 0.65, textAlign: 'center' }}>

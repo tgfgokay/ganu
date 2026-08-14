@@ -444,15 +444,16 @@ export async function customerCloudLogout() {
    kalır; panelde onay kuyruğuna düşer (dashboard.paymentClaims).
    Yönetici dekontu görüp "Ödeme geldi" ile aktive eder.
    (Gerçek otomatik eşleşme banka API'si gerektirir — ileride.) */
-export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount = 0, pkg = '', sender = '' } = {}) {
+export async function submitPaymentReceipt(customerId, { receiptUrl = '', receiptFile = null, purchaseToken = '', amount = 0, pkg = '', sender = '' } = {}) {
   if (usingSupabase) {
-    // anon UPDATE yok — RPC yalnız 'aday' kaydına dekont yazar
-    const { data, error } = await supabase.rpc('purchase_submit_receipt', {
-      p_customer_id: customerId, p_url: receiptUrl,
-      p_expected: Number(amount) || 0, p_pkg: pkg, p_sender: sender,
-    })
-    if (error || !data) throw new Error(error?.message || 'Dekont kaydedilemedi.')
-    return true
+    if (!purchaseToken) throw new Error('Satın alma oturumu eksik.')
+    let body
+    if (receiptFile) {
+      body = new FormData(); body.append('purchase_token', purchaseToken); body.append('sender', sender); body.append('file', receiptFile)
+    } else body = { action: 'claim', purchase_token: purchaseToken, sender }
+    const { data, error } = await supabase.functions.invoke('purchase-flow', { body })
+    if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Ödeme bildirimi kaydedilemedi.')
+    return data
   }
   return customers.update(customerId, {
     payment_receipt_url: receiptUrl,
@@ -468,13 +469,13 @@ export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount
    ekranına yönlendirmek için iframe_url / redirect döner. Yalnız Supabase
    bağlıyken çalışır (secret'lar sunucuda). Sağlayıcı: 'paytr' | 'iyzico'.
    Config'te pos_enabled açık değilse UI bu yolu kullanmaz (simülasyon kalır). */
-export async function posPay(provider, { customerId, pkg = '', code = '', email = '', name = '', phone = '' } = {}) {
+export async function posPay(provider, { purchaseToken = '', email = '', name = '', phone = '' } = {}) {
   if (!usingSupabase) throw new Error('Sanal POS için Supabase bağlı olmalı (yerel modda simülasyon çalışır).')
-  if (!customerId || !pkg) throw new Error('customerId ve paket zorunlu.')
+  if (!purchaseToken) throw new Error('Güvenli satın alma oturumu zorunlu.')
   // P0.3: TUTAR İSTEMCİDEN GÖNDERİLMEZ. Sunucu, package_id + izinli indirim
   // kodundan fiyatı kendisi hesaplar; istemcinin ilettiği tutar yok sayılır.
   const { data, error } = await supabase.functions.invoke('pos-payment', {
-    body: { action: 'init', provider, customer_id: customerId, package_id: pkg, code, email, name, phone },
+    body: { action: 'init', provider, purchase_token: purchaseToken, email, name, phone },
   })
   if (error) throw new Error(error.message || 'POS başlatılamadı.')
   if (data?.error) throw new Error(data.error)
@@ -520,11 +521,13 @@ export async function customerApply(form) {
     notes: [form.package ? `İstenen paket: ${form.package}` : '', refNote, (form.notes || '').trim()].filter(Boolean).join(' · '),
   }
   if (usingSupabase) {
-    // anon INSERT policy dönüş satırı vermez — id'yi istemci üretir
-    const id = crypto.randomUUID()
-    const { error } = await supabase.from('customers').insert({ ...row, id, partner_id: partner_id || null })
-    if (error) throw error
-    return { ...row, id }
+    const { data, error } = await supabase.functions.invoke('purchase-flow', { body: {
+      action: 'create', title: row.title, email: row.email, phone: row.phone,
+      tax_no: form.tax_no || '', tax_office: row.tax_office, package_id: form.package,
+      code: form.code || '', ref,
+    } })
+    if (error || !data?.customer || !data?.purchase_token) throw new Error(data?.error || error?.message || 'Satın alma başlatılamadı.')
+    return { ...data.customer, purchase_token: data.purchase_token, quote: data.quote, expires_at: data.expires_at }
   }
   return customers.create(row)
 }
