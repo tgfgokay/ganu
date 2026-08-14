@@ -61,7 +61,8 @@ export default function SatinAl() {
   const [f, setF] = useState({ title: '', email: '', phone: '', tax_no: '', tax_office: '' })
   const [err, setErr] = useState('')
   const [cust, setCust] = useState(null)       // adım 1'de oluşan aday kaydı
-  const [payTab, setPayTab] = useState('kart') // kart | havale
+  // Kart sekmesi başlangıcı: POS açık ya da geliştirme modu değilse doğrudan havale.
+  const [payTab, setPayTab] = useState(() => (posEnabled() || import.meta.env.DEV) ? 'kart' : 'havale') // kart | havale
   const [result, setResult] = useState(null)   // { mode:'kart', code } | { mode:'havale' }
   const [codeInput, setCodeInput] = useState('') // müşterinin girdiği indirim kodu
   const [discount, setDiscount] = useState(null) // { code, pct } | null
@@ -70,6 +71,15 @@ export default function SatinAl() {
   const listPrice = PACKAGE_PRICES[pkg]
   const isCorp = pkg === 'Kurumsal'
   const price = discount && listPrice ? indirimliTutar(listPrice, discount.pct) : listPrice
+
+  /* Kart ödeme modu (P0.4 — prod'da demo kesinlikle kapalı):
+     - 'pos'  : gerçek sanal POS (pos_enabled açık)
+     - 'demo' : test kartı SİMÜLASYONU — YALNIZCA geliştirme (import.meta.env.DEV)
+     - 'off'  : POS yok + production → kart sekmesi hiç gösterilmez, sadece havale */
+  const cardMode = posEnabled() ? 'pos' : (import.meta.env.DEV ? 'demo' : 'off')
+  const payMethods = cardMode === 'off'
+    ? [['havale', '🏦', 'Havale / EFT']]
+    : [['kart', '💳', 'Kredi kartı'], ['havale', '🏦', 'Havale / EFT']]
 
   useEffect(() => { document.title = 'GANU · Satın Al'; window.scrollTo(0, 0) }, [])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [step])
@@ -129,7 +139,9 @@ export default function SatinAl() {
      - Ayarda "dekontla otomatik aktivasyon" AÇIK ve dekont varsa → anında
        aktive et (karttaki gibi kod ekranda). Aksi halde onay kuyruğuna düşer. */
   const onTransferClaim = async ({ receiptUrl = '' } = {}) => {
-    if (cfg.auto_activate_receipt && receiptUrl) {
+    // P0.4: Dekontla otomatik aktivasyon YALNIZCA geliştirmede. Production'da
+    // dekont ödeme kanıtı değildir; personel onay kuyruğuna (inceleme) düşer.
+    if (cfg.auto_activate_receipt && import.meta.env.DEV && receiptUrl) {
       try {
         // dekontu da kaydet, sonra aktive et
         await submitPaymentReceipt(cust.id, { receiptUrl, amount: price, pkg, sender: f.title })
@@ -248,17 +260,19 @@ export default function SatinAl() {
         {step === 2 && (
           <div style={{ background: '#fff', border: '2px solid var(--line, #dbe2ea)', borderRadius: 4, padding: 22 }}>
             {/* ödeme yöntemi sekmeleri */}
-            <div className="pay-tabs">
-              {[['kart', '💳', 'Kredi kartı'], ['havale', '🏦', 'Havale / EFT']].map(([k, ic, l]) => (
+            <div className="pay-tabs" style={payMethods.length === 1 ? { gridTemplateColumns: '1fr' } : undefined}>
+              {payMethods.map(([k, ic, l]) => (
                 <button key={k} type="button" onClick={() => setPayTab(k)} className={`pay-tab${payTab === k ? ' on' : ''}`}>
                   <span aria-hidden="true">{ic}</span>{l}
                 </button>
               ))}
             </div>
             {payTab === 'kart'
-              ? (posEnabled()
+              ? (cardMode === 'pos'
                   ? <PosPay amount={price} provider={cfg.pos_provider || 'paytr'} onStart={startPos} />
-                  : <CardPay amount={price} onPaid={onCardPaid} />)
+                  : import.meta.env.DEV
+                    ? <CardPay amount={price} onPaid={onCardPaid} />
+                    : <PaymentUnavailable onTransfer={() => setPayTab('havale')} />)
               : <TransferPay cfg={cfg} applicant={f.title || cust?.title} pkg={pkg} amount={price} onClaim={onTransferClaim} />}
           </div>
         )}
@@ -413,7 +427,20 @@ export default function SatinAl() {
   )
 }
 
-/* ---- Kart ödeme (TEST MODU — tahsilat yok, simülasyon) ---- */
+/* Kart ödemesi kapalı (POS bağlı değil + production) — simülasyon ASLA gösterilmez.
+   Kullanıcı havaleye yönlendirilir; hiçbir aktivasyon tetiklenmez. */
+function PaymentUnavailable({ onTransfer }) {
+  return (
+    <div style={{ display: 'grid', gap: 14, textAlign: 'center', padding: '8px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff7e6', border: '1.5px solid #f0c36d', borderRadius: 10, padding: '10px 14px', fontSize: 13, fontWeight: 600, color: '#7a5b12', textAlign: 'left' }}>
+        💳 Kredi kartı ile ödeme çok yakında. Şimdilik <b>banka havalesi / EFT</b> ile güvenle ödeyebilirsiniz.
+      </div>
+      <button type="button" className="pay-btn" onClick={onTransfer}>Havale / EFT ile öde →</button>
+    </div>
+  )
+}
+
+/* ---- Kart ödeme (TEST MODU — tahsilat yok, simülasyon; YALNIZCA geliştirmede) ---- */
 /* Gerçek sanal POS ödemesi — sağlayıcının güvenli 3D Secure ekranına yönlendirir.
    Kart bilgisi bu ekrana GİRİLMEZ; sağlayıcıda girilir (PCI-DSS uyumlu). */
 function PosPay({ amount, provider, onStart }) {
