@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect, useReducer } from 'react'
 import { withBase } from './base'
 import { motion, useScroll, useSpring, useTransform, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
-import { PACKAGE_MONTHLY, PACKAGE_PRICES } from './panel/lib/store.js'
+import { PACKAGE_MONTHLY, PACKAGE_PRICES, PACKAGE_CUSTOM, onCatalog } from './panel/lib/store.js'
 
 /* ---------- motion presets ---------- */
 const rise = {
@@ -41,14 +41,27 @@ const stepIcons = {
   focus: <><circle cx="12" cy="12" r="7.5" /><circle cx="12" cy="12" r="2.6" /><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" /></>,
 }
 
-/* Fiyat tek kaynak: store.js PACKAGE_MONTHLY / PACKAGE_PRICES.
-   Yıllık gösterim = yıllık peşin tutarın aylık karşılığı (₺/12, yuvarlanır). */
+/* Fiyat tek kaynak: store.js PACKAGE_MONTHLY / PACKAGE_PRICES (Supabase 'packages'
+   tablosundan yüklenir). Yıllık gösterim = yıllık peşin tutarın aylık karşılığı.
+   Katalog runtime yüklendiği için tiers RENDER anında hesaplanır (buildTiers). */
 const trTL = (n) => Math.round(n).toLocaleString('tr-TR')
-const tiers = [
-  { name: 'Başlangıç', m: trTL(PACKAGE_MONTHLY['Başlangıç']), y: trTL(PACKAGE_PRICES['Başlangıç'] / 12), per: '₺ / ay', feat: false, items: ['Yasal iş adresi', 'Posta & tebligat bildirimi', 'Müşteri paneli + belge kasası', 'Aylık 2 saat toplantı odası'] },
-  { name: 'Pro', m: trTL(PACKAGE_MONTHLY['Pro']), y: trTL(PACKAGE_PRICES['Pro'] / 12), per: '₺ / ay', feat: true, items: ['Başlangıç’taki her şey', 'Telefon karşılama', 'Kargo yönlendirme (aylık 2 gönderi)', 'Aylık 8 saat toplantı odası', 'Öncelikli destek'] },
-  { name: 'Kurumsal', m: 'Teklif', y: 'Teklif', per: '', custom: true, items: ['Pro’daki her şey', 'Mali müşavir paketi', 'Sınırsız toplantı odası', 'Özel hesap yöneticisi'] },
-]
+const ITEMS = {
+  'Başlangıç': ['Yasal iş adresi', 'Posta & tebligat bildirimi', 'Müşteri paneli + belge kasası', 'Aylık 2 saat toplantı odası'],
+  'Pro': ['Başlangıç’taki her şey', 'Telefon karşılama', 'Kargo yönlendirme (aylık 2 gönderi)', 'Aylık 8 saat toplantı odası', 'Öncelikli destek'],
+  'Kurumsal': ['Pro’daki her şey', 'Mali müşavir paketi', 'Sınırsız toplantı odası', 'Özel hesap yöneticisi'],
+}
+function buildTiers() {
+  return [
+    { name: 'Başlangıç', feat: false },
+    { name: 'Pro', feat: true },
+    { name: 'Kurumsal', feat: false },
+  ].map(({ name, feat }) => {
+    const custom = PACKAGE_CUSTOM.has(name) || PACKAGE_PRICES[name] == null
+    return custom
+      ? { name, m: 'Teklif', y: 'Teklif', per: '', custom: true, items: ITEMS[name] || [] }
+      : { name, m: trTL(PACKAGE_MONTHLY[name]), y: trTL(PACKAGE_PRICES[name] / 12), per: '₺ / ay', feat, items: ITEMS[name] || [] }
+  })
+}
 
 const marqueeItems = ['Yasal İş Adresi', 'Posta & Kargo', 'Telefon Karşılama', 'Toplantı Odası', 'Mali Müşavir']
 
@@ -374,6 +387,9 @@ function Trust() {
 
 function Pricing() {
   const [yearly, setYearly] = useState(false)
+  const [, bumpCatalog] = useReducer((x) => x + 1, 0)
+  useEffect(() => onCatalog(bumpCatalog), []) // katalog yüklenince fiyatları güncelle
+  const tiers = buildTiers()
   return (
     <section className="section" id="paketler">
       <div className="wrap">

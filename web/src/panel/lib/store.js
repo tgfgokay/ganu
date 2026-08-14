@@ -662,6 +662,35 @@ export const PACKAGES = ['Başlangıç', 'Pro', 'Kurumsal']
    Kurumsal: özel teklif — sabit fiyatı yok (taban ~29.990 ₺). */
 export const PACKAGE_MONTHLY = { 'Başlangıç': 999, 'Pro': 1899 }    // aylık, ₺
 export const PACKAGE_PRICES = { 'Başlangıç': 9990, 'Pro': 18990 }   // yıllık peşin, ₺
+export const PACKAGE_CUSTOM = new Set(['Kurumsal'])                 // sabit fiyatsız (teklif)
+
+/* ---------- Fiyat kataloğu tek gerçek kaynak (P0.2/#7) ----------
+   Supabase bağlıysa fiyatlar 'packages' tablosundan okunur ve yukarıdaki
+   objeler YERİNDE güncellenir; site, checkout, panel ve POS aynı değerleri
+   kullanır. Yerel/dev modda yukarıdaki sabitler geçerlidir.
+   Bileşenler onCatalog ile abone olup katalog yüklenince yeniden render eder. */
+const _catalogSubs = new Set()
+export function onCatalog(cb) { _catalogSubs.add(cb); return () => _catalogSubs.delete(cb) }
+export async function loadCatalog() {
+  if (!usingSupabase) return false
+  const { data, error } = await supabase
+    .from('packages').select('id,name,list_amount,monthly_amount,is_custom,active,sort')
+    .eq('active', true).order('sort')
+  if (error || !Array.isArray(data) || !data.length) return false
+  for (const k of Object.keys(PACKAGE_PRICES)) delete PACKAGE_PRICES[k]
+  for (const k of Object.keys(PACKAGE_MONTHLY)) delete PACKAGE_MONTHLY[k]
+  PACKAGE_CUSTOM.clear()
+  const names = []
+  for (const p of data) {
+    names.push(p.id)
+    if (p.is_custom || !(Number(p.list_amount) > 0)) { PACKAGE_CUSTOM.add(p.id); continue }
+    PACKAGE_PRICES[p.id] = Number(p.list_amount)
+    if (p.monthly_amount != null) PACKAGE_MONTHLY[p.id] = Number(p.monthly_amount)
+  }
+  PACKAGES.splice(0, PACKAGES.length, ...names)
+  _catalogSubs.forEach((cb) => { try { cb() } catch { /* yoksay */ } })
+  return true
+}
 /* BNI Nişantaşı kaynaklı müşteri indirimi (%). Sitede GÖRÜNMEZ; yalnız panelde,
    müşteri "BNI" işaretliyse ödeme anında uygulanır. Oran ayda bir elle gözden
    geçirilir — değişecek tek yer burası. 0 = indirim yok. */

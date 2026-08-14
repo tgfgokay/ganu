@@ -9,7 +9,12 @@ import SatinAl from './SatinAl.jsx'
 import PanelApp from './panel/PanelApp.jsx'
 import MusteriPortal from './panel/MusteriPortal.jsx'
 import OrtakPortal from './panel/OrtakPortal.jsx'
+import { loadCatalog } from './panel/lib/store.js'
 import './index.css'
+
+// P0.2/#7: Supabase bağlıysa fiyat kataloğunu tek gerçek kaynaktan yükle.
+// Bileşenler onCatalog ile yüklenince güncellenir. (Yerel modda no-op.)
+loadCatalog()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

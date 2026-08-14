@@ -41,13 +41,22 @@ stable
 security definer
 set search_path = public
 as $$
-  select exists (
-    select 1 from public.customers c
-    where upper(c.access_code) = upper(p_code)
-      and p_path like 'customers/' || c.id || '/%'
-       or p_path like 'mail/'      || c.id || '/%'
-       or p_path like 'receipts/'  || c.id || '/%'
-  );
+  -- Boş/geçersiz kod ASLA erişemez. AND/OR parantezi: kod eşleşmesi TÜM path
+  -- alternatiflerini kapsar (aksi halde OR yüzünden herhangi bir mail/receipts
+  -- yolu kodsuz geçerdi).
+  select case
+    when coalesce(p_code, '') = '' then false
+    else exists (
+      select 1 from public.customers c
+      where coalesce(c.access_code, '') <> ''
+        and upper(c.access_code) = upper(p_code)
+        and (
+             p_path like 'customers/' || c.id || '/%'
+          or p_path like 'mail/'      || c.id || '/%'
+          or p_path like 'receipts/'  || c.id || '/%'
+        )
+    )
+  end;
 $$;
 
 revoke all on function public.owns_secure_object(text, text) from public;

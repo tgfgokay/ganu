@@ -29,19 +29,54 @@ as $$
   end
 $$;
 
--- Parola belirleme/güncelleme — personel panelinden çağrılır; bcrypt saklar.
+-- Parola belirleme/güncelleme — YETKİ: owner/admin personel VEYA müşterinin kendisi
+-- (auth.uid() = customers.auth_user_id, OTP geçişi sonrası). bcrypt saklar.
 create or replace function public.set_portal_password(p_customer_id uuid, p_new text)
 returns void
-language sql
+language plpgsql
 security definer
 set search_path = public, extensions
 as $$
+declare
+  is_staff boolean;
+  is_self  boolean;
+begin
+  if length(coalesce(p_new,'')) < 8 then
+    raise exception 'parola en az 8 karakter olmalı';
+  end if;
+  is_staff := exists (select 1 from public.staff_roles r
+                      where r.user_id = auth.uid() and r.role in ('owner','admin'));
+  -- customers.auth_user_id kolonu OTP geçişinde eklenir; yoksa self=false.
+  is_self := exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='customers' and column_name='auth_user_id'
+  ) and exists (
+    select 1 from public.customers c where c.id = p_customer_id and c.auth_user_id = auth.uid()
+  );
+  if not (is_staff or is_self) then
+    raise exception 'yetki yok: parola yalnız owner/admin ya da müşterinin kendisi tarafından belirlenebilir';
+  end if;
   update public.customers
      set portal_password = 'bcrypt:' || crypt(p_new, gen_salt('bf', 12))
    where id = p_customer_id;
-$$;
+end $$;
 revoke all on function public.set_portal_password(uuid, text) from anon;
 grant execute on function public.set_portal_password(uuid, text) to authenticated;
+
+-- ------------------------------------------------------------
+-- ESKİ (düz metin / sha256:) PAROLA GEÇİŞ PLANI — zorunlu sıfırlama
+-- _pw_match artık yalnız bcrypt kabul ettiği için eski hash'ler otomatik
+-- GEÇERSİZDİR. Bu kayıtları açıkça işaretle ve temizle → kullanıcı parola
+-- sıfırlama (OTP / e-posta) ile yeni bcrypt parola belirleyene kadar
+-- parola ile giremez (geçici olarak access_code/OTP kullanılır).
+-- ------------------------------------------------------------
+alter table public.customers add column if not exists must_reset_password boolean not null default false;
+
+update public.customers
+   set must_reset_password = true,
+       portal_password = ''          -- eski düz metin/sha256 hash'i sıfırla (login edilemez)
+ where coalesce(portal_password,'') <> ''
+   and portal_password not like 'bcrypt:%';
 
 -- ------------------------------------------------------------
 -- RBAC iskeleti (P1 başlangıcı) — personel rolleri

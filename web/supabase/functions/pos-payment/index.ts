@@ -56,40 +56,33 @@ type InitBody = {
 // DB kataloğundan (sürüm + geçerlilik tarihi ile) okunmalıdır; şimdilik
 // web/src/panel/lib/store.js PACKAGE_PRICES ile elle senkron tutulur.
 // ============================================================
-// FALLBACK (packages/discount_codes tabloları yoksa). Tercih: DB kataloğu.
-const CATALOG_FALLBACK: Record<string, number> = { 'Başlangıç': 9990, 'Pro': 18990 }
-const DISCOUNTS_FALLBACK: Record<string, number> = { 'BNINISANTASI': 10 }
 const CURRENCY = 'TL'
 
 type Db = ReturnType<typeof admin>
 type Order = { amount: number; list: number; pct: number; code: string; price_version: number }
 
-// P0.2/P0.3: fiyatı SUNUCU + DB kataloğundan hesapla. İstemci tutarı yok sayılır.
+// P0.2/P0.3: fiyat YALNIZ DB kataloğundan (tek gerçek kaynak). SABİT FALLBACK YOK.
+// Katalog/indirim sorgusu hata verirse ödeme FAIL-CLOSED durur.
 async function computeOrder(db: Db, packageId: string, code: string): Promise<Order> {
-  let list = 0
-  let priceVersion = 1
-  // 1) DB kataloğu (tek gerçek kaynak)
-  const { data: pkg } = await db.from('packages')
+  const { data: pkg, error: pErr } = await db.from('packages')
     .select('list_amount, price_version, is_custom, active').eq('id', packageId).maybeSingle()
-  if (pkg) {
-    if (pkg.is_custom) throw new Error('Bu paket özel tekliftir; online ödeme alınmaz.')
-    if (!pkg.active) throw new Error('Paket aktif değil.')
-    list = Number(pkg.list_amount) || 0
-    priceVersion = Number(pkg.price_version) || 1
-  } else {
-    // 2) Fallback (tablo kurulmadıysa)
-    list = CATALOG_FALLBACK[packageId] || 0
-  }
-  if (!(list > 0)) throw new Error('Geçersiz paket.')
+  if (pErr) throw new Error('Fiyat kataloğu okunamadı — ödeme durduruldu (fail-closed).')
+  if (!pkg) throw new Error('Geçersiz paket.')
+  if (pkg.is_custom) throw new Error('Bu paket özel tekliftir; online ödeme alınmaz.')
+  if (!pkg.active) throw new Error('Paket aktif değil.')
+  const list = Number(pkg.list_amount) || 0
+  const priceVersion = Number(pkg.price_version) || 1
+  if (!(list > 0)) throw new Error('Geçersiz paket fiyatı.')
 
-  // İndirim: DB'den (gizli kodlar), yoksa fallback.
+  // İndirim: yalnız DB (gizli kodlar). Sorgu hatası → fail-closed.
   const norm = String(code || '').trim().toUpperCase().replace(/\s+/g, '')
   let pct = 0
   if (norm) {
-    const { data: dc } = await db.from('discount_codes')
+    const { data: dc, error: dErr } = await db.from('discount_codes')
       .select('pct, active').eq('code', norm).maybeSingle()
+    if (dErr) throw new Error('İndirim kodu doğrulanamadı — ödeme durduruldu (fail-closed).')
     if (dc && dc.active) pct = Number(dc.pct) || 0
-    else if (!dc) pct = DISCOUNTS_FALLBACK[norm] || 0
+    // bilinmeyen/pasif kod → indirim uygulanmaz (ödeme durmaz; kod opsiyoneldir)
   }
   const amount = Math.round(list * (100 - pct)) / 100
   return { amount, list, pct, code: pct ? norm : '', price_version: priceVersion }
@@ -97,6 +90,13 @@ async function computeOrder(db: Db, packageId: string, code: string): Promise<Or
 
 // ---- yardımcılar ----
 const enc = new TextEncoder()
+
+// P0.5/#5: İstemci IP'sini GÜVENİLİR proxy başlığından al; body.ip'ye güvenme.
+function clientIp(req: Request): string {
+  const xff = req.headers.get('x-forwarded-for') || ''
+  const first = xff.split(',')[0].trim()
+  return first || req.headers.get('x-real-ip') || '0.0.0.0'
+}
 
 async function hmacSha256B64(key: string, msg: string): Promise<string> {
   const k = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
@@ -111,26 +111,8 @@ function admin() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-// Güvenlik olayı kaydı (best-effort — security_events tablosu yoksa sessiz geç + log).
-async function logSecurity(db: ReturnType<typeof admin>, kind: string, detail: unknown) {
-  console.error('SECURITY', kind, JSON.stringify(detail))
-  try {
-    await db.from('security_events').insert({ kind, detail })
-  } catch { /* tablo yoksa yut — konsola zaten yazıldı */ }
-}
-
-// Ödeme doğrulanınca müşteriyi işaretle (panel ödeme onayını tetikler).
-async function markPaid(customerId: string, amount: number, pkg: string, provider: string) {
-  const db = admin()
-  const { error } = await db.from('customers').update({
-    payment_claimed_at: new Date().toISOString(),
-    payment_expected: amount,
-    payment_pkg: pkg,
-    payment_sender: `${provider} sanal POS`,
-    payment_receipt_url: `pos:${provider}`,
-  }).eq('id', customerId)
-  if (error) throw new Error('DB güncelleme hatası: ' + error.message)
-}
+// Not: sipariş/müşteri güncellemesi ve güvenlik logu artık pos_settle RPC'si
+// (0001_pricing_catalog.sql) içinde ATOMİK yapılır — burada ayrı helper yok.
 
 // ============================================================
 // PayTR — iframe token akışı (deterministik HMAC)
@@ -215,33 +197,22 @@ async function paytrCallback(req: Request): Promise<Response> {
 
   try {
     const db = admin()
-    const { data: order } = await db.from('pos_orders').select('*').eq('merchant_oid', merchant_oid).single()
-    // Bilinmeyen sipariş: PayTR tekrar denemesin diye OK dön, ama hiçbir işlem yapma.
-    if (!order) { await logSecurity(db, 'pos_unknown_order', { merchant_oid }); return new Response('OK', { status: 200 }) }
-
-    // IDEMPOTENCY: zaten sonuçlanmış sipariş yeniden işlenmez.
-    if (order.status === 'başarılı' || order.status === 'başarısız') {
-      return new Response('OK', { status: 200 })
-    }
-
-    if (status === 'success') {
-      // TUTAR DOĞRULAMA (P0.3): sağlayıcı tutarı (kuruş) kayıtlı siparişle bire bir eşleşmeli.
-      const expectedKurus = Math.round(Number(order.amount) * 100)
-      if (String(total_amount) !== String(expectedKurus)) {
-        await logSecurity(db, 'pos_amount_mismatch', { merchant_oid, expected: expectedKurus, got: total_amount })
-        await db.from('pos_orders').update({ status: 'şüpheli' }).eq('merchant_oid', merchant_oid)
-        return new Response('PAYTR amount mismatch', { status: 400 })
-      }
-      await db.from('pos_orders').update({ status: 'başarılı' }).eq('merchant_oid', merchant_oid)
-      await markPaid(order.customer_id, order.amount, order.pkg || '', 'paytr')
-    } else {
-      await db.from('pos_orders').update({ status: 'başarısız' }).eq('merchant_oid', merchant_oid)
-    }
+    // P0.3: sipariş + müşteri güncellemesi TEK ATOMİK RPC içinde (satır kilidi +
+    // idempotency + tutar doğrulama). total_amount kuruş (integer) beklenir.
+    const totalKurus = Math.round(Number(total_amount))
+    const { data: result, error } = await db.rpc('pos_settle', {
+      p_merchant_oid: merchant_oid,
+      p_status: status,
+      p_total_amount: totalKurus,
+    })
+    if (error) { console.error('pos_settle:', error.message); return new Response('db error', { status: 500 }) }
+    // Tutar uyuşmazlığında PayTR'a başarısızlık bildir (güvenlik olayı RPC içinde yazıldı).
+    if (result === 'mismatch') return new Response('PAYTR amount mismatch', { status: 400 })
+    // 'ok' | 'idempotent' | 'unknown' | 'failed' → PayTR düz "OK" bekler.
   } catch (e) {
-    console.error('paytr callback db:', e)
+    console.error('paytr callback:', e)
     return new Response('db error', { status: 500 })
   }
-  // PayTR bu yanıtı BEKLER — düz "OK" gövdesi:
   return new Response('OK', { status: 200 })
 }
 
@@ -276,6 +247,7 @@ Deno.serve(async (req) => {
     if (action === 'init') {
       // P0.3: yalnız customer_id + package_id (+ opsiyonel code) kabul edilir; amount YOK.
       if (!body.customer_id || !body.package_id) return json({ error: 'customer_id ve package_id zorunlu' }, 400)
+      body.ip = clientIp(req) // #5: istemcinin ip alanını GÜVENİLİR başlıkla ez
       let result
       if (body.provider === 'paytr') result = await paytrInit(body)
       else if (body.provider === 'iyzico') result = await iyzicoInit(body)
