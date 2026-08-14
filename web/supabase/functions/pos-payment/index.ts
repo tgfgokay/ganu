@@ -63,8 +63,18 @@ type Order = { amount: number; list: number; pct: number; code: string; price_ve
 
 // P0.2/P0.3: fiyat YALNIZ DB kataloğundan (tek gerçek kaynak). SABİT FALLBACK YOK.
 // Katalog/indirim sorgusu hata verirse ödeme FAIL-CLOSED durur.
+//
+// STAGING HATA ENJEKSİYONU (fail-closed kapısını KANITLAMAK için):
+//   secret POS_TEST_FAULT=catalog|discount → ilgili sorgu GERÇEKTEN hata verir
+//   (var olmayan tablo) ve if(pErr/dErr) dalı çalışır → 5xx, sipariş 0, PayTR 0.
+//   ⚠️ YALNIZ PAYTR_TEST_MODE=1 iken aktiftir; production'da (test_mode=0) ASLA
+//   tetiklenmez. Test bitince secret'ı kaldır.
 async function computeOrder(db: Db, packageId: string, code: string): Promise<Order> {
-  const { data: pkg, error: pErr } = await db.from('packages')
+  const fault = (Deno.env.get('PAYTR_TEST_MODE') === '1') ? (Deno.env.get('POS_TEST_FAULT') || '') : ''
+  const pkgTable   = fault === 'catalog'  ? '__ganu_fault_no_such_table__' : 'packages'
+  const discTable  = fault === 'discount' ? '__ganu_fault_no_such_table__' : 'discount_codes'
+
+  const { data: pkg, error: pErr } = await db.from(pkgTable)
     .select('list_amount, price_version, is_custom, active').eq('id', packageId).maybeSingle()
   if (pErr) throw new Error('Fiyat kataloğu okunamadı — ödeme durduruldu (fail-closed).')
   if (!pkg) throw new Error('Geçersiz paket.')
@@ -78,7 +88,7 @@ async function computeOrder(db: Db, packageId: string, code: string): Promise<Or
   const norm = String(code || '').trim().toUpperCase().replace(/\s+/g, '')
   let pct = 0
   if (norm) {
-    const { data: dc, error: dErr } = await db.from('discount_codes')
+    const { data: dc, error: dErr } = await db.from(discTable)
       .select('pct, active').eq('code', norm).maybeSingle()
     if (dErr) throw new Error('İndirim kodu doğrulanamadı — ödeme durduruldu (fail-closed).')
     if (dc && dc.active) pct = Number(dc.pct) || 0

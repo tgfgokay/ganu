@@ -104,6 +104,34 @@ curl -s -X POST "$FN" -H "content-type: application/json" \
 #      gerçek callback'te test_mode ile denenir.
 ```
 
+### 3a) FAIL-CLOSED kapısı — katalog SORGU HATASI (kontrollü enjeksiyon)
+> "Bilinmeyen/pasif paket" bunu KANITLAMAZ (o 'not found', DB hatası değil). Gerçek
+> sorgu hatasını staging'de kontrollü enjekte ederiz. ⚠️ `POS_TEST_FAULT` yalnız
+> `PAYTR_TEST_MODE=1` iken aktiftir; **production'a ASLA konmaz**. Test bitince kaldır.
+```bash
+# 1) Ölçüm öncesi sipariş sayısını al (SQL editor):
+--   select count(*) as before_cnt from public.pos_orders;
+# 2) Hata enjeksiyonunu aç ve yeniden deploy:
+supabase secrets set POS_TEST_FAULT=catalog     # (PAYTR_TEST_MODE=1 olmalı)
+supabase functions deploy pos-payment --no-verify-jwt
+# 3) init çağır → 5xx beklenir (fiyat kataloğu okunamadı = fail-closed):
+curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST "$FN" \
+  -H "content-type: application/json" \
+  -d '{"action":"init","provider":"paytr","customer_id":"<CID>","package_id":"Pro"}'
+#   → BEKLENEN: HTTP 5xx
+# 4) Kanıt: sipariş EKLENMEDİ + PayTR ÇAĞRILMADI
+--   select count(*) as after_cnt from public.pos_orders;   -- before_cnt ile AYNI
+--   select count(*) from public.pos_orders where merchant_oid like 'GANU%'
+--     and created_at > now() - interval '5 min';           -- 0 (yeni sipariş yok)
+#   PayTR çağrısı 0: sipariş insert'i computeOrder'dan SONRA olduğu için, hata
+#   insert ve get-token'dan ÖNCE fırlar → sağlayıcıya hiç gidilmez.
+# 5) Enjeksiyonu KALDIR ve yeniden deploy:
+supabase secrets unset POS_TEST_FAULT
+supabase functions deploy pos-payment --no-verify-jwt
+```
+Beklenen sonuç: **HTTP 5xx**, **after_cnt == before_cnt (sipariş 0)**, **PayTR çağrısı 0**.
+(Aynısı indirim yolu için `POS_TEST_FAULT=discount`.)
+
 ---
 
 ## 4) Rollback planı (staging'de sorun çıkarsa)
@@ -134,4 +162,10 @@ Down dosyaları:
 
 ## 5) Çıkış kriteri (production'a geçiş)
 §2 + §3 tüm pozitif/negatif testler geçmeden `pos_enabled` açılmaz, production
-Supabase kurulmaz, gerçek PayTR tahsilatı yapılmaz.
+Supabase kurulmaz, gerçek PayTR tahsilatı yapılmaz. Ek zorunlu kapılar:
+
+- **§3a fail-closed:** `POS_TEST_FAULT=catalog` ile HTTP 5xx + sipariş 0 + PayTR 0 görülmeli;
+  test sonrası secret KALDIRILMIŞ olmalı (`supabase secrets unset POS_TEST_FAULT`).
+- **admin testi:** staging'de `SKIP` kabul; **production öncesi** gerçek owner/admin
+  auth kullanıcısıyla (`set ganu.test_owner_uid=<uid>`) **PASS** olmak ZORUNDA.
+- **POS_TEST_FAULT** production secret'larında **bulunmamalı** (deploy öncesi doğrula).
