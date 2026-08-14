@@ -226,7 +226,7 @@ export default function SatinAl() {
               <label style={labelS} htmlFor="sa-title">Şirket ünvanı / adınız *</label>
               <input id="sa-title" className="sa-in" value={f.title} onChange={set('title')} required autoFocus placeholder="ör. Yıldız E-Ticaret Ltd. Şti." />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="sa-2col">
               <div style={field}>
                 <label style={labelS} htmlFor="sa-mail">E-posta</label>
                 <input id="sa-mail" className="sa-in" type="email" inputMode="email" value={f.email} onChange={set('email')} placeholder="ad@firma.com" />
@@ -236,7 +236,7 @@ export default function SatinAl() {
                 <input id="sa-tel" className="sa-in" type="tel" inputMode="tel" value={f.phone} onChange={set('phone')} placeholder="05xx xxx xx xx" />
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="sa-2col">
               <div style={field}>
                 <label style={labelS} htmlFor="sa-vkn">Vergi no / TC kimlik no {isCorp ? '' : '*'}</label>
                 <input id="sa-vkn" className="sa-in" inputMode="numeric" maxLength={11} value={f.tax_no}
@@ -337,6 +337,9 @@ export default function SatinAl() {
           transition: border-color .2s;
         }
         .sa-in:focus { outline: none; border-color: var(--teal, #00D4B2); }
+        /* checkout ikili alanlar — dar ekranda (≤480px) tek kolona iner */
+        .sa-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 480px) { .sa-2col { grid-template-columns: 1fr; } }
 
         /* ---- Ödeme adımı ---- */
         .pay-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
@@ -550,7 +553,7 @@ function CardPay({ amount, onPaid }) {
             value={c.name} onChange={set('name', (v) => v.toUpperCase())} onFocus={() => setFlip(false)} />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div className="sa-2col">
         <div>
           <label className="pay-lab" htmlFor="cp-exp">Son kullanma</label>
           <div className="pay-field">
