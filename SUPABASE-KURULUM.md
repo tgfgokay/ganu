@@ -23,7 +23,7 @@ Aşağıda **kimin ne yapacağı** net ayrılmıştır; her satırın yanında i
 - [ ] **Yönetici kullanıcıları** ekle — her ortak (Gökay / Ali / Nurullah) için e-posta + parola → *Adım 3*
 - [ ] **API anahtarlarını** `web/.env`'e yaz — Project URL + anon key → *Adım 4*
 - [ ] Supabase **plan/ödeme**: ücretsiz kota başlangıç için yeterli; büyüyünce kredi kartı gerekir (Supabase → Billing)
-- [ ] **Kurumsal e-posta** kutusunu aç: `merhaba@ganu.com.tr` (site ve footer bu adresi kullanıyor)
+- [x] **Kurumsal e-posta** kutusu açık: `info@ganu.com.tr` (site ve footer bu adresi kullanıyor)
 - [ ] *(SMS/e-posta göndereceksen)* **Netgsm** ve/veya **Resend** hesabı + anahtarları → *Adım 7*
 - [ ] *(e-belge keseceksen)* **Entegratör** (Paraşüt / Uyumsoft / İzibiz…) hesabı + anahtarları → *Adım 8*
 - [ ] **Alan adı + hosting** hesabı: `ganu.com.tr` DNS'ini yayın sağlayıcısına bağla → *Adım 10*

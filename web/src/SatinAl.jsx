@@ -171,7 +171,7 @@ export default function SatinAl() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--paper, #F4F6F8)' }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--paper, #F4F6F8)' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px clamp(20px,5vw,48px)', borderBottom: '2px solid var(--navy, #0A2540)' }}>
         <a href={withBase("/")} style={{ display: 'inline-flex', color: 'var(--navy, #0A2540)' }} aria-label="Ana sayfa">
           <GanuMark style={{ height: 26, width: 'auto', display: 'block' }} />
@@ -328,7 +328,7 @@ export default function SatinAl() {
                     : 'Ödemenizi yaptıktan sonra dekontu iletmeniz onayı hızlandırır. Ödeme görülünce '}
                   sözleşmeniz ve portal giriş bilgileriniz e-posta/telefonunuza iletilir.
                 </p>
-                <p style={{ marginTop: 10, opacity: 0.7 }}>Dekont iletmek / acil durum için: <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a></p>
+                <p style={{ marginTop: 10, opacity: 0.7 }}>Dekont iletmek / acil durum için: <a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></p>
               </>
             )}
             {result.mode === 'teklif' && (
@@ -361,7 +361,7 @@ export default function SatinAl() {
           font: inherit; font-weight: 700; cursor: pointer;
           padding: 13px 12px; border-radius: 10px;
           background: #fff; color: var(--navy, #0A2540);
-          border: 2px solid var(--line, #dbe2ea); transition: all .18s;
+          border: 2px solid var(--line, #dbe2ea); transition: border-color .18s, background-color .18s;
         }
         .pay-tab span { font-size: 18px; }
         .pay-tab:hover { border-color: var(--teal, #00D4B2); }
@@ -414,7 +414,7 @@ export default function SatinAl() {
         .pay-field {
           display: flex; align-items: center; gap: 8px;
           background: #fff; border: 2px solid var(--line, #dbe2ea);
-          border-radius: 10px; padding: 0 12px; transition: all .18s;
+          border-radius: 10px; padding: 0 12px; transition: border-color .18s, box-shadow .18s;
         }
         .pay-field:focus-within {
           border-color: var(--teal, #00D4B2);
@@ -654,7 +654,7 @@ function TransferPay({ cfg, applicant, customerId, pkg, amount, onClaim }) {
           </p>
         </div>
       ) : (
-        <p>Havale bilgileri için bize ulaşın: <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a></p>
+        <p>Havale bilgileri için bize ulaşın: <a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></p>
       )}
 
       {/* dekont yükleme */}

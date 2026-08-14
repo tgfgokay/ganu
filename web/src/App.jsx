@@ -487,7 +487,7 @@ function CtaBand() {
           <motion.p variants={rise}>Bugün başla; yasal adresin yarın hazır. 30 saniyede satın al, evrakları biz takip edelim.</motion.p>
           <motion.a variants={rise} href={withBase("/satin-al")} className="btn btn-solid big">Satın almaya başla →</motion.a>
           <motion.p variants={rise} style={{ marginTop: 12, fontSize: 14, opacity: 0.75 }}>
-            Sorunuz mu var? <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a>
+            Sorunuz mu var? <a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a>
           </motion.p>
         </motion.div>
       </div>
@@ -536,7 +536,7 @@ function Footer() {
             <ul>
               <li>Kavacık Mah. Okul Cad.</li>
               <li>No:29 · Beykoz / İstanbul</li>
-              <li><a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a></li>
+              <li><a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></li>
               <li><a href="https://ganu.com.tr">ganu.com.tr</a></li>
             </ul>
           </div>
