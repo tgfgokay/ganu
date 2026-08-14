@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { withBase } from './base'
 import { motion, useScroll, useSpring, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
 import { partnerApply, PARTNER_PROFESSIONS } from './panel/lib/store.js'
@@ -55,7 +56,7 @@ function Nav() {
       initial={{ y: -60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.7, ease: [0.19, 1, 0.22, 1] }}>
       <div className="wrap mast-inner">
-        <a href="/" className="wordmark" onClick={close} aria-label="GANU — ana sayfa"><GanuMark /></a>
+        <a href={withBase("/")} className="wordmark" onClick={close} aria-label="GANU — ana sayfa"><GanuMark /></a>
         <span className="mast-meta">İş Ortaklığı · İstanbul</span>
         <button className="nav-toggle" aria-label={open ? 'Menüyü kapat' : 'Menüyü aç'}
           aria-expanded={open} aria-controls="nav-links" onClick={() => setOpen((v) => !v)}>
@@ -66,7 +67,7 @@ function Nav() {
         <div className={`links${open ? ' open' : ''}`} id="nav-links">
           <a href="#neden" onClick={close}>Neden ortak ol</a>
           <a href="#nasil" onClick={close}>Süreç</a>
-          <a href="/ortak" onClick={close}>Ortak girişi</a>
+          <a href={withBase("/ortak")} onClick={close}>Ortak girişi</a>
           <a href="#basvuru" className="mast-cta" onClick={close}>Ortak ol →</a>
         </div>
       </div>
@@ -98,7 +99,7 @@ function Hero() {
           <motion.div className="hero-side" variants={rise} initial="hidden" animate="show" custom={3}>
             <div className="hero-cta">
               <a href="#basvuru" className="btn btn-solid">Ortak ol →</a>
-              <a href="/ortak" className="btn btn-line">Ortak girişi</a>
+              <a href={withBase("/ortak")} className="btn btn-line">Ortak girişi</a>
             </div>
             <dl className="stats">
               <div><dt>Komisyon</dt><dd>her müşteride</dd></div>
@@ -232,7 +233,7 @@ function Apply({ formRef, profession }) {
             <h3>Başvurunu aldık.</h3>
             <p>
               En kısa sürede döneriz. Onaydan sonra komisyon oranın belirlenir ve sana bir <b>giriş kodu</b> iletiriz;
-              bununla <a href="/ortak">ortak paneline</a> girip getirdiğin müşterileri ve biriken hakedişini izlersin.
+              bununla <a href={withBase("/ortak")}>ortak paneline</a> girip getirdiğin müşterileri ve biriken hakedişini izlersin.
             </p>
           </motion.div>
         ) : (
@@ -289,7 +290,7 @@ function Apply({ formRef, profession }) {
               </button>
               <p className="pa-kvkk">
                 Bilgilerin yalnızca ortaklık başvurunu değerlendirmek için kullanılır, KVKK’ya uygun saklanır.
-                Zaten ortak mısın? <a href="/ortak">Ortak girişi →</a>
+                Zaten ortak mısın? <a href={withBase("/ortak")}>Ortak girişi →</a>
               </p>
             </div>
           </motion.form>
@@ -314,15 +315,15 @@ function Footer() {
               <li><a href="#neden">Neden ortak ol</a></li>
               <li><a href="#nasil">Süreç</a></li>
               <li><a href="#basvuru">Ortak ol</a></li>
-              <li><a href="/ortak">Ortak girişi</a></li>
+              <li><a href={withBase("/ortak")}>Ortak girişi</a></li>
             </ul>
           </div>
           <div>
             <h4>Kurumsal</h4>
             <ul>
-              <li><a href="/#nasil">Süreç</a></li>
-              <li><a href="/#paketler">Paketler</a></li>
-              <li><a href="/">Ana sayfa</a></li>
+              <li><a href={withBase("/#nasil")}>Süreç</a></li>
+              <li><a href={withBase("/#paketler")}>Paketler</a></li>
+              <li><a href={withBase("/")}>Ana sayfa</a></li>
             </ul>
           </div>
           <div>

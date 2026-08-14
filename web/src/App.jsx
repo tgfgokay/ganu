@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { withBase } from './base'
 import { motion, useScroll, useSpring, useTransform, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
 import { PACKAGE_MONTHLY, PACKAGE_PRICES } from './panel/lib/store.js'
@@ -159,13 +160,13 @@ function Nav() {
           <a href="#hizmetler" onClick={close}>Hizmetler</a>
           <a href="#nasil" onClick={close}>Süreç</a>
           <a href="#paketler" onClick={close}>Paketler</a>
-          <a href="/is-ortakligi" onClick={close}>İş Ortaklığı</a>
-          <a href="/musteri" className="mast-login" onClick={close} aria-label="Müşteri girişi">
+          <a href={withBase("/is-ortakligi")} onClick={close}>İş Ortaklığı</a>
+          <a href={withBase("/musteri")} className="mast-login" onClick={close} aria-label="Müşteri girişi">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 5 }}>
               <circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
             </svg>Giriş
           </a>
-          <a href="/satin-al" className="mast-cta" onClick={close}>Satın al →</a>
+          <a href={withBase("/satin-al")} className="mast-cta" onClick={close}>Satın al →</a>
         </div>
       </div>
     </motion.nav>
@@ -427,7 +428,7 @@ function Pricing() {
                   <li key={i}><Check /><span>{i}</span></li>
                 ))}
               </ul>
-              <a href={`/satin-al?paket=${encodeURIComponent(t.name)}`} className={`btn ${t.feat ? 'btn-solid' : 'btn-line'}`}>
+              <a href={withBase(`/satin-al?paket=${encodeURIComponent(t.name)}`)} className={`btn ${t.feat ? 'btn-solid' : 'btn-line'}`}>
                 {t.custom ? 'Teklif al →' : 'Satın al →'}
               </a>
             </motion.div>
@@ -478,7 +479,7 @@ function CtaBand() {
         <motion.div className="cta-band" {...reveal} variants={stagger}>
           <motion.h2 variants={rise}>Şirketine<br /><em>prestijli</em> bir adres<span className="dot">.</span></motion.h2>
           <motion.p variants={rise}>Bugün başla; yasal adresin yarın hazır. 30 saniyede satın al, evrakları biz takip edelim.</motion.p>
-          <motion.a variants={rise} href="/satin-al" className="btn btn-solid big">Satın almaya başla →</motion.a>
+          <motion.a variants={rise} href={withBase("/satin-al")} className="btn btn-solid big">Satın almaya başla →</motion.a>
           <motion.p variants={rise} style={{ marginTop: 12, fontSize: 14, opacity: 0.75 }}>
             Sorunuz mu var? <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a>
           </motion.p>
@@ -509,17 +510,17 @@ function Footer() {
           <div>
             <h4>İş Ortaklığı</h4>
             <ul>
-              <li><a href="/is-ortakligi">Ortak ol · komisyon</a></li>
-              <li><a href="/ortak">Ortak girişi</a></li>
-              <li><a href="/avukat">Avukatlar için</a></li>
-              <li><a href="/mali-musavir">Mali müşavirler için</a></li>
+              <li><a href={withBase("/is-ortakligi")}>Ortak ol · komisyon</a></li>
+              <li><a href={withBase("/ortak")}>Ortak girişi</a></li>
+              <li><a href={withBase("/avukat")}>Avukatlar için</a></li>
+              <li><a href={withBase("/mali-musavir")}>Mali müşavirler için</a></li>
             </ul>
           </div>
           <div>
             <h4>Kurumsal</h4>
             <ul>
-              <li><a href="/musteri"><b>Müşteri girişi</b></a></li>
-              <li><a href="/satin-al">Satın al</a></li>
+              <li><a href={withBase("/musteri")}><b>Müşteri girişi</b></a></li>
+              <li><a href={withBase("/satin-al")}>Satın al</a></li>
               <li><a href="#paketler">Paketler</a></li>
               <li><a href="#sss">SSS</a></li>
             </ul>

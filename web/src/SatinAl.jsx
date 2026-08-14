@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { withBase } from './base'
 import { useSearchParams, Link } from 'react-router-dom'
 import GanuMark from './GanuMark'
 import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar } from './panel/lib/store.js'
@@ -148,10 +149,10 @@ export default function SatinAl() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--paper, #F4F6F8)' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px clamp(20px,5vw,48px)', borderBottom: '2px solid var(--navy, #0A2540)' }}>
-        <a href="/" style={{ display: 'inline-flex', color: 'var(--navy, #0A2540)' }} aria-label="Ana sayfa">
+        <a href={withBase("/")} style={{ display: 'inline-flex', color: 'var(--navy, #0A2540)' }} aria-label="Ana sayfa">
           <GanuMark style={{ height: 26, width: 'auto', display: 'block' }} />
         </a>
-        <a href="/" style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy, #0A2540)' }}>← Siteye dön</a>
+        <a href={withBase("/")} style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy, #0A2540)' }}>← Siteye dön</a>
       </header>
 
       <main style={{ maxWidth: 620, margin: '0 auto', padding: '10px 20px 80px' }}>

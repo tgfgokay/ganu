@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { withBase } from './base'
 import { motion, useScroll, useSpring, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
 
@@ -36,7 +37,7 @@ function Nav({ segLabel }) {
       initial={{ y: -60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.7, ease: [0.19, 1, 0.22, 1] }}>
       <div className="wrap mast-inner">
-        <a href="/" className="wordmark" onClick={close} aria-label="GANU — ana sayfa"><GanuMark /></a>
+        <a href={withBase("/")} className="wordmark" onClick={close} aria-label="GANU — ana sayfa"><GanuMark /></a>
         <span className="mast-meta">{segLabel} · İstanbul</span>
         <button className="nav-toggle" aria-label={open ? 'Menüyü kapat' : 'Menüyü aç'}
           aria-expanded={open} aria-controls="nav-links" onClick={() => setOpen((v) => !v)}>
@@ -47,7 +48,7 @@ function Nav({ segLabel }) {
         <div className={`links${open ? ' open' : ''}`} id="nav-links">
           <a href="#neden" onClick={close}>Neden GANU</a>
           <a href="#nasil" onClick={close}>Süreç</a>
-          <a href="/#paketler" onClick={close}>Paketler</a>
+          <a href={withBase("/#paketler")} onClick={close}>Paketler</a>
           <a href="#iletisim" className="mast-cta" onClick={close}>İletişim →</a>
         </div>
       </div>
@@ -78,7 +79,7 @@ function Hero({ hero }) {
           <motion.div className="hero-side" variants={rise} initial="hidden" animate="show" custom={3}>
             <div className="hero-cta">
               <a href="#iletisim" className="btn btn-solid">{hero.cta} →</a>
-              <a href="/#paketler" className="btn btn-line">Paketleri gör</a>
+              <a href={withBase("/#paketler")} className="btn btn-line">Paketleri gör</a>
             </div>
             <dl className="stats">
               {hero.stats.map((s) => (
@@ -155,7 +156,7 @@ function SegSwitch({ cross }) {
   return (
     <section className="section seg-switch">
       <div className="wrap">
-        <motion.a className="seg-switch-band" href={cross.href} {...reveal} variants={stagger}>
+        <motion.a className="seg-switch-band" href={withBase(cross.href)} {...reveal} variants={stagger}>
           <motion.span className="seg-switch-eyebrow" variants={rise}>{cross.eyebrow}</motion.span>
           <motion.span className="seg-switch-title" variants={rise}>
             {cross.title}<span className="dot">.</span>
@@ -194,18 +195,18 @@ function Footer() {
           <div>
             <h4>İş Ortaklığı</h4>
             <ul>
-              <li><a href="/is-ortakligi">Ortak ol · komisyon</a></li>
-              <li><a href="/ortak">Ortak girişi</a></li>
-              <li><a href="/avukat">Avukatlar için</a></li>
-              <li><a href="/mali-musavir">Mali müşavirler için</a></li>
-              <li><a href="/">Ana sayfa</a></li>
+              <li><a href={withBase("/is-ortakligi")}>Ortak ol · komisyon</a></li>
+              <li><a href={withBase("/ortak")}>Ortak girişi</a></li>
+              <li><a href={withBase("/avukat")}>Avukatlar için</a></li>
+              <li><a href={withBase("/mali-musavir")}>Mali müşavirler için</a></li>
+              <li><a href={withBase("/")}>Ana sayfa</a></li>
             </ul>
           </div>
           <div>
             <h4>Kurumsal</h4>
             <ul>
-              <li><a href="/#nasil">Süreç</a></li>
-              <li><a href="/#paketler">Paketler</a></li>
+              <li><a href={withBase("/#nasil")}>Süreç</a></li>
+              <li><a href={withBase("/#paketler")}>Paketler</a></li>
               <li><a href="#iletisim">İletişim</a></li>
             </ul>
           </div>
