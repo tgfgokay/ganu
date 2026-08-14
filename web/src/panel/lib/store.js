@@ -839,20 +839,37 @@ export function trackingUrl(carrier, code) {
   return c && code ? c.url(code) : ''
 }
 
-/* ---------- dosya/foto → depolanabilir URL ----------
+/* ---------- dosya/foto → depolanabilir referans (P0.5) ----------
    Yerel mod: görseli küçültüp dataURL üretir (tarayıcıda saklanır).
-   Bulut modu: Supabase Storage 'mail-photos' bucket'ına yükler, public
-   URL döner — DB satırına dev dataURL gömülmez, tablo şişmez. */
-const STORAGE_BUCKET = 'mail-photos'
+   Bulut modu: PRIVATE 'secure-docs' bucket'ına yükler ve DB'ye "secure:<path>"
+   (public URL DEĞİL) saklar. Görüntülemede resolveStoredUrl() kısa ömürlü
+   signed URL çözer. Böylece kalıcı public link tutulmaz. */
+const STORAGE_BUCKET = 'secure-docs' // PRIVATE (public=false). Bkz. 0002_private_storage.sql
+const SIGNED_TTL = 300               // saniye (kısa ömürlü)
 
-async function uploadToStorage(blob, ext = 'jpg') {
-  const path = `${new Date().toISOString().slice(0, 10)}/${uid()}.${ext}`
+async function uploadToStorage(blob, ext = 'jpg', prefix = 'mail') {
+  // tahmin edilemez yol; müşteri klasörlemesi için prefix (mail/receipts/customers)
+  const path = `${prefix}/${uid()}-${uid()}.${ext}`
   const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {
     contentType: blob.type || 'application/octet-stream', upsert: false,
   })
   if (error) throw error
-  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
-  return data?.publicUrl || ''
+  return `secure:${path}` // public URL değil — DB'ye referans saklanır
+}
+
+/* Depolanan referansı görüntülenebilir URL'e çevirir.
+   - "secure:<path>" → kısa ömürlü signed URL (private bucket)
+   - dataURL / http(s) (eski/yerel) → olduğu gibi döner */
+export async function resolveStoredUrl(stored) {
+  if (!stored) return ''
+  if (typeof stored === 'string' && stored.startsWith('secure:')) {
+    if (!usingSupabase) return ''
+    const path = stored.slice('secure:'.length)
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, SIGNED_TTL)
+    if (error) return ''
+    return data?.signedUrl || ''
+  }
+  return stored // dataURL / eski public URL — dokunma
 }
 
 export async function fileToStoredUrl(file, { maxW = 1000, quality = 0.6 } = {}) {

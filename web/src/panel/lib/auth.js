@@ -12,8 +12,11 @@ import { withBase } from '../../base'
 const SESSION_KEY = 'ganu.panel.session'
 const PASS_KEY = 'ganu.panel.pass'
 const DEFAULT_PASS = 'ganu2026' // yalnız yerel mod; panelden değiştirilebilir
+// P0.6: Yerel (parolasız/tek-parola) demo mod YALNIZCA geliştirmede açılır.
+// Production'da Supabase bağlı değilse panel girişi kapalıdır (demo mod başlamaz).
+const LOCAL_ALLOWED = import.meta.env.DEV
 
-export const authMode = usingSupabase ? 'supabase' : 'local'
+export const authMode = usingSupabase ? 'supabase' : (LOCAL_ALLOWED ? 'local' : 'disabled')
 
 /** Oturumdaki kullanıcıyı döndürür (yoksa null). */
 export async function getUser() {
@@ -21,6 +24,7 @@ export async function getUser() {
     const { data } = await supabase.auth.getSession()
     return data.session?.user ?? null
   }
+  if (!LOCAL_ALLOWED) return null
   return localStorage.getItem(SESSION_KEY) === '1' ? { email: 'Yerel yönetici' } : null
 }
 
@@ -39,6 +43,7 @@ export async function login({ email = '', password = '' } = {}) {
     if (error) return { ok: false, error: cevirHata(error.message) }
     return { ok: true, user: data.user }
   }
+  if (!LOCAL_ALLOWED) return { ok: false, error: 'Yönetim girişi yapılandırılmadı (Supabase bağlı değil).' }
   const current = localStorage.getItem(PASS_KEY) || DEFAULT_PASS
   if (password === current) {
     localStorage.setItem(SESSION_KEY, '1')

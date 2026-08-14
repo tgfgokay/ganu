@@ -56,22 +56,43 @@ type InitBody = {
 // DB kataloğundan (sürüm + geçerlilik tarihi ile) okunmalıdır; şimdilik
 // web/src/panel/lib/store.js PACKAGE_PRICES ile elle senkron tutulur.
 // ============================================================
-const CATALOG: Record<string, number> = {
-  'Başlangıç': 9990, // KDV dahil yıllık ₺
-  'Pro': 18990,
-}
-const DISCOUNTS: Record<string, number> = {
-  'BNINISANTASI': 10, // izinli indirim kodu → yüzde
-}
+// FALLBACK (packages/discount_codes tabloları yoksa). Tercih: DB kataloğu.
+const CATALOG_FALLBACK: Record<string, number> = { 'Başlangıç': 9990, 'Pro': 18990 }
+const DISCOUNTS_FALLBACK: Record<string, number> = { 'BNINISANTASI': 10 }
 const CURRENCY = 'TL'
 
-function computeOrder(packageId: string, code: string): { amount: number; list: number; pct: number; code: string } {
-  const list = CATALOG[packageId]
-  if (!list || !(list > 0)) throw new Error('Geçersiz paket.')
+type Db = ReturnType<typeof admin>
+type Order = { amount: number; list: number; pct: number; code: string; price_version: number }
+
+// P0.2/P0.3: fiyatı SUNUCU + DB kataloğundan hesapla. İstemci tutarı yok sayılır.
+async function computeOrder(db: Db, packageId: string, code: string): Promise<Order> {
+  let list = 0
+  let priceVersion = 1
+  // 1) DB kataloğu (tek gerçek kaynak)
+  const { data: pkg } = await db.from('packages')
+    .select('list_amount, price_version, is_custom, active').eq('id', packageId).maybeSingle()
+  if (pkg) {
+    if (pkg.is_custom) throw new Error('Bu paket özel tekliftir; online ödeme alınmaz.')
+    if (!pkg.active) throw new Error('Paket aktif değil.')
+    list = Number(pkg.list_amount) || 0
+    priceVersion = Number(pkg.price_version) || 1
+  } else {
+    // 2) Fallback (tablo kurulmadıysa)
+    list = CATALOG_FALLBACK[packageId] || 0
+  }
+  if (!(list > 0)) throw new Error('Geçersiz paket.')
+
+  // İndirim: DB'den (gizli kodlar), yoksa fallback.
   const norm = String(code || '').trim().toUpperCase().replace(/\s+/g, '')
-  const pct = norm ? (DISCOUNTS[norm] || 0) : 0
+  let pct = 0
+  if (norm) {
+    const { data: dc } = await db.from('discount_codes')
+      .select('pct, active').eq('code', norm).maybeSingle()
+    if (dc && dc.active) pct = Number(dc.pct) || 0
+    else if (!dc) pct = DISCOUNTS_FALLBACK[norm] || 0
+  }
   const amount = Math.round(list * (100 - pct)) / 100
-  return { amount, list, pct, code: pct ? norm : '' }
+  return { amount, list, pct, code: pct ? norm : '', price_version: priceVersion }
 }
 
 // ---- yardımcılar ----
@@ -123,8 +144,9 @@ async function paytrInit(b: InitBody) {
     throw new Error('PayTR secrets eksik (MERCHANT_ID/KEY/SALT).')
   }
   const site = SITE
-  // P0.3: tutar SUNUCUDA hesaplanır; istemcinin ilettiği tutar yok sayılır.
-  const { amount, pct } = computeOrder(b.package_id || '', b.code || '')
+  // P0.3: tutar SUNUCUDA (DB kataloğundan) hesaplanır; istemci tutarı yok sayılır.
+  const db = admin()
+  const { amount, pct, list, code, price_version } = await computeOrder(db, b.package_id || '', b.code || '')
   const amountKurus = Math.round(amount * 100)
   if (amountKurus <= 0) throw new Error('Geçersiz tutar.')
 
@@ -138,10 +160,10 @@ async function paytrInit(b: InitBody) {
   const test_mode = Deno.env.get('PAYTR_TEST_MODE') || '0'
 
   // P0.3: ÖNCE siparişi yaz — yazılamazsa ödeme oturumu ÜRETME.
-  const db = admin()
   const { error: insErr } = await db.from('pos_orders').insert({
     merchant_oid, customer_id: b.customer_id, amount, pkg: b.package_id || null,
     provider: 'paytr', status: 'bekliyor',
+    price_version, list_amount: list, discount_code: code || null, discount_pct: pct || null, currency: CURRENCY,
   })
   if (insErr) throw new Error('Sipariş kaydı oluşturulamadı, ödeme başlatılmadı: ' + insErr.message)
 
