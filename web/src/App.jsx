@@ -2,7 +2,7 @@ import { useState, useEffect, useReducer } from 'react'
 import { withBase } from './base'
 import { motion, useScroll, useSpring, useTransform, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
-import { PACKAGE_MONTHLY, PACKAGE_PRICES, PACKAGE_CUSTOM, onCatalog } from './panel/lib/store.js'
+import { PACKAGE_MONTHLY, PACKAGE_PRICES, PACKAGE_CUSTOM, onCatalog, usingSupabase } from './panel/lib/store.js'
 
 /* ---------- motion presets ---------- */
 const rise = {
@@ -56,6 +56,9 @@ function buildTiers() {
     { name: 'Pro', feat: true },
     { name: 'Kurumsal', feat: false },
   ].map(({ name, feat }) => {
+    if (usingSupabase && PACKAGE_PRICES[name] == null && !PACKAGE_CUSTOM.has(name)) {
+      return { name, m: 'Yüklenemedi', y: 'Yüklenemedi', per: '', unavailable: true, items: ITEMS[name] || [] }
+    }
     const custom = PACKAGE_CUSTOM.has(name) || PACKAGE_PRICES[name] == null
     return custom
       ? { name, m: 'Teklif', y: 'Teklif', per: '', custom: true, items: ITEMS[name] || [] }
@@ -417,21 +420,23 @@ function Pricing() {
                 {t.feat && <span className="tag">En popüler</span>}
               </div>
               <div className="price">
-                {t.custom
+                {t.custom || t.unavailable
                   ? <span className="price-word">{t.m}</span>
                   : <><span className="price-num">{yearly ? t.y : t.m}</span><span className="price-per">{t.per}</span></>}
               </div>
               <div className="price-sub">
-                {t.custom ? 'ihtiyaca göre fiyat' : yearly ? 'yıllık faturalandırılır' : 'aylık faturalandırılır'}
+                {t.unavailable ? 'katalog bağlantısı gerekli' : t.custom ? 'ihtiyaca göre fiyat' : yearly ? 'yıllık faturalandırılır' : 'aylık faturalandırılır'}
               </div>
               <ul>
                 {t.items.map((i) => (
                   <li key={i}><Check /><span>{i}</span></li>
                 ))}
               </ul>
-              <a href={withBase(`/satin-al?paket=${encodeURIComponent(t.name)}`)} className={`btn ${t.feat ? 'btn-solid' : 'btn-line'}`}>
-                {t.custom ? 'Teklif al →' : 'Satın al →'}
-              </a>
+              {t.unavailable
+                ? <span className="btn btn-line" aria-disabled="true">Satış geçici kapalı</span>
+                : <a href={withBase(`/satin-al?paket=${encodeURIComponent(t.name)}`)} className={`btn ${t.feat ? 'btn-solid' : 'btn-line'}`}>
+                    {t.custom ? 'Teklif al →' : 'Satın al →'}
+                  </a>}
             </motion.div>
           ))}
         </motion.div>

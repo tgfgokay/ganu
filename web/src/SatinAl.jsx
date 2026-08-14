@@ -2,7 +2,7 @@ import { useState, useEffect, useReducer } from 'react'
 import { withBase } from './base'
 import { useSearchParams, Link } from 'react-router-dom'
 import GanuMark from './GanuMark'
-import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar, onCatalog } from './panel/lib/store.js'
+import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar, onCatalog, usingSupabase } from './panel/lib/store.js'
 
 /* ============================================================
    /satin-al — 3 adımlı satın alma sayfası
@@ -70,6 +70,7 @@ export default function SatinAl() {
   const cfg = getConfig()
   const listPrice = PACKAGE_PRICES[pkg]
   const isCorp = pkg === 'Kurumsal'
+  const catalogUnavailable = !isCorp && !(Number(listPrice) > 0)
   const price = discount && listPrice ? indirimliTutar(listPrice, discount.pct) : listPrice
 
   /* Kart ödeme modu (P0.4 — prod'da demo kesinlikle kapalı):
@@ -93,6 +94,13 @@ export default function SatinAl() {
 
   /* indirim kodu uygula — kod sahibi (ör. BNI üyesi) kendi girer */
   const applyCode = () => {
+    const normalized = String(codeInput || '').trim().toUpperCase().replace(/\s+/g, '')
+    if (usingSupabase) {
+      if (!normalized) return
+      setDiscount({ code: normalized, pct: 0, pending: true })
+      setCodeMsg('Kod, ödeme başlatılırken güvenli sunucuda doğrulanacak.')
+      return
+    }
     const d = indirimCoz(codeInput)
     if (d) { setDiscount(d); setCodeMsg(`✓ %${d.pct} indirim uygulandı`) }
     else { setDiscount(null); setCodeMsg('Kod geçersiz.') }
@@ -103,6 +111,7 @@ export default function SatinAl() {
   /* Adım 1 → 2: aday kaydı oluştur */
   const submitInfo = async (e) => {
     e.preventDefault()
+    if (catalogUnavailable) return setErr('Fiyat kataloğuna ulaşılamadı; güvenlik nedeniyle satış başlatılmadı.')
     const email = f.email.trim(), phone = f.phone.trim()
     if (!f.title.trim()) return setErr('Şirket ünvanı / adınız zorunlu.')
     if (!email && !phone) return setErr('E-posta ya da telefondan en az birini yazın.')
@@ -178,11 +187,13 @@ export default function SatinAl() {
           border: '2px solid var(--navy, #0A2540)', borderRadius: 4, padding: '14px 18px', background: '#fff', marginBottom: 22 }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 17 }}>{pkg} Paketi</div>
-            <div style={{ fontSize: 13, opacity: 0.65 }}>{isCorp ? 'ihtiyaca göre fiyatlanır' : `yıllık peşin · ≈₺${Math.round(price / 12).toLocaleString('tr-TR')}/ay'a gelir`}</div>
+            <div style={{ fontSize: 13, opacity: 0.65 }}>{isCorp ? 'ihtiyaca göre fiyatlanır' : catalogUnavailable ? 'fiyat kataloğu bağlantısı gerekli' : `yıllık peşin · ≈₺${Math.round(price / 12).toLocaleString('tr-TR')}/ay'a gelir`}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             {isCorp ? (
               <div style={{ fontWeight: 800, fontSize: 20 }}>Özel teklif</div>
+            ) : catalogUnavailable ? (
+              <div style={{ fontWeight: 800, fontSize: 17, color: '#b91c1c' }}>Satış geçici kapalı</div>
             ) : (
               <>
                 {discount && <div style={{ fontSize: 13, opacity: 0.5, textDecoration: 'line-through' }}>₺{listPrice.toLocaleString('tr-TR')}</div>}
@@ -204,7 +215,7 @@ export default function SatinAl() {
             <label style={{ ...labelS, display: 'block', marginBottom: 8 }}>İndirim kodunuz var mı?</label>
             {discount ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--teal-dark, #04352c)' }}>✓ {discount.code} — %{discount.pct} indirim uygulandı</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--teal-dark, #04352c)' }}>{discount.pending ? '⏳' : '✓'} {discount.code}{discount.pending ? ' — sunucuda doğrulanacak' : ` — %${discount.pct} indirim uygulandı`}</span>
                 <button type="button" className="btn btn-line" style={{ padding: '5px 12px', fontSize: 13 }} onClick={clearCode}>Kaldır</button>
               </div>
             ) : (
@@ -253,7 +264,7 @@ export default function SatinAl() {
               Bu bilgilerle faturanız ödemenin ardından otomatik düzenlenip e-postanıza gönderilir.
             </span>
             {err && <span style={{ color: '#b91c1c', fontSize: 14, fontWeight: 600 }}>{err}</span>}
-            <button type="submit" className="btn btn-solid big" style={{ width: '100%' }}>
+            <button type="submit" className="btn btn-solid big" style={{ width: '100%' }} disabled={catalogUnavailable}>
               {isCorp ? 'Teklif iste →' : 'Ödemeye geç →'}
             </button>
             <span style={{ fontSize: 13, opacity: 0.65, textAlign: 'center' }}>30 saniyede tamamlanır · Sözleşme + KVKK metinleri aktivasyonda paylaşılır</span>
@@ -276,7 +287,7 @@ export default function SatinAl() {
                   : import.meta.env.DEV
                     ? <CardPay amount={price} onPaid={onCardPaid} />
                     : <PaymentUnavailable onTransfer={() => setPayTab('havale')} />)
-              : <TransferPay cfg={cfg} applicant={f.title || cust?.title} pkg={pkg} amount={price} onClaim={onTransferClaim} />}
+              : <TransferPay cfg={cfg} applicant={f.title || cust?.title} customerId={cust?.id} pkg={pkg} amount={price} onClaim={onTransferClaim} />}
           </div>
         )}
 
@@ -588,7 +599,7 @@ function CardPay({ amount, onPaid }) {
 }
 
 /* ---- Havale / EFT — banka bilgileri + dekont yükleme ---- */
-function TransferPay({ cfg, applicant, pkg, amount, onClaim }) {
+function TransferPay({ cfg, applicant, customerId, pkg, amount, onClaim }) {
   const [copied, setCopied] = useState('')
   const [receipt, setReceipt] = useState('')   // yüklenen dekont (dataURL)
   const [fileName, setFileName] = useState('')
@@ -604,7 +615,7 @@ function TransferPay({ cfg, applicant, pkg, amount, onClaim }) {
     if (file.size > 8 * 1024 * 1024) { setErr('Dosya çok büyük (en fazla 8 MB).'); return }
     setErr(''); setBusy(true)
     try {
-      const url = await fileToStoredUrl(file, { maxW: 1600, quality: 0.7 })
+      const url = await fileToStoredUrl(file, { maxW: 1600, quality: 0.7, prefix: 'receipts', customerId })
       setReceipt(url); setFileName(file.name)
     } catch { setErr('Dosya yüklenemedi, tekrar deneyin.') }
     setBusy(false)

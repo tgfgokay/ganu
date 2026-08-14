@@ -1,0 +1,16 @@
+project_id = "ganu-web"
+
+[functions.pos-payment]
+verify_jwt = false
+
+[functions.get-file]
+verify_jwt = false
+
+[functions.admin-gate]
+verify_jwt = true
+
+[functions.send-notification]
+verify_jwt = true
+
+[functions.issue-einvoice]
+verify_jwt = true

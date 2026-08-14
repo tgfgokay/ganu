@@ -656,13 +656,14 @@ export async function withCustomerNames(rows) {
 /* ---------- sabitler ---------- */
 export const MAIL_TYPES = ['mektup', 'kargo', 'tebligat']
 export const MAIL_STATUS = ['geldi', 'bildirildi', 'teslim', 'yönlendirildi', 'imha']
-export const PACKAGES = ['Başlangıç', 'Pro', 'Kurumsal']
+const LOCAL_PACKAGES = ['Başlangıç', 'Pro', 'Kurumsal']
+export const PACKAGES = usingSupabase ? [] : [...LOCAL_PACKAGES]
 /* Tarife (14.08.2026 güncel — pazar-arastirma/rakip-fiyat-analizi-2026-08.md)
    KDV DAHİL. Satın alma yıllık peşin tahsil edilir (yıllık ≈ 10 aylık = 2 ay bedava).
    Kurumsal: özel teklif — sabit fiyatı yok (taban ~29.990 ₺). */
-export const PACKAGE_MONTHLY = { 'Başlangıç': 999, 'Pro': 1899 }    // aylık, ₺
-export const PACKAGE_PRICES = { 'Başlangıç': 9990, 'Pro': 18990 }   // yıllık peşin, ₺
-export const PACKAGE_CUSTOM = new Set(['Kurumsal'])                 // sabit fiyatsız (teklif)
+export const PACKAGE_MONTHLY = usingSupabase ? {} : { 'Başlangıç': 999, 'Pro': 1899 }
+export const PACKAGE_PRICES = usingSupabase ? {} : { 'Başlangıç': 9990, 'Pro': 18990 }
+export const PACKAGE_CUSTOM = new Set(usingSupabase ? [] : ['Kurumsal'])
 
 /* ---------- Fiyat kataloğu tek gerçek kaynak (P0.2/#7) ----------
    Supabase bağlıysa fiyatlar 'packages' tablosundan okunur ve yukarıdaki
@@ -676,7 +677,14 @@ export async function loadCatalog() {
   const { data, error } = await supabase
     .from('packages').select('id,name,list_amount,monthly_amount,is_custom,active,sort')
     .eq('active', true).order('sort')
-  if (error || !Array.isArray(data) || !data.length) return false
+  if (error || !Array.isArray(data) || !data.length) {
+    PACKAGES.splice(0, PACKAGES.length)
+    for (const k of Object.keys(PACKAGE_PRICES)) delete PACKAGE_PRICES[k]
+    for (const k of Object.keys(PACKAGE_MONTHLY)) delete PACKAGE_MONTHLY[k]
+    PACKAGE_CUSTOM.clear()
+    _catalogSubs.forEach((cb) => { try { cb() } catch { /* yoksay */ } })
+    return false
+  }
   for (const k of Object.keys(PACKAGE_PRICES)) delete PACKAGE_PRICES[k]
   for (const k of Object.keys(PACKAGE_MONTHLY)) delete PACKAGE_MONTHLY[k]
   PACKAGE_CUSTOM.clear()
@@ -876,9 +884,11 @@ export function trackingUrl(carrier, code) {
 const STORAGE_BUCKET = 'secure-docs' // PRIVATE (public=false). Bkz. 0002_private_storage.sql
 const SIGNED_TTL = 300               // saniye (kısa ömürlü)
 
-async function uploadToStorage(blob, ext = 'jpg', prefix = 'mail') {
-  // tahmin edilemez yol; müşteri klasörlemesi için prefix (mail/receipts/customers)
-  const path = `${prefix}/${uid()}-${uid()}.${ext}`
+async function uploadToStorage(blob, ext = 'jpg', prefix = 'mail', customerId = '') {
+  if (!customerId || !/^[0-9a-f-]{36}$/i.test(customerId)) throw new Error('Güvenli yükleme için müşteri kimliği gerekli.')
+  if (!['mail', 'receipts', 'customers'].includes(prefix)) throw new Error('Geçersiz storage kapsamı.')
+  const safeExt = String(ext || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'bin'
+  const path = `${prefix}/${customerId}/${uid()}-${uid()}.${safeExt}`
   const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {
     contentType: blob.type || 'application/octet-stream', upsert: false,
   })
@@ -889,11 +899,16 @@ async function uploadToStorage(blob, ext = 'jpg', prefix = 'mail') {
 /* Depolanan referansı görüntülenebilir URL'e çevirir.
    - "secure:<path>" → kısa ömürlü signed URL (private bucket)
    - dataURL / http(s) (eski/yerel) → olduğu gibi döner */
-export async function resolveStoredUrl(stored) {
+export async function resolveStoredUrl(stored, { accessCode = '' } = {}) {
   if (!stored) return ''
   if (typeof stored === 'string' && stored.startsWith('secure:')) {
     if (!usingSupabase) return ''
     const path = stored.slice('secure:'.length)
+    if (accessCode) {
+      const { data, error } = await supabase.functions.invoke('get-file', { body: { path, code: accessCode } })
+      if (error) return ''
+      return data?.url || ''
+    }
     const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, SIGNED_TTL)
     if (error) return ''
     return data?.signedUrl || ''
@@ -901,15 +916,13 @@ export async function resolveStoredUrl(stored) {
   return stored // dataURL / eski public URL — dokunma
 }
 
-export async function fileToStoredUrl(file, { maxW = 1000, quality = 0.6 } = {}) {
+export async function fileToStoredUrl(file, { maxW = 1000, quality = 0.6, prefix = 'customers', customerId = '' } = {}) {
   if (!file) return ''
   const isImage = file.type.startsWith('image/')
   if (usingSupabase) {
-    try {
-      if (!isImage) return await uploadToStorage(file, (file.name || '').split('.').pop() || 'bin')
-      const small = await shrinkImage(file, { maxW, quality })
-      return await uploadToStorage(small, 'jpg')
-    } catch { /* Storage kurulmamışsa dataURL'e düş */ }
+    if (!isImage) return await uploadToStorage(file, (file.name || '').split('.').pop() || 'bin', prefix, customerId)
+    const small = await shrinkImage(file, { maxW, quality })
+    return await uploadToStorage(small, 'jpg', prefix, customerId)
   }
   if (!isImage) {
     // görsel değilse (PDF vb.) doğrudan dataURL — yerel modda küçük tut

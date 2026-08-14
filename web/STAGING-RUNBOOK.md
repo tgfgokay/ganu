@@ -6,15 +6,30 @@
 > store'a girer; sohbete/GitHub'a yazılmaz.
 
 ## 0) Ön koşul
-- `ganu-staging` projesi. Project URL + anon key → `web/.env` (public).
+- `ganu-staging` projesi. Project URL + anon key → `web/.env.local` (public).
 - Secret'lar: `supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... SITE_URL=... PAYTR_MERCHANT_ID=... PAYTR_MERCHANT_KEY=... PAYTR_MERCHANT_SALT=... PAYTR_TEST_MODE=1`
 
-## 1) Migration sırası (SQL editor ya da `supabase db push`)
+Secret göstermeyen yerel ön kontrol: `bash scripts/staging-readiness.sh`.
+Bu komut `READY` vermeden migration/deploy testine geçilmez; `READY` sonucu da canlı
+migration veya testlerin geçtiği anlamına gelmez.
+
+## 1) Migration sırası (SQL editor ya da aşağıdaki fail-fast `psql` sırası)
 1. `supabase-schema.sql`            — ana şema (tablolar, RLS, portal RPC, pos_orders, security_events)
 2. `supabase/migrations/0001_pricing_catalog.sql`  — packages, discount_codes, pos_orders fiyat alanları, **pos_settle**
 3. `supabase/migrations/0002_private_storage.sql`  — secure-docs bucket + RLS + owns_secure_object
 4. `supabase/migrations/0003_auth_hardening.sql`   — bcrypt _pw_match, set_portal_password (yetkili), staff_roles, legacy reset
 5. `supabase/migrations/0004_prod_gate.sql`        — prod_gate_proof (service-role) + gate-probe müşteri
+
+```bash
+set -euo pipefail
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase-schema.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0001_pricing_catalog.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0002_private_storage.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0003_auth_hardening.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0004_prod_gate.sql
+```
+`supabase-schema.sql` migration klasöründe olmadığı için boş bir projede yalnız
+`supabase db push` çalıştırmak ana şemayı kurmaz; yukarıdaki sıra veya SQL Editor şarttır.
 
 Storage bucket: 0002 `insert into storage.buckets` ile açar; Dashboard → Storage'da
 `secure-docs` **public=false** olduğunu teyit et.
@@ -22,6 +37,7 @@ Storage bucket: 0002 `insert into storage.buckets` ile açar; Dashboard → Stor
 Edge Function:
 - `supabase functions deploy pos-payment --no-verify-jwt`  (anon/callback erişir)
 - `supabase functions deploy admin-gate`                   (JWT doğrulaması AÇIK — §6)
+- `supabase functions deploy get-file --no-verify-jwt`     (portal access_code sahiplik kontrolü)
 Personel: Auth → Users → invite; `insert into public.staff_roles(user_id, role) values ('<uid>','owner');`
 
 ---

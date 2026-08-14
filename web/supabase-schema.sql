@@ -492,7 +492,7 @@ grant execute on function public.portal_submit_receipt(uuid, text, text, numeric
 grant execute on function public.partner_portal(text) to anon;
 
 -- ------------------------------------------------------------
--- Fotoğraf/dekont depolama:
--- Storage → New bucket → "mail-photos" (public okuma önerilir; dekont
--- ve kargo fotoğrafları buraya yüklenir, DB'ye sadece URL yazılır).
+-- Fotoğraf/dekont depolama ana şemada public bucket açmaz. 0002 migration,
+-- private `secure-docs` bucket + sahiplik kontrolünü kurar; DB'de yalnız
+-- `secure:<path>` referansı tutulur ve görüntüleme kısa ömürlü signed URL'dir.
 -- ------------------------------------------------------------

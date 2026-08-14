@@ -18,7 +18,7 @@
 
 ## 1) Proje ve ortam ayrımı
 - **Ayrı projeler:** `ganu-dev`, `ganu-staging`, `ganu-prod` (her biri farklı URL + anon key).
-- İstemci env (**public**): `web/.env` → `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
+- İstemci env (**public**): `web/.env.local` → `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 - Sunucu secret'ları (**repoya girmez**): `supabase secrets set ...`
   (SERVICE_ROLE_KEY, PAYTR_*, IYZICO_*, PARASUT_*, SITE_URL). Bkz. `.env.example`.
 - `.gitignore` → `.env` hariç tutulmalı (yalnız `.env.example` commit'lenir).
@@ -76,6 +76,7 @@ supabase secrets set PAYTR_MERCHANT_ID=... PAYTR_MERCHANT_KEY=... PAYTR_MERCHANT
 supabase secrets set PROD_GATE_HMAC_SECRET=... # en az 32 karakter; CI secret ile aynı
 supabase functions deploy pos-payment --no-verify-jwt
 supabase functions deploy admin-gate           # JWT doğrulaması açık; --no-verify-jwt YOK
+supabase functions deploy get-file --no-verify-jwt # portal private dosya signed URL
 # personel kullanıcısı + rolü:
 #   Auth → Users → invite;  insert into staff_roles(user_id, role) values ('<uid>','owner');
 GANU_BASE=/ganu/ npm run build   # env gömülür → usingSupabase=true

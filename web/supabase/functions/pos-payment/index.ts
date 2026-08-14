@@ -52,9 +52,8 @@ type InitBody = {
 
 // ============================================================
 // SUNUCU TARAFI FİYAT KATALOĞU (P0.3)
-// İstemci fiyatı asla belirlemez. İleride (P0.2) bu değerler tek bir
-// DB kataloğundan (sürüm + geçerlilik tarihi ile) okunmalıdır; şimdilik
-// web/src/panel/lib/store.js PACKAGE_PRICES ile elle senkron tutulur.
+// İstemci fiyatı asla belirlemez. packages/discount_codes tabloları tek gerçek
+// kaynaktır; katalog sorgusu başarısızsa sabit fallback olmadan fail-closed durur.
 // ============================================================
 const CURRENCY = 'TL'
 
