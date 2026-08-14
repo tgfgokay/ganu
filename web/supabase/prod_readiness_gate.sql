@@ -2,11 +2,12 @@
 -- PROD READINESS GATE — deployment'ı DURDURAN kontrol
 -- psql -v ON_ERROR_STOP=1 ile çalıştır: FAIL → non-zero exit (CI durur).
 -- ------------------------------------------------------------
--- Zorunlu kanıt: son 24 saatte, GERÇEK JWT ile (admin-gate Edge Function)
--- doğrulanmış bir owner/admin'in admin RPC'yi çalıştırdığı kaydı.
+-- Zorunlu DB audit kaydı: son 24 saatte admin-gate üzerinden owner/admin RPC.
+-- Bu kayıt ayrıcalıklı SQL Editor rolü tarafından taklit edilebilir; dolayısıyla
+-- tek başına kriptografik kanıt değildir. prod-gate.sh aynı koşuda ürettiği nonce'a
+-- bağlı admin-gate HMAC imzasını DB dışında doğruladıktan sonra bu dosyayı çalıştırır.
 --   • Yalnız staff_roles kaydı YETMEZ.
---   • Elle set edilen request.jwt.claims YETMEZ (kanıt service-role ile,
---     getUser-doğrulamalı JWT üzerinden yazılır).
+--   • Elle set edilen request.jwt.claims uygulama testinde YETMEZ.
 -- ============================================================
 do $$
 declare

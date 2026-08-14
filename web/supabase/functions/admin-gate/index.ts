@@ -9,7 +9,10 @@
 //   • SQL Editor'de request.jwt.claims ELLE set edilebilir → sahte "admin".
 //   • Burada JWT, auth sunucusuyla getUser() ÜZERİNDEN doğrulanır (imza
 //     kontrolü); elle uydurulan claim getUser'dan GEÇMEZ.
-//   • Kanıt tablosu yalnız service-role'a açık → SQL editor'de elle yazılamaz.
+//   • SQL Editor ayrıcalıklı DB rolüyle tabloya kayıt yazabilir; bu nedenle tablo
+//     kaydı tek başına güvenlik kanıtı değildir. CI, bu koşunun nonce'ına bağlı
+//     HMAC imzasını ayrıca doğrular. Tehdit modeli: kazara/uygulama-rolü bypass'ı;
+//     Supabase proje sahibi veya CI secret yöneticisi kötü niyetli kabul edilmez.
 //
 // Dağıtım (JWT doğrulaması AÇIK — --no-verify-jwt KULLANMA):
 //   supabase functions deploy admin-gate
@@ -43,6 +46,20 @@ function randomPass(): string {
   return 'Gate-' + Array.from(a, (x) => x.toString(16).padStart(2, '0')).join('').slice(0, 16)
 }
 
+function hex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes), (x) => x.toString(16).padStart(2, '0')).join('')
+}
+
+async function signProof(payload: string): Promise<string> {
+  const secret = Deno.env.get('PROD_GATE_HMAC_SECRET') || ''
+  if (secret.length < 32) throw new Error('PROD_GATE_HMAC_SECRET en az 32 karakter olmalı')
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  return hex(await crypto.subtle.sign('HMAC', key, enc.encode(payload)))
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'POST kullanın' }, 405)
@@ -56,6 +73,10 @@ Deno.serve(async (req) => {
   const anon = Deno.env.get('SUPABASE_ANON_KEY')!
 
   try {
+    const body = await req.json().catch(() => ({})) as { nonce?: unknown }
+    const nonce = typeof body.nonce === 'string' ? body.nonce : ''
+    if (!/^[a-f0-9]{64}$/.test(nonce)) return json({ ok: false, error: 'Geçerli nonce gerekli' }, 400)
+
     // 1) JWT'yi GERÇEKTEN doğrula (auth sunucusu) — elle set claim buradan geçmez.
     const userClient = createClient(url, anon, {
       global: { headers: { Authorization: authHeader } },
@@ -78,14 +99,18 @@ Deno.serve(async (req) => {
     })
     if (rpcErr) return json({ ok: false, error: 'admin RPC (set_portal_password) başarısız: ' + rpcErr.message }, 403)
 
-    // 4) Kanıtı service-role ile yaz (SQL editor'de üretilemez).
+    // 4) Operasyonel audit kaydını service-role ile yaz. Ayrıcalıklı SQL Editor
+    //    bunu taklit edebilir; güvenlik kanıtı aşağıdaki nonce-bağlı HMAC'tır.
     const { error: insErr } = await db.from('prod_gate_proof').insert({
       uid, role: roleRow.role, method: 'jwt',
-      detail: { checked: 'set_portal_password@probe', ua: req.headers.get('user-agent') || '' },
+      detail: { checked: 'set_portal_password@probe', nonce, ua: req.headers.get('user-agent') || '' },
     })
     if (insErr) return json({ ok: false, error: 'Kanıt yazılamadı: ' + insErr.message }, 500)
 
-    return json({ ok: true, uid, role: roleRow.role, method: 'jwt' })
+    const issuedAt = Math.floor(Date.now() / 1000)
+    const method = 'jwt'
+    const signature = await signProof(`${nonce}.${uid}.${roleRow.role}.${issuedAt}.${method}`)
+    return json({ ok: true, uid, role: roleRow.role, method, nonce, issued_at: issuedAt, signature })
   } catch (e) {
     return json({ ok: false, error: String((e as Error).message || e) }, 500)
   }

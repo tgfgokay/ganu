@@ -1,8 +1,9 @@
 -- ============================================================
--- PROD READINESS GATE — admin RPC'sinin GERÇEK authenticated JWT ile
--- çalıştığının kanıtı. (Yalnız staff_roles kaydı veya elle set edilen
--- request.jwt.claims YETERLİ DEĞİLDİR; kanıt admin-gate Edge Function'ı
--- tarafından, gateway-doğrulamalı JWT ile üretilir ve buraya yazılır.)
+-- PROD READINESS GATE — admin RPC audit kaydı.
+-- UYARI / TEHDİT MODELİ: RLS ve REVOKE anon/authenticated rollerini engeller,
+-- fakat Supabase SQL Editor ayrıcalıklı postgres/supabase_admin bağlamında bu
+-- tabloya yazabilir. Bu kayıt tek başına taklit edilemez kanıt değildir. CI,
+-- admin-gate'in kendi nonce'ına verdiği HMAC imzasını DB dışında doğrular.
 -- ============================================================
 
 -- Kanıt tablosu — yalnız service-role yazar/okur (RLS policy YOK → anon/auth erişemez).
@@ -17,8 +18,8 @@ create table if not exists public.prod_gate_proof (
 create index if not exists idx_prod_gate_proof_uid on public.prod_gate_proof(uid);
 create index if not exists idx_prod_gate_proof_time on public.prod_gate_proof(created_at);
 alter table public.prod_gate_proof enable row level security;
--- Bilerek policy tanımlanmaz: anon/authenticated erişemez; yalnız service-role
--- (RLS baypas) yazıp okur. Böylece SQL editor'de elle kanıt üretilemez.
+-- Bilerek policy tanımlanmaz: anon/authenticated erişemez; service-role ve
+-- ayrıcalıklı DB yöneticileri erişebilir. Bu tablo operasyonel audit içindir.
 revoke all on public.prod_gate_proof from anon, authenticated;
 
 -- ------------------------------------------------------------

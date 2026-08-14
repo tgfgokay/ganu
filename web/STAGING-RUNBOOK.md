@@ -156,12 +156,14 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/migrations/0004_prod_gate.down.sql
 psql "$DB_URL" -f supabase/migrations/0003_auth_hardening.down.sql
 psql "$DB_URL" -f supabase/migrations/0002_private_storage.down.sql
 psql "$DB_URL" -f supabase/migrations/0001_pricing_catalog.down.sql
 # (ya da her dosyanın içeriğini Supabase SQL editor'e sırayla yapıştır)
 ```
 Down dosyaları:
+- `supabase/migrations/0004_prod_gate.down.sql` — prod_gate_proof ve gate-probe müşteri
 - `supabase/migrations/0001_pricing_catalog.down.sql` — pos_settle, kolonlar, discount_codes, packages
 - `supabase/migrations/0002_private_storage.down.sql` — owns_secure_object, policy, secure-docs bucket (nesneleri boşaltır)
 - `supabase/migrations/0003_auth_hardening.down.sql` — set_portal_password, staff_roles, must_reset_password
@@ -180,7 +182,8 @@ Down dosyaları:
 §2 + §3 tüm pozitif/negatif testler geçmeden `pos_enabled` açılmaz, production
 Supabase kurulmaz, gerçek PayTR tahsilatı yapılmaz. Ek zorunlu kapılar:
 
-- **§3a fail-closed:** `POS_TEST_FAULT=catalog` ile HTTP 5xx + sipariş 0 + PayTR 0 görülmeli;
+- **§3a fail-closed:** `POS_TEST_FAULT=catalog` ile HTTP 5xx + sipariş 0 gözlenmeli;
+  PayTR çağrısının erişilemez olduğu kod sıralamasında statik olarak doğrulanmalı;
   test sonrası secret KALDIRILMIŞ olmalı (`supabase secrets unset POS_TEST_FAULT`).
 - **admin gate (makine-kontrollü):** aşağıdaki §6 ile gerçek JWT kanıtı üretilmeli;
   `prod_readiness_gate.sql` PASS vermeli. Kanıt yoksa CI/deploy **DURUR**.
@@ -189,29 +192,41 @@ Supabase kurulmaz, gerçek PayTR tahsilatı yapılmaz. Ek zorunlu kapılar:
 ## 6) PROD READINESS GATE — admin RPC gerçek-JWT kanıtı (makine-kontrollü)
 > Amaç: "owner/admin gerçek authenticated JWT ile admin RPC çalıştırabiliyor"
 > kanıtını üretip deploy'u ona bağlamak. Sadece staff_roles kaydı ya da SQL
-> editor'de elle set edilen claim **kanıt sayılmaz** (getUser imza doğrular; kanıt
-> tablosu yalnız service-role'a açık).
+> editor'de elle set edilen claim uygulama kanıtı sayılmaz (`getUser` JWT'yi doğrular).
+> Ancak ayrıcalıklı SQL Editor rolü `prod_gate_proof` kaydı yazabilir; tablo yalnız
+> operasyonel audit'tir. Asıl gate, CI'ın rastgele nonce'ına `admin-gate` tarafından
+> verilen HMAC imzasını CI tarafında doğrular. Bu, DB kaydı taklidini engeller; proje
+> sahibi veya CI/Supabase secret yöneticisinin kötü niyetli olmadığı varsayılır.
 
 **Kurulum (bir kez):**
 1. Migration `0004_prod_gate.sql` uygulanmış olmalı (prod_gate_proof + probe müşteri).
 2. `admin-gate` fonksiyonu **JWT doğrulaması AÇIK** deploy edilir (--no-verify-jwt YOK):
    `supabase functions deploy admin-gate`
-   Secret: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+   Secret: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+   en az 32 karakterlik `PROD_GATE_HMAC_SECRET`.
 3. Gerçek bir **owner** auth kullanıcısı (Auth → invite) + `staff_roles(user_id,'owner')`.
 
 **Kanıt üretimi (gerçek owner access-token ile):**
 ```bash
 # owner kullanıcısının access_token'ı (uygulamadan/oturumdan) — repoya KONMAZ:
 curl -s -X POST "$SUPABASE_URL/functions/v1/admin-gate" \
-  -H "Authorization: Bearer <OWNER_ACCESS_TOKEN>" -H "apikey: <ANON_KEY>"
-#   → {"ok":true,"role":"owner","method":"jwt"}   (prod_gate_proof'a kanıt yazılır)
+  -H "Authorization: Bearer <OWNER_ACCESS_TOKEN>" -H "apikey: <ANON_KEY>" \
+  -H 'content-type: application/json' -d '{"nonce":"<64_HEX_RANDOM>"}'
+#   → jwt/nonce/issued_at/signature döner; prod-gate.sh HMAC'ı doğrular.
 ```
 
 **Gate kontrolü (deploy öncesi / CI):**
 ```bash
-DB_URL='postgres://...'  bash web/scripts/prod-gate.sh    # DB_URL yalnız CI secret
-#   → PASS: POS_TEST_FAULT yok + son 24s içinde jwt owner/admin kanıtı var
+DB_URL='postgres://...' bash web/scripts/prod-gate.sh
+#   → PASS: remote POS_TEST_FAULT yok + taze JWT/HMAC kanıtı + DB audit var
 #   → FAIL/eksik: non-zero exit → deployment DURUR
 ```
-CI şablonu: `web/ci/prod-gate.workflow.yml` (repo köküne `.github/workflows/`
-altına kopyalanır; prod deploy job'ı `needs: gate` ile bağlanır).
+Aktif workflow: repo kökünde `.github/workflows/prod-gate.yml`.
+Production deploy job'ı aynı workflow içindeyse `needs: gate` kullanmalı; başka bir
+workflow ise bunu `workflow_call` ile çağırıp deploy'u başarılı sonuca bağlamalıdır.
+
+**CI secrets:** `PROD_DB_URL`, `SUPABASE_ACCESS_TOKEN`, `PROD_OWNER_ACCESS_TOKEN`,
+`PROD_GATE_HMAC_SECRET`, `SUPABASE_ANON_KEY`. **CI variable:** `SUPABASE_PROJECT_REF`.
+Owner access token kısa ömürlüdür; manuel production gate öncesi tazelenir ve loglanmaz.
+`SUPABASE_ACCESS_TOKEN`, Supabase CLI'ın hedef projenin gerçek remote secret listesini
+okuyabilmesi içindir; yerel `POS_TEST_FAULT` env kontrolü kanıt sayılmaz.
