@@ -46,12 +46,9 @@ begin
   end if;
   is_staff := exists (select 1 from public.staff_roles r
                       where r.user_id = auth.uid() and r.role in ('owner','admin'));
-  -- customers.auth_user_id kolonu OTP geçişinde eklenir; yoksa self=false.
-  is_self := exists (
-    select 1 from information_schema.columns
-    where table_schema='public' and table_name='customers' and column_name='auth_user_id'
-  ) and exists (
-    select 1 from public.customers c where c.id = p_customer_id and c.auth_user_id = auth.uid()
+  -- self = müşterinin kendi auth kullanıcısı (customers.auth_uid, OTP geçişinde bağlanır).
+  is_self := auth.uid() is not null and exists (
+    select 1 from public.customers c where c.id = p_customer_id and c.auth_uid = auth.uid()
   );
   if not (is_staff or is_self) then
     raise exception 'yetki yok: parola yalnız owner/admin ya da müşterinin kendisi tarafından belirlenebilir';
@@ -104,6 +101,34 @@ create or replace function public.current_staff_role()
 returns text language sql stable security definer set search_path = public as $$
   select role from public.staff_roles where user_id = auth.uid();
 $$;
+
+-- ------------------------------------------------------------
+-- portal_change_password: sha256 yazımını BCRYPT'e çevir (P0.6). access_code ile
+-- eski parola doğrulama korunur → legacy/reset kullanıcısı access_code'unu p_old
+-- vererek yeni bcrypt parola belirler (kontrollü geçiş; must_reset_password=false).
+create or replace function public.portal_change_password(p_customer_id uuid, p_old text, p_new text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare c public.customers%rowtype;
+begin
+  if length(coalesce(p_new,'')) < 8 then
+    raise exception 'parola en az 8 karakter olmalı';
+  end if;
+  select * into c from public.customers where id = p_customer_id;
+  if not found then return false; end if;
+  if not ( _pw_match(c.portal_password, p_old)
+           or (coalesce(c.access_code,'') <> '' and upper(c.access_code) = upper(p_old)) ) then
+    return false;
+  end if;
+  update public.customers
+     set portal_password = 'bcrypt:' || crypt(p_new, gen_salt('bf', 12)),
+         must_reset_password = false
+   where id = c.id;
+  return true;
+end $$;
 
 -- ------------------------------------------------------------
 -- NOT: portal_login / portal_bundle RPC'leri şimdilik access_code'a dayanıyor.

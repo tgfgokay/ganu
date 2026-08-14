@@ -71,6 +71,13 @@ insert into public.discount_codes (code, pct, note) values
   ('BNINISANTASI', 10, 'BNI Nişantaşı — gizli üye indirimi (ilan edilmez)')
 on conflict (code) do nothing;
 
+-- Tablo-seviyesi yetkiler (RLS'e ek; deterministik olsun diye açık).
+grant select on public.packages to anon, authenticated;
+grant insert, update, delete on public.packages to authenticated;
+-- discount_codes GİZLİ: anon'dan tüm erişimi geri al; yalnız personel görsün.
+revoke all on public.discount_codes from anon;
+grant select, insert, update, delete on public.discount_codes to authenticated;
+
 -- ------------------------------------------------------------
 -- pos_orders: fiyat denetimi için sürüm/indirim alanları (P0.2/P0.3)
 -- ------------------------------------------------------------
@@ -97,6 +104,7 @@ as $$
 declare
   o        public.pos_orders%rowtype;
   expected bigint;
+  cust_cnt integer;
 begin
   select * into o from public.pos_orders where merchant_oid = p_merchant_oid for update;
   if not found then
@@ -127,6 +135,12 @@ begin
       payment_sender      = o.provider || ' sanal POS',
       payment_receipt_url = 'pos:' || o.provider
       where id = o.customer_id;
+    -- P0.3 / kriter #5: müşteri güncellenmezse (0 satır) TÜM işlem geri sarılır.
+    -- Aynı transaction içinde raise → order 'başarılı' güncellemesi de rollback olur.
+    get diagnostics cust_cnt = row_count;
+    if cust_cnt <> 1 then
+      raise exception 'pos_settle: müşteri güncellenemedi (customer_id=%, updated=%) — sipariş tamamlanmadı', o.customer_id, cust_cnt;
+    end if;
     return 'ok';
   else
     update public.pos_orders set status = 'başarısız' where merchant_oid = p_merchant_oid;
