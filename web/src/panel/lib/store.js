@@ -296,7 +296,7 @@ export async function partnerApply(form) {
     phone: (form.phone || '').trim(),
     iban: (form.iban || '').trim(),
     tax_no: (form.tax_no || '').trim(),
-    commission_rate: 0,
+    commission_rate: 10, // standart yönlendirme komisyonu %10 (onayda panelden değiştirilebilir)
     access_code: '',
     status: 'başvuru',
     notes: (form.notes || '').trim(),
@@ -655,11 +655,11 @@ export async function withCustomerNames(rows) {
 export const MAIL_TYPES = ['mektup', 'kargo', 'tebligat']
 export const MAIL_STATUS = ['geldi', 'bildirildi', 'teslim', 'yönlendirildi', 'imha']
 export const PACKAGES = ['Başlangıç', 'Pro', 'Kurumsal']
-/* Tarife (03.07.2026 rakip analizi — pazar-arastirma/rakip-fiyat-analizi-2026-07.md)
-   KDV DAHİL. Satın alma yıllık peşin tahsil edilir (≈%17 indirimli).
-   Kurumsal: özel teklif — sabit fiyatı yok. */
-export const PACKAGE_MONTHLY = { 'Başlangıç': 799, 'Pro': 1499 }   // aylık, ₺
-export const PACKAGE_PRICES = { 'Başlangıç': 7990, 'Pro': 14990 }  // yıllık peşin, ₺
+/* Tarife (14.08.2026 güncel — pazar-arastirma/rakip-fiyat-analizi-2026-08.md)
+   KDV DAHİL. Satın alma yıllık peşin tahsil edilir (yıllık ≈ 10 aylık = 2 ay bedava).
+   Kurumsal: özel teklif — sabit fiyatı yok (taban ~29.990 ₺). */
+export const PACKAGE_MONTHLY = { 'Başlangıç': 999, 'Pro': 1899 }    // aylık, ₺
+export const PACKAGE_PRICES = { 'Başlangıç': 9990, 'Pro': 18990 }   // yıllık peşin, ₺
 /* BNI Nişantaşı kaynaklı müşteri indirimi (%). Sitede GÖRÜNMEZ; yalnız panelde,
    müşteri "BNI" işaretliyse ödeme anında uygulanır. Oran ayda bir elle gözden
    geçirilir — değişecek tek yer burası. 0 = indirim yok. */
