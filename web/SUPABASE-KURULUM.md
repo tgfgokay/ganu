@@ -30,6 +30,7 @@ Sırayla uygula (Supabase SQL editor ya da `supabase db push`):
 3. `supabase/migrations/0002_private_storage.sql` — **secure-docs** private bucket + RLS + `owns_secure_object`.
 4. `supabase/migrations/0003_auth_hardening.sql` — bcrypt `_pw_match` (düz metin/sha256 RED), `set_portal_password`, `staff_roles` (RBAC).
 5. `supabase/migrations/0004_prod_gate.sql` — production readiness audit tablosu ve izole gate-probe müşterisi.
+6. `supabase/migrations/0005_rbac_auth_storage.sql` — `authenticated=staff` varsayımını kaldıran RBAC ve JWT/auth_uid storage erişimi.
 
 RLS notları:
 - `packages`: anon yalnız `active` okur; yazma personel.
@@ -42,8 +43,9 @@ RLS notları:
 - Görüntüleme: `resolveStoredUrl()` → kısa ömürlü (300 sn) signed URL.
 - **Kalan wiring (cutover'da):** panellerde dosya gösteren yerler `resolveStoredUrl` ile
   çözecek (async). Etkilenen alanlar: posta foto, dekont, belge kasası, imzalı sözleşme.
-- Müşteri erişimi: signed URL yalnız sahiplik doğrulandıktan sonra sunucuda üretilir
-  (`owns_secure_object` RPC / özel get-file Edge Function).
+- Müşteri erişimi: signed URL yalnız gerçek Supabase JWT doğrulandıktan ve
+  `customers.auth_uid=auth.uid()` sahipliği görüldükten sonra `get-file` tarafından üretilir;
+  access-code portalı OTP/auth_uid geçişine kadar private dosyalarda fail-closed kalır.
 
 ## 4) Auth/OTP + MFA
 - **Personel (/panel):** Supabase Auth (e-posta+parola veya magic link) + **MFA (TOTP)**.
@@ -76,7 +78,7 @@ supabase secrets set PAYTR_MERCHANT_ID=... PAYTR_MERCHANT_KEY=... PAYTR_MERCHANT
 supabase secrets set PROD_GATE_HMAC_SECRET=... # en az 32 karakter; CI secret ile aynı
 supabase functions deploy pos-payment --no-verify-jwt
 supabase functions deploy admin-gate           # JWT doğrulaması açık; --no-verify-jwt YOK
-supabase functions deploy get-file --no-verify-jwt # portal private dosya signed URL
+supabase functions deploy get-file             # JWT açık; access_code dosya erişimi YOK
 # personel kullanıcısı + rolü:
 #   Auth → Users → invite;  insert into staff_roles(user_id, role) values ('<uid>','owner');
 GANU_BASE=/ganu/ npm run build   # env gömülür → usingSupabase=true

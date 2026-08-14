@@ -21,13 +21,11 @@ on conflict (id) do update set public = false;
 
 -- 3) RLS (storage.objects):
 --    • anon: erişim YOK (bucket private + policy yok).
---    • authenticated (personel): secure-docs üzerinde tam erişim.
+--    • 0005 sonrası yalnız staff_roles üyesi: secure-docs üzerinde erişim.
 --    • müşteri/ortak: doğrudan erişim YOK; signed URL ile erişir.
 drop policy if exists "staff_rw_secure_docs" on storage.objects;
-create policy "staff_rw_secure_docs" on storage.objects
-  for all to authenticated
-  using (bucket_id = 'secure-docs')
-  with check (bucket_id = 'secure-docs');
+-- Bilerek burada policy açılmaz: staff_roles 0003'te kurulur; 0005 gerçek RBAC
+-- helper ile policy'yi açana kadar storage fail-closed kalır.
 
 -- 4) Müşteriye ait dosya için signed URL üreten RPC (SECURITY DEFINER).
 --    Müşteri erişim kodu doğrulanır; yalnız KENDİ customer_id klasöründeki

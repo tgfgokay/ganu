@@ -899,13 +899,13 @@ async function uploadToStorage(blob, ext = 'jpg', prefix = 'mail', customerId = 
 /* Depolanan referansı görüntülenebilir URL'e çevirir.
    - "secure:<path>" → kısa ömürlü signed URL (private bucket)
    - dataURL / http(s) (eski/yerel) → olduğu gibi döner */
-export async function resolveStoredUrl(stored, { accessCode = '' } = {}) {
+export async function resolveStoredUrl(stored, { portal = false } = {}) {
   if (!stored) return ''
   if (typeof stored === 'string' && stored.startsWith('secure:')) {
     if (!usingSupabase) return ''
     const path = stored.slice('secure:'.length)
-    if (accessCode) {
-      const { data, error } = await supabase.functions.invoke('get-file', { body: { path, code: accessCode } })
+    if (portal) {
+      const { data, error } = await supabase.functions.invoke('get-file', { body: { path } })
       if (error) return ''
       return data?.url || ''
     }

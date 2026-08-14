@@ -88,13 +88,12 @@ alter table public.staff_roles enable row level security;
 
 drop policy if exists "staff_read_roles" on public.staff_roles;
 create policy "staff_read_roles" on public.staff_roles
-  for select to authenticated using (true);
+  for select to authenticated using (false); -- 0005 gerçek is_staff() policy'sini açar
 
 drop policy if exists "owner_admin_write_roles" on public.staff_roles;
 create policy "owner_admin_write_roles" on public.staff_roles
   for all to authenticated
-  using (exists (select 1 from public.staff_roles r where r.user_id = auth.uid() and r.role in ('owner','admin')))
-  with check (exists (select 1 from public.staff_roles r where r.user_id = auth.uid() and r.role in ('owner','admin')));
+  using (false) with check (false); -- 0005 recursion-safe is_staff_admin() kullanır
 
 -- rol yardımcıları
 create or replace function public.current_staff_role()

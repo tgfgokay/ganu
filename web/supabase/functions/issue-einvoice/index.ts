@@ -1,4 +1,6 @@
 // ============================================================
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // GANU Panel · e-Fatura / e-Arşiv kesme Edge Function (Deno)
 // ------------------------------------------------------------
 // Türkiye'de e-belge, GİB onaylı bir ENTEGRATÖR üzerinden kesilir.
@@ -25,13 +27,28 @@
 //     customer: { title, contact, tax_no, tax_office, tc, email } }
 // ============================================================
 
+const SITE = Deno.env.get('SITE_URL') || ''
+let ALLOW_ORIGIN = ''
+try { ALLOW_ORIGIN = SITE ? new URL(SITE).origin : '' } catch { ALLOW_ORIGIN = '' }
 const cors = {
-  'Access-Control-Allow-Origin': '*',
+  ...(ALLOW_ORIGIN ? { 'Access-Control-Allow-Origin': ALLOW_ORIGIN } : {}),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+
+async function isStaffRequest(req: Request): Promise<boolean> {
+  const url = Deno.env.get('SUPABASE_URL') || ''
+  const anon = Deno.env.get('SUPABASE_ANON_KEY') || ''
+  const authorization = req.headers.get('Authorization') || ''
+  if (!url || !anon || !authorization.toLowerCase().startsWith('bearer ')) return false
+  const client = createClient(url, anon, {
+    global: { headers: { Authorization: authorization } }, auth: { persistSession: false },
+  })
+  const { data, error } = await client.rpc('is_staff')
+  return !error && data === true
+}
 
 type Invoice = { amount: number; issue_date?: string; note?: string }
 type Customer = { title?: string; contact?: string; tax_no?: string; tax_office?: string; tc?: string; email?: string }
@@ -214,8 +231,12 @@ async function issueGeneric(provider: string, _mode: string, _invoice: Invoice, 
 }
 
 Deno.serve(async (req) => {
+  if (!ALLOW_ORIGIN) return json({ error: 'SITE_URL yapılandırılmadı' }, 500)
+  const requestOrigin = req.headers.get('origin') || ''
+  if (requestOrigin && requestOrigin !== ALLOW_ORIGIN) return json({ error: 'Origin izinli değil' }, 403)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'POST kullanın' }, 405)
+  if (!(await isStaffRequest(req))) return json({ error: 'Personel yetkisi gerekli' }, 403)
 
   try {
     const { provider, mode = 'e-arsiv', invoice, customer } = await req.json()

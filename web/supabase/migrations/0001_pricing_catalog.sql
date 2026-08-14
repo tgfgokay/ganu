@@ -29,10 +29,10 @@ drop policy if exists "anyone_read_active_packages" on public.packages;
 create policy "anyone_read_active_packages" on public.packages
   for select to anon, authenticated using (active = true);
 
--- Yazma yalnız personel (authenticated).
+-- 0005 gerçek staff_roles RBAC politikasını açana kadar yazma fail-closed.
 drop policy if exists "staff_write_packages" on public.packages;
 create policy "staff_write_packages" on public.packages
-  for all to authenticated using (true) with check (true);
+  for all to authenticated using (false) with check (false);
 
 insert into public.packages (id, name, list_amount, monthly_amount, is_custom, sort) values
   ('Başlangıç', 'Başlangıç',  9990,  999, false, 1),
@@ -62,10 +62,10 @@ alter table public.discount_codes enable row level security;
 -- anon için policy YOK → gizli. Yalnız personel okur; service-role RLS'i baypas eder.
 drop policy if exists "staff_read_discounts" on public.discount_codes;
 create policy "staff_read_discounts" on public.discount_codes
-  for select to authenticated using (true);
+  for select to authenticated using (false);
 drop policy if exists "staff_write_discounts" on public.discount_codes;
 create policy "staff_write_discounts" on public.discount_codes
-  for all to authenticated using (true) with check (true);
+  for all to authenticated using (false) with check (false);
 
 insert into public.discount_codes (code, pct, note) values
   ('BNINISANTASI', 10, 'BNI Nişantaşı — gizli üye indirimi (ilan edilmez)')

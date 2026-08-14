@@ -174,7 +174,7 @@ function PortalHome({ cust, onLogout }) {
             {ml.length === 0 && <div className="pl-empty">Henüz gönderi yok.</div>}
             {ml.map((m) => (
               <div className="pl-row" key={m.id}>
-                {m.photo_url ? <SecureImage stored={m.photo_url} accessCode={cust.access_code} alt="" className="pl-thumb" /> : <TypeBadge t={m.type} />}
+                {m.photo_url ? <SecureImage stored={m.photo_url} portal alt="" className="pl-thumb" /> : <TypeBadge t={m.type} />}
                 <div className="grow">
                   <div className="t1">{m.type === 'tebligat' ? '⚠️ Resmi Tebligat' : m.sender || m.type}</div>
                   <div className="t2">{fmtDate(m.received_date)} · {m.sender || '—'}</div>
@@ -236,7 +236,7 @@ function PortalHome({ cust, onLogout }) {
               {docs.map((d) => (
                 <div className="pl-row" key={d.id}>
                   <div className="grow"><div className="t1">{d.name}</div>{d.note && <div className="t2">{d.note}</div>}</div>
-                  {d.file_url && <SecureLink className="pl-btn pl-btn-ghost pl-btn-sm" stored={d.file_url} accessCode={cust.access_code} download={d.name}>İndir</SecureLink>}
+                  {d.file_url && <SecureLink className="pl-btn pl-btn-ghost pl-btn-sm" stored={d.file_url} portal download={d.name}>İndir</SecureLink>}
                 </div>
               ))}
             </div>

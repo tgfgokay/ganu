@@ -4,7 +4,7 @@ project_id = "ganu-web"
 verify_jwt = false
 
 [functions.get-file]
-verify_jwt = false
+verify_jwt = true
 
 [functions.admin-gate]
 verify_jwt = true

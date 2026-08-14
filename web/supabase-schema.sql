@@ -188,8 +188,8 @@ create index if not exists idx_expenses_customer on public.expenses(customer_id)
 
 -- ------------------------------------------------------------
 -- RLS (Row Level Security)
--- Faz 1: sadece giriş yapmış (authenticated) kullanıcı = GANU personeli
---        her şeyi görür/yönetir. Faz 2'de müşteri tabanlı kural eklenir.
+-- authenticated olmak personel olmak değildir. Bu ana şema fail-closed politika
+-- kurar; 0005 migration staff_roles tabanlı gerçek RBAC politikalarını açar.
 -- ------------------------------------------------------------
 alter table public.partners      enable row level security;
 alter table public.customers     enable row level security;
@@ -204,18 +204,18 @@ alter table public.request_messages enable row level security;
 alter table public.expenses      enable row level security;
 alter table public.bookings      enable row level security;
 
-create policy "staff_all_partners"      on public.partners      for all to authenticated using (true) with check (true);
-create policy "staff_all_customers"     on public.customers     for all to authenticated using (true) with check (true);
-create policy "staff_all_contracts"     on public.contracts     for all to authenticated using (true) with check (true);
-create policy "staff_all_mail"          on public.mail_items    for all to authenticated using (true) with check (true);
-create policy "staff_all_invoices"      on public.invoices      for all to authenticated using (true) with check (true);
-create policy "staff_all_documents"     on public.documents     for all to authenticated using (true) with check (true);
-create policy "staff_all_notifications" on public.notifications for all to authenticated using (true) with check (true);
-create policy "staff_all_requests"      on public.requests      for all to authenticated using (true) with check (true);
-create policy "staff_all_inspections"   on public.inspections   for all to authenticated using (true) with check (true);
-create policy "staff_all_reqmsg"        on public.request_messages for all to authenticated using (true) with check (true);
-create policy "staff_all_expenses"      on public.expenses      for all to authenticated using (true) with check (true);
-create policy "staff_all_bookings"      on public.bookings      for all to authenticated using (true) with check (true);
+create policy "staff_all_partners"      on public.partners      for all to authenticated using (false) with check (false);
+create policy "staff_all_customers"     on public.customers     for all to authenticated using (false) with check (false);
+create policy "staff_all_contracts"     on public.contracts     for all to authenticated using (false) with check (false);
+create policy "staff_all_mail"          on public.mail_items    for all to authenticated using (false) with check (false);
+create policy "staff_all_invoices"      on public.invoices      for all to authenticated using (false) with check (false);
+create policy "staff_all_documents"     on public.documents    for all to authenticated using (false) with check (false);
+create policy "staff_all_notifications" on public.notifications for all to authenticated using (false) with check (false);
+create policy "staff_all_requests"      on public.requests      for all to authenticated using (false) with check (false);
+create policy "staff_all_inspections"   on public.inspections   for all to authenticated using (false) with check (false);
+create policy "staff_all_reqmsg"        on public.request_messages for all to authenticated using (false) with check (false);
+create policy "staff_all_expenses"      on public.expenses      for all to authenticated using (false) with check (false);
+create policy "staff_all_bookings"      on public.bookings      for all to authenticated using (false) with check (false);
 
 -- Sitedeki online başvuru formu: anonim ziyaretçi yalnız 'aday' kaydı EKLEYEBİLİR
 -- (okuyamaz, güncelleyemez; erişim kodu boş geldiğinden portala giremez)
@@ -255,7 +255,7 @@ create table if not exists public.commission_payments (
 );
 create index if not exists idx_compay_partner on public.commission_payments(partner_id);
 alter table public.commission_payments enable row level security;
-create policy "staff_all_compay" on public.commission_payments for all to authenticated using (true) with check (true);
+create policy "staff_all_compay" on public.commission_payments for all to authenticated using (false) with check (false);
 
 -- ------------------------------------------------------------
 -- Sanal POS siparişleri (kart tahsilatı — pos-payment Edge Function)
@@ -275,7 +275,7 @@ create table if not exists public.pos_orders (
 create index if not exists idx_pos_orders_oid on public.pos_orders(merchant_oid);
 create index if not exists idx_pos_orders_customer on public.pos_orders(customer_id);
 alter table public.pos_orders enable row level security;
-create policy "staff_all_pos_orders" on public.pos_orders for all to authenticated using (true) with check (true);
+create policy "staff_all_pos_orders" on public.pos_orders for all to authenticated using (false) with check (false);
 
 -- Güvenlik olayları (P0.3): POS tutar uyuşmazlığı, bilinmeyen sipariş vb.
 -- Edge Function service-role ile yazar; yalnız personel okur.
@@ -287,7 +287,7 @@ create table if not exists public.security_events (
 );
 create index if not exists idx_security_events_kind on public.security_events(kind);
 alter table public.security_events enable row level security;
-create policy "staff_read_security_events" on public.security_events for select to authenticated using (true);
+create policy "staff_read_security_events" on public.security_events for select to authenticated using (false);
 
 -- ------------------------------------------------------------
 -- İş ortaklığı başvuru formu (anon INSERT — sadece 'başvuru' statüsü)

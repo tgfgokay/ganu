@@ -18,11 +18,18 @@ const LOCAL_ALLOWED = import.meta.env.DEV
 
 export const authMode = usingSupabase ? 'supabase' : (LOCAL_ALLOWED ? 'local' : 'disabled')
 
+async function hasStaffRole() {
+  if (!usingSupabase) return false
+  const { data, error } = await supabase.rpc('is_staff')
+  return !error && data === true
+}
+
 /** Oturumdaki kullanıcıyı döndürür (yoksa null). */
 export async function getUser() {
   if (usingSupabase) {
     const { data } = await supabase.auth.getSession()
-    return data.session?.user ?? null
+    const user = data.session?.user ?? null
+    return user && await hasStaffRole() ? user : null
   }
   if (!LOCAL_ALLOWED) return null
   return localStorage.getItem(SESSION_KEY) === '1' ? { email: 'Yerel yönetici' } : null
@@ -41,6 +48,10 @@ export async function login({ email = '', password = '' } = {}) {
       password,
     })
     if (error) return { ok: false, error: cevirHata(error.message) }
+    if (!(await hasStaffRole())) {
+      await supabase.auth.signOut()
+      return { ok: false, error: 'Bu hesap personel paneline yetkili değil.' }
+    }
     return { ok: true, user: data.user }
   }
   if (!LOCAL_ALLOWED) return { ok: false, error: 'Yönetim girişi yapılandırılmadı (Supabase bağlı değil).' }
@@ -91,7 +102,12 @@ export async function resetPassword(email) {
 /** Supabase oturum değişimlerini dinle; aboneliği iptal eden fonksiyon döner. */
 export function onAuthChange(cb) {
   if (!usingSupabase) return () => {}
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => cb(session?.user ?? null))
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (!session?.user) { cb(null); return }
+    setTimeout(() => {
+      hasStaffRole().then((ok) => cb(ok ? session.user : null)).catch(() => cb(null))
+    }, 0)
+  })
   return () => data.subscription.unsubscribe()
 }
 

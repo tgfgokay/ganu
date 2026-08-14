@@ -30,9 +30,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SITE = Deno.env.get('SITE_URL') || ''
-const ALLOW_ORIGIN = SITE ? new URL(SITE).origin : '*' // P0.3: CORS allowlist
+let ALLOW_ORIGIN = ''
+try { ALLOW_ORIGIN = SITE ? new URL(SITE).origin : '' } catch { ALLOW_ORIGIN = '' }
 const cors = {
-  'Access-Control-Allow-Origin': ALLOW_ORIGIN,
+  ...(ALLOW_ORIGIN ? { 'Access-Control-Allow-Origin': ALLOW_ORIGIN } : {}),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
@@ -240,6 +241,9 @@ async function iyzicoInit(_b: InitBody) {
 }
 
 Deno.serve(async (req) => {
+  if (!ALLOW_ORIGIN) return json({ error: 'SITE_URL yapılandırılmadı' }, 500)
+  const requestOrigin = req.headers.get('origin') || ''
+  if (requestOrigin && requestOrigin !== ALLOW_ORIGIN) return json({ error: 'Origin izinli değil' }, 403)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'POST kullanın' }, 405)
 

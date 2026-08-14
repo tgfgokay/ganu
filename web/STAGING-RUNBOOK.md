@@ -19,6 +19,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 3. `supabase/migrations/0002_private_storage.sql`  — secure-docs bucket + RLS + owns_secure_object
 4. `supabase/migrations/0003_auth_hardening.sql`   — bcrypt _pw_match, set_portal_password (yetkili), staff_roles, legacy reset
 5. `supabase/migrations/0004_prod_gate.sql`        — prod_gate_proof (service-role) + gate-probe müşteri
+6. `supabase/migrations/0005_rbac_auth_storage.sql` — gerçek staff RBAC + JWT/auth_uid private storage
 
 ```bash
 set -euo pipefail
@@ -27,6 +28,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0001_pricing_catalog.sq
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0002_private_storage.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0003_auth_hardening.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0004_prod_gate.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0005_rbac_auth_storage.sql
 ```
 `supabase-schema.sql` migration klasöründe olmadığı için boş bir projede yalnız
 `supabase db push` çalıştırmak ana şemayı kurmaz; yukarıdaki sıra veya SQL Editor şarttır.
@@ -37,7 +39,7 @@ Storage bucket: 0002 `insert into storage.buckets` ile açar; Dashboard → Stor
 Edge Function:
 - `supabase functions deploy pos-payment --no-verify-jwt`  (anon/callback erişir)
 - `supabase functions deploy admin-gate`                   (JWT doğrulaması AÇIK — §6)
-- `supabase functions deploy get-file --no-verify-jwt`     (portal access_code sahiplik kontrolü)
+- `supabase functions deploy get-file`                     (JWT AÇIK; access_code kabul etmez)
 Personel: Auth → Users → invite; `insert into public.staff_roles(user_id, role) values ('<uid>','owner');`
 
 ---
@@ -172,6 +174,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/migrations/0005_rbac_auth_storage.down.sql
 psql "$DB_URL" -f supabase/migrations/0004_prod_gate.down.sql
 psql "$DB_URL" -f supabase/migrations/0003_auth_hardening.down.sql
 psql "$DB_URL" -f supabase/migrations/0002_private_storage.down.sql
@@ -179,6 +182,7 @@ psql "$DB_URL" -f supabase/migrations/0001_pricing_catalog.down.sql
 # (ya da her dosyanın içeriğini Supabase SQL editor'e sırayla yapıştır)
 ```
 Down dosyaları:
+- `supabase/migrations/0005_rbac_auth_storage.down.sql` — RBAC policy/helper; eski geniş erişimi geri açmaz
 - `supabase/migrations/0004_prod_gate.down.sql` — prod_gate_proof ve gate-probe müşteri
 - `supabase/migrations/0001_pricing_catalog.down.sql` — pos_settle, kolonlar, discount_codes, packages
 - `supabase/migrations/0002_private_storage.down.sql` — owns_secure_object, policy, secure-docs bucket (nesneleri boşaltır)
@@ -255,3 +259,31 @@ okuyabilmesi içindir; yerel `POS_TEST_FAULT` env kontrolü kanıt sayılmaz.
 `DB_URL` yalnız resmî Supabase direct/dedicated (`db.<ref>.supabase.co`) veya shared
 pooler (`postgres.<ref>@*.pooler.supabase.com`) URI biçiminde kabul edilir; böylece
 DB audit kontrolünün farklı bir Supabase projesine yöneltilmesi fail-closed reddedilir.
+
+## 7) 0005 RBAC + JWT private-file testleri
+
+SQL Editor'de gerçek staff UID ile:
+```sql
+set ganu.test_staff_uid = '<STAFF_AUTH_UID>';
+set ganu.test_customer_uid = '<CUSTOMER_AUTH_UID>'; -- section2 self/JWT testi
+-- ardından supabase/tests/staging_0005_rbac_tests.sql dosyasını çalıştır
+```
+Beklenen: staff olmayan authenticated kullanıcı `customers` okuyamaz; gerçek staff
+`is_staff()=true`; anon/authenticated `owns_secure_object` çalıştıramaz; storage policy
+`is_staff()` helper'a bağlıdır. Pozitif staff testi UID verilmezse SKIP olabilir,
+production öncesi PASS zorunludur.
+
+HTTP `get-file` testleri (`secure-docs` içinde gerçek bir test nesnesiyle):
+```bash
+GET_FILE="$SUPABASE_URL/functions/v1/get-file"
+# JWT yok → gateway 401
+curl -s -o /dev/null -w '%{http_code}\n' -X POST "$GET_FILE" \
+  -H "apikey: $ANON_KEY" -H 'content-type: application/json' -d '{"path":"mail/<CID>/test.jpg"}'
+# staff_roles kaydı olmayan normal authenticated JWT → 403
+# auth_uid=<CUSTOMER_UID> müşterinin KENDİ yolu → 200 + 300 sn URL
+# aynı müşteri JWT + BAŞKA CID yolu → 403
+# gerçek staff JWT + mevcut secure-docs yolu → 200
+```
+Eski access-code portal oturumu Supabase Auth JWT üretmediği için private dosya açamaz;
+bu bilinçli fail-closed davranıştır. OTP/magic-link + kontrollü `auth_uid` bağlama akışı
+canlı Auth projesi ve hesap eşleştirme kararı olmadan tamamlanmış sayılmaz.

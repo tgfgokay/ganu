@@ -29,7 +29,7 @@ else
   block 'Supabase project link metadata yok'
 fi
 
-for n in 0001_pricing_catalog 0002_private_storage 0003_auth_hardening 0004_prod_gate; do
+for n in 0001_pricing_catalog 0002_private_storage 0003_auth_hardening 0004_prod_gate 0005_rbac_auth_storage; do
   if [ -f "$ROOT/supabase/migrations/${n}.sql" ] && [ -f "$ROOT/supabase/migrations/${n}.down.sql" ]; then
     pass "migration ${n} up/down var"
   else
@@ -41,7 +41,11 @@ for fn in pos-payment admin-gate get-file; do
   if [ -f "$ROOT/supabase/functions/${fn}/index.ts" ]; then pass "function ${fn} kaynağı var"; else block "function ${fn} eksik"; fi
 done
 
-if [ -f "$ROOT/supabase/tests/staging_section2_tests.sql" ]; then pass 'SQL staging test paketi var'; else block 'SQL staging test paketi eksik'; fi
+if [ -f "$ROOT/supabase/tests/staging_section2_tests.sql" ] && [ -f "$ROOT/supabase/tests/staging_0005_rbac_tests.sql" ]; then
+  pass 'SQL staging test paketleri var'
+else
+  block 'SQL staging test paketi eksik'
+fi
 
 if [ "$fail" -ne 0 ]; then
   printf 'SONUÇ BLOCKED — canlı test için yukarıdaki bağlantı/araç eksikleri tamamlanmalı.\n' >&2

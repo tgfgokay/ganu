@@ -36,7 +36,7 @@ declare
   v_cid       uuid := gen_random_uuid();   -- ana TEST müşteri
   v_legacy    uuid := gen_random_uuid();   -- legacy parola testi müşterisi
   v_other     uuid := gen_random_uuid();   -- var olmayan başka müşteri (path testi)
-  v_self      uuid := gen_random_uuid();   -- self senaryosu için auth_uid
+  v_self      text := nullif(current_setting('ganu.test_customer_uid', true), ''); -- gerçek auth.users UID
   v_owner     text := nullif(current_setting('ganu.test_owner_uid', true), '');
   v_code      text := 'TEST_CODE_1';
   b boolean; r text; s text; n int;
@@ -189,22 +189,27 @@ begin
   end;
   perform set_config('request.jwt.claims','', true);
 
-  -- 4c self (customers.auth_uid = auth.uid()) → kendi parolasını belirleyebilir
-  update public.customers set auth_uid = v_self where id = v_cid;
-  perform set_config('request.jwt.claims', json_build_object('sub', v_self::text)::text, true);
-  begin
-    perform public.set_portal_password(v_cid,'SelfParola12');
-    select case when portal_password like 'bcrypt:%' then 'bcrypt' else left(coalesce(portal_password,'yok'),10) end
-      into s from public.customers where id=v_cid;
+  -- 4c self (customers.auth_uid = auth.uid()) → gerçek auth.users UID gerekir.
+  if v_self is not null and exists (select 1 from auth.users where id=v_self::uuid) then
+    update public.customers set auth_uid = v_self::uuid where id = v_cid;
+    perform set_config('request.jwt.claims', json_build_object('sub', v_self)::text, true);
+    begin
+      perform public.set_portal_password(v_cid,'SelfParola12');
+      select case when portal_password like 'bcrypt:%' then 'bcrypt' else left(coalesce(portal_password,'yok'),10) end
+        into s from public.customers where id=v_cid;
+      insert into _ganu_test_results(grp,name,expected,actual,result) values
+        ('set_portal_password','self → kendi parolasını belirledi (bcrypt)','bcrypt',s,
+         case when s='bcrypt' then 'PASS' else 'FAIL' end);
+    exception when others then
+      insert into _ganu_test_results(grp,name,expected,actual,result) values
+        ('set_portal_password','self → başarılı','bcrypt','exception: '||left(SQLERRM,30),'FAIL');
+    end;
+    update public.customers set auth_uid = null where id = v_cid;
+    perform set_config('request.jwt.claims','', true);
+  else
     insert into _ganu_test_results(grp,name,expected,actual,result) values
-      ('set_portal_password','self → kendi parolasını belirledi (bcrypt)','bcrypt',s,
-       case when s='bcrypt' then 'PASS' else 'FAIL' end);
-  exception when others then
-    insert into _ganu_test_results(grp,name,expected,actual,result) values
-      ('set_portal_password','self → başarılı','bcrypt','exception: '||left(SQLERRM,30),'FAIL');
-  end;
-  update public.customers set auth_uid = null where id = v_cid; -- geri al
-  perform set_config('request.jwt.claims','', true);
+      ('set_portal_password','self gerçek Auth UID senaryosu','PASS','SKIP: set ganu.test_customer_uid=<uid>','SKIP');
+  end if;
 
   -- 4d admin (owner) → farklı müşterinin parolasını belirleyebilir (owner uid gerekli)
   if v_owner is not null and exists (select 1 from public.staff_roles where user_id = v_owner::uuid and role in ('owner','admin')) then
@@ -278,17 +283,17 @@ begin
       ('RLS~','anon discount_codes göremez (yetki reddi)','0 veya red','red: '||left(SQLERRM,20),'PASS');
   end;
 
-  -- 6c authenticated discount_codes okur (personel)
+  -- 6c authenticated tek başına personel değildir → gizli kodları okuyamaz
   begin
     execute 'set local role authenticated';
     execute 'select count(*) from public.discount_codes' into n;
     execute 'reset role';
     insert into _ganu_test_results(grp,name,expected,actual,result) values
-      ('RLS~','authenticated discount_codes okur (>=1)','>=1',n::text,case when n>=1 then 'PASS' else 'FAIL' end);
+      ('RLS~','staff rolü olmayan authenticated discount_codes göremez','0',n::text,case when n=0 then 'PASS' else 'FAIL' end);
   exception when others then
     execute 'reset role';
     insert into _ganu_test_results(grp,name,expected,actual,result) values
-      ('RLS~','authenticated discount_codes okur','>=1','hata: '||left(SQLERRM,30),'FAIL');
+      ('RLS~','staff rolü olmayan authenticated discount_codes red','0 veya red','red: '||left(SQLERRM,30),'PASS');
   end;
 
   -- 6d yetkisiz personel (authenticated, owner/admin değil) staff_roles YAZAMAZ
