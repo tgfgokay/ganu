@@ -20,6 +20,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 4. `supabase/migrations/0003_auth_hardening.sql`   — bcrypt _pw_match, set_portal_password (yetkili), staff_roles, legacy reset
 5. `supabase/migrations/0004_prod_gate.sql`        — prod_gate_proof (service-role) + gate-probe müşteri
 6. `supabase/migrations/0005_rbac_auth_storage.sql` — gerçek staff RBAC + JWT/auth_uid private storage
+7. `supabase/migrations/0006_customer_portal_auth.sql` — doğrulanmış magic-link claim + JWT portal RPC; legacy anon portal kapalı
 
 ```bash
 set -euo pipefail
@@ -29,6 +30,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0002_private_storage.sq
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0003_auth_hardening.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0004_prod_gate.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0005_rbac_auth_storage.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0006_customer_portal_auth.sql
 ```
 `supabase-schema.sql` migration klasöründe olmadığı için boş bir projede yalnız
 `supabase db push` çalıştırmak ana şemayı kurmaz; yukarıdaki sıra veya SQL Editor şarttır.
@@ -174,6 +176,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/migrations/0006_customer_portal_auth.down.sql
 psql "$DB_URL" -f supabase/migrations/0005_rbac_auth_storage.down.sql
 psql "$DB_URL" -f supabase/migrations/0004_prod_gate.down.sql
 psql "$DB_URL" -f supabase/migrations/0003_auth_hardening.down.sql
@@ -285,5 +288,10 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$GET_FILE" \
 # gerçek staff JWT + mevcut secure-docs yolu → 200
 ```
 Eski access-code portal oturumu Supabase Auth JWT üretmediği için private dosya açamaz;
-bu bilinçli fail-closed davranıştır. OTP/magic-link + kontrollü `auth_uid` bağlama akışı
-canlı Auth projesi ve hesap eşleştirme kararı olmadan tamamlanmış sayılmaz.
+0006 sonrasında cloud access-code/parola RPC execute yetkileri de kapalıdır. Auth → URL
+Configuration içinde production/staging `/musteri` redirect URL'lerini allow-list'e ekle.
+`staging_0006_customer_portal_tests.sql` için dedicated, doğrulanmış Auth kullanıcısı ve
+tam bir aktif/askıda customer eşleşmesi gerekir. Zorunlu negatifler: anon legacy RPC red;
+doğrulanmamış/yanlış e-posta red; duplicate normalize e-posta red; başka auth_uid'ye
+bağlı kayıt red; başka müşterinin talep/mail/dosya erişimi red; customer staff değildir.
+Production öncesi bunların tümü gözlenmiş PASS olmalıdır.

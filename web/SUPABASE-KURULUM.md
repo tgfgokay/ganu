@@ -31,6 +31,7 @@ Sırayla uygula (Supabase SQL editor ya da `supabase db push`):
 4. `supabase/migrations/0003_auth_hardening.sql` — bcrypt `_pw_match` (düz metin/sha256 RED), `set_portal_password`, `staff_roles` (RBAC).
 5. `supabase/migrations/0004_prod_gate.sql` — production readiness audit tablosu ve izole gate-probe müşterisi.
 6. `supabase/migrations/0005_rbac_auth_storage.sql` — `authenticated=staff` varsayımını kaldıran RBAC ve JWT/auth_uid storage erişimi.
+7. `supabase/migrations/0006_customer_portal_auth.sql` — doğrulanmış e-posta claim, JWT portal RPC ve legacy anon portal kapatma.
 
 RLS notları:
 - `packages`: anon yalnız `active` okur; yazma personel.
@@ -51,9 +52,10 @@ RLS notları:
 - **Personel (/panel):** Supabase Auth (e-posta+parola veya magic link) + **MFA (TOTP)**.
   `auth.js` zaten Supabase modunu destekliyor; yerel demo mod artık **yalnız DEV**
   (prod'da kapalı — `authMode='disabled'`).
-- **Müşteri/ortak portalı:** hedef = e-posta **OTP**; `access_code` login sırrı olmaktan
-  çıkar, tek kullanımlık davet/bağlama koduna döner. (Geçiş adımı: portal RPC'leri
-  `auth.uid()`+customer eşlemesine taşınır.)
+- **Müşteri portalı:** e-posta **OTP/magic-link** + `auth_uid`; `access_code` cloud giriş
+  sırrı değildir ve legacy RPC execute yetkileri 0006 ile kapatılır. Portal RPC'leri
+  yalnız doğrulanmış JWT sahibine kendi verisini döndürür. Auth redirect allow-list'e
+  `/musteri` URL'si eklenmelidir. **Ortak portalı** ayrı bir geçiş işi olarak kalır.
 - Parola gerekiyorsa **bcrypt** (0003) — uygulama içinde SHA-256 parola üretimi YOK.
 - Rate limit + artan gecikme + geçici kilit: Auth ayarları + Edge/gateway.
 

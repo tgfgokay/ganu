@@ -8,6 +8,7 @@
    ============================================================ */
 
 import { supabase, usingSupabase } from './supabase.js'
+import { withBase } from '../../base.js'
 
 const KEY = 'ganu.panel.v1'
 
@@ -343,9 +344,7 @@ export async function customerLogin(code) {
   const q = (code || '').trim().toUpperCase()
   if (!q) return null
   if (usingSupabase) {
-    const { data } = await supabase.rpc('portal_login_code', { p_code: q })
-    const c = Array.isArray(data) ? data[0] : data
-    return c && c.status !== 'ayrıldı' && c.status !== 'aday' ? c : null
+    return null // cloud: access_code oturumu 0006 ile kapalı
   }
   const cs = await customers.list()
   const c = cs.find((x) => (x.access_code || '').toUpperCase() === q)
@@ -375,13 +374,7 @@ export async function customerLoginEmail({ email = '', password = '' } = {}) {
   const pw = (password || '').trim()
   if (!id || !pw) return { ok: false, error: 'E-posta ve şifre gerekli.' }
   if (usingSupabase) {
-    // anon tablo okuyamaz — RPC e-posta + parola/kod doğrular, sadece o kaydı döner
-    const { data, error } = await supabase.rpc('portal_login', { p_email: id, p_pass: pw })
-    if (error) return { ok: false, error: 'Giriş yapılamadı. Tekrar deneyin.' }
-    const c = Array.isArray(data) ? data[0] : data
-    if (!c) return { ok: false, error: 'E-posta veya şifre hatalı.' }
-    if (c.status === 'aday') return { ok: false, error: 'Hesabınız henüz aktif değil — ödeme/aktivasyon bekleniyor.' }
-    return { ok: true, customer: c }
+    return { ok: false, error: 'Bulut girişinde şifre yerine e-posta giriş bağlantısını kullanın.' }
   }
   const cs = await customers.list()
   const c = cs.find((x) =>
@@ -402,11 +395,7 @@ export async function customerChangePassword(customerId, oldPass, newPass) {
   const newP = (newPass || '').trim()
   if (newP.length < 4) return { ok: false, error: 'Yeni şifre en az 4 karakter olmalı.' }
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_change_password', {
-      p_customer_id: customerId, p_old: oldP, p_new: newP,
-    })
-    if (error || !data) return { ok: false, error: 'Mevcut şifre hatalı.' }
-    return { ok: true }
+    return { ok: false, error: 'Bulut portalı magic-link kullanır; portal şifresi yoktur.' }
   }
   const c = await customers.get(customerId)
   if (!c) return { ok: false, error: 'Kayıt bulunamadı.' }
@@ -415,6 +404,39 @@ export async function customerChangePassword(customerId, oldPass, newPass) {
   if (!valid) return { ok: false, error: 'Mevcut şifre hatalı.' }
   await customers.update(customerId, { portal_password: await hashPass(newP) })
   return { ok: true }
+}
+
+export async function customerSendMagicLink(email = '') {
+  if (!usingSupabase) return { ok: false, error: 'Magic-link yalnız bulut modunda kullanılabilir.' }
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) return { ok: false, error: 'E-posta gerekli.' }
+  const emailRedirectTo = `${window.location.origin}${withBase('/musteri')}`
+  const { error } = await supabase.auth.signInWithOtp({ email: normalized, options: { emailRedirectTo } })
+  return error ? { ok: false, error: 'Giriş bağlantısı gönderilemedi. Tekrar deneyin.' } : { ok: true }
+}
+
+export async function customerCloudRestore({ claim = true } = {}) {
+  if (!usingSupabase) return null
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError || !session) return null
+  let { data, error } = await supabase.rpc('customer_me')
+  if (!error && data) return data
+  if (!claim) return null
+  ;({ data, error } = await supabase.rpc('claim_customer_by_email'))
+  if (error || !data) throw new Error('Bu doğrulanmış e-posta için benzersiz aktif müşteri kaydı bulunamadı.')
+  return data
+}
+
+export function onCustomerAuthChange(callback) {
+  if (!usingSupabase) return () => {}
+  const { data } = supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'SIGNED_OUT') callback(event)
+  })
+  return () => data.subscription.unsubscribe()
+}
+
+export async function customerCloudLogout() {
+  if (usingSupabase) await supabase.auth.signOut()
 }
 
 /* ---------- havale dekontu bildirimi ----------
@@ -514,7 +536,7 @@ export async function customerApply(form) {
 export async function portalBundle(cust) {
   if (!cust?.id) return null
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_bundle', { p_customer_id: cust.id, p_code: cust.access_code || '' })
+    const { data, error } = await supabase.rpc('portal_bundle_jwt')
     if (error || !data) return null
     return {
       customer: data.customer, contracts: data.contracts || [], mail: data.mail || [],
@@ -536,10 +558,8 @@ export async function portalBundle(cust) {
 
 export async function portalCreateRequest(cust, { kind = 'yönlendirme', note = '', mail_id = '' } = {}) {
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_create_request', {
-      p_customer_id: cust.id, p_code: cust.access_code || '',
-      p_mail_id: mail_id || null, p_kind: kind, p_note: note,
-    })
+    const { data, error } = await supabase.rpc('portal_create_request_jwt', {
+      p_mail_id: mail_id || null, p_kind: kind, p_note: note })
     if (error) throw error
     return Array.isArray(data) ? data[0] : data
   }
@@ -550,9 +570,7 @@ export async function portalSendMessage(cust, requestId, text) {
   const t = (text || '').trim()
   if (!t) return null
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_send_message', {
-      p_customer_id: cust.id, p_code: cust.access_code || '', p_request_id: requestId, p_text: t,
-    })
+    const { data, error } = await supabase.rpc('portal_send_message_jwt', { p_request_id: requestId, p_text: t })
     if (error) throw error
     return Array.isArray(data) ? data[0] : data
   }
@@ -561,8 +579,7 @@ export async function portalSendMessage(cust, requestId, text) {
 
 export async function portalCreateBooking(cust, form) {
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_create_booking', {
-      p_customer_id: cust.id, p_code: cust.access_code || '',
+    const { data, error } = await supabase.rpc('portal_create_booking_jwt', {
       p_date: form.date, p_start: form.start, p_end: form.end,
       p_attendees: Number(form.attendees) || 1, p_note: form.note || '',
     })
@@ -575,9 +592,9 @@ export async function portalCreateBooking(cust, form) {
 export async function portalSetKvkk(cust) {
   const at = new Date().toISOString()
   if (usingSupabase) {
-    const { error } = await supabase.rpc('portal_set_kvkk', { p_customer_id: cust.id, p_code: cust.access_code || '' })
+    const { data, error } = await supabase.rpc('portal_set_kvkk_jwt')
     if (error) throw error
-    return { ...cust, kvkk_consent_at: at }
+    return data || { ...cust, kvkk_consent_at: at }
   }
   const updated = await customers.update(cust.id, { kvkk_consent_at: at })
   return updated || { ...cust, kvkk_consent_at: at }
