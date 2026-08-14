@@ -33,6 +33,7 @@ Sırayla uygula (Supabase SQL editor ya da `supabase db push`):
 6. `supabase/migrations/0005_rbac_auth_storage.sql` — `authenticated=staff` varsayımını kaldıran RBAC ve JWT/auth_uid storage erişimi.
 7. `supabase/migrations/0006_customer_portal_auth.sql` — doğrulanmış e-posta claim, JWT portal RPC ve legacy anon portal kapatma.
 8. `supabase/migrations/0007_purchase_flow.sql` — Edge-only aday/dekont, HMAC purchase token, rate-limit ve POS session binding.
+9. `supabase/migrations/0008_pos_reconciliation.sql` — callback/session terminal mutabakatı, opak dönüş tokenı ve minimal ödeme durumu.
 
 RLS notları:
 - `packages`: anon yalnız `active` okur; yazma personel.

@@ -50,6 +50,7 @@ type InitBody = {
   phone?: string
   ip?: string
   purchase_token?: string
+  return_token?: string
 }
 
 // ============================================================
@@ -145,6 +146,24 @@ async function hmacSha256B64(key: string, msg: string): Promise<string> {
   return btoa(String.fromCharCode(...new Uint8Array(sig)))
 }
 
+const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', enc.encode(value))
+  return [...new Uint8Array(digest)].map((x) => x.toString(16).padStart(2, '0')).join('')
+}
+function newReturnToken(): string {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return b64u(bytes)
+}
+function returnUrl(rawToken: string): string {
+  const configured = new URL(SITE)
+  if (configured.search || configured.hash) throw new Error('SITE_URL query/hash içermemeli.')
+  configured.pathname = `${configured.pathname.replace(/\/+$/, '')}/satin-al`
+  configured.searchParams.set('payment_return', rawToken)
+  return configured.toString()
+}
+
 function admin() {
   const url = Deno.env.get('SUPABASE_URL')
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -166,7 +185,6 @@ async function paytrInit(b: InitBody, verified: { purchase: Purchase; order: Ord
   if (!merchant_id || !merchant_key || !merchant_salt) {
     throw new Error('PayTR secrets eksik (MERCHANT_ID/KEY/SALT).')
   }
-  const site = SITE
   // P0.3: tutar SUNUCUDA (DB kataloğundan) hesaplanır; istemci tutarı yok sayılır.
   const db = admin()
   const { amount, pct, list, code, price_version } = verified.order
@@ -175,10 +193,15 @@ async function paytrInit(b: InitBody, verified: { purchase: Purchase; order: Ord
   if (amountKurus <= 0) throw new Error('Geçersiz tutar.')
 
   const merchant_oid = `GANU${Date.now()}${Math.floor(Math.random() * 1000)}`
+  // 32 CSPRNG byte ham dönüş tokenı yalnız URL'de; DB'de yalnız SHA-256 hash.
+  const rawReturnToken = newReturnToken()
+  const returnTokenHash = await sha256Hex(rawReturnToken)
+  const returnExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
   const { data: started, error: startErr } = await db.rpc('purchase_start_pos', {
     p_session: verified.purchase.sid, p_customer: verified.purchase.cid, p_merchant_oid: merchant_oid,
     p_amount: amount, p_package: verified.purchase.pkg, p_provider: 'paytr', p_price_version: price_version,
     p_list_amount: list, p_discount_code: code, p_discount_pct: pct, p_currency: CURRENCY,
+    p_return_token_hash: returnTokenHash, p_return_expires_at: returnExpiresAt,
   })
   if (startErr || !started) throw new Error('POS siparişi atomik başlatılamadı.')
   if (started.state === 'ready') return { provider:'paytr', mode:'iframe', token:started.provider_token, iframe_url:started.provider_url, merchant_oid:started.merchant_oid, amount:Number(started.amount) }
@@ -207,8 +230,10 @@ async function paytrInit(b: InitBody, verified: { purchase: Purchase; order: Ord
     user_name: b.name || 'GANU Müşteri',
     user_address: 'GANU Sanal Ofis',
     user_phone: b.phone || '0000000000',
-    merchant_ok_url: `${site}/#/satin-al?paid=1`,
-    merchant_fail_url: `${site}/#/satin-al?paid=0`,
+    // BrowserRouter + base-path uyumlu gerçek route. Sonuç ipucu taşınmaz;
+    // tarayıcı yalnız callback ile mutabık DB durumunu sorgular.
+    merchant_ok_url: returnUrl(rawReturnToken),
+    merchant_fail_url: returnUrl(rawReturnToken),
     timeout_limit: '30', currency, test_mode,
   })
 
@@ -261,9 +286,12 @@ async function paytrCallback(req: Request): Promise<Response> {
       p_total_amount: totalKurus,
     })
     if (error) { console.error('pos_settle:', error.message); return new Response('db error', { status: 500 }) }
-    // Tutar uyuşmazlığında PayTR'a başarısızlık bildir (güvenlik olayı RPC içinde yazıldı).
     if (result === 'mismatch') return new Response('PAYTR amount mismatch', { status: 400 })
-    // 'ok' | 'idempotent' | 'unknown' | 'failed' → PayTR düz "OK" bekler.
+    // Yerel sipariş bulunamadığında ACK verme: sağlayıcının retry/mutabakatı sürsün.
+    if (result === 'unknown') return new Response('PAYTR order unknown', { status: 500 })
+    if (!['ok', 'failed', 'idempotent_success', 'idempotent_failed'].includes(String(result))) {
+      return new Response('PAYTR settlement invalid', { status: 500 })
+    }
   } catch (e) {
     console.error('paytr callback:', e)
     return new Response('db error', { status: 500 })
@@ -311,6 +339,27 @@ Deno.serve(async (req) => {
       else if (body.provider === 'iyzico') return json({ error: 'iyzico henüz güvenli state-machine entegrasyonuna bağlı değil' }, 503)
       else return json({ error: "provider 'paytr' veya 'iyzico' olmalı" }, 400)
       return json(result)
+    }
+
+    if (action === 'status') {
+      const raw = String(body.return_token || '')
+      // 32-byte base64url token; rate-limit yardımcı katmandır, auth sınırı token entropisidir.
+      if (!/^[A-Za-z0-9_-]{43}$/.test(raw)) return json({ error: 'Dönüş anahtarı geçersiz' }, 404)
+      const db = admin()
+      const ipHash = await sha256Hex(clientIp(req))
+      const { data: allowed, error: limitErr } = await db.rpc('purchase_rate_limit', {
+        p_ip_hash: ipHash, p_action: 'status', p_limit: 60, p_window_seconds: 3600,
+      })
+      if (limitErr) throw new Error('status rate-limit DB hatası')
+      if (allowed !== true) return json({ error: 'Çok fazla istek' }, 429)
+      const { data: state, error: stateErr } = await db.rpc('purchase_return_status', {
+        p_return_token_hash: await sha256Hex(raw),
+      })
+      if (stateErr) throw new Error('status DB hatası')
+      if (!['pending', 'paid_pending_activation', 'active', 'failed', 'manual_review'].includes(String(state))) {
+        return json({ error: 'Dönüş anahtarı geçersiz' }, 404)
+      }
+      return json({ status: state })
     }
 
     return json({ error: 'bilinmeyen action' }, 400)

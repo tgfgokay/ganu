@@ -2,7 +2,7 @@ import { useState, useEffect, useReducer } from 'react'
 import { withBase } from './base'
 import { useSearchParams, Link } from 'react-router-dom'
 import GanuMark from './GanuMark'
-import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar, onCatalog, usingSupabase } from './panel/lib/store.js'
+import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posPaymentStatus, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar, onCatalog, usingSupabase } from './panel/lib/store.js'
 
 /* ============================================================
    /satin-al — 3 adımlı satın alma sayfası
@@ -51,11 +51,41 @@ function Steps({ current }) {
 
 const field = { display: 'flex', flexDirection: 'column', gap: 6 }
 const labelS = { fontSize: 13, fontWeight: 700, color: 'var(--navy, #0A2540)' }
+const POS_RETURN_KEY = 'ganu_pos_return_v1'
+const POS_RETURN_TTL_MS = 60 * 60 * 1000
+const RETURN_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/
+
+function loadPaymentReturn(queryToken) {
+  const raw = String(queryToken || '').trim()
+  try {
+    if (raw) {
+      if (RETURN_TOKEN_RE.test(raw)) sessionStorage.setItem(POS_RETURN_KEY, JSON.stringify({ token: raw, expiresAt: Date.now() + POS_RETURN_TTL_MS }))
+      return { token: raw, expired: false }
+    }
+    const saved = JSON.parse(sessionStorage.getItem(POS_RETURN_KEY) || 'null')
+    if (!saved) return { token: '', expired: false }
+    if (!RETURN_TOKEN_RE.test(String(saved.token || '')) || !Number.isFinite(Number(saved.expiresAt)) || Number(saved.expiresAt) <= Date.now()) {
+      sessionStorage.removeItem(POS_RETURN_KEY)
+      return { token: '', expired: true }
+    }
+    return { token: saved.token, expired: false }
+  } catch {
+    try { sessionStorage.removeItem(POS_RETURN_KEY) } catch { /* storage kapalı */ }
+    return { token: raw, expired: false }
+  }
+}
+
+function clearPaymentReturn() {
+  try { sessionStorage.removeItem(POS_RETURN_KEY) } catch { /* storage kapalı */ }
+}
 
 export default function SatinAl() {
   const [params] = useSearchParams()
   const urlPkg = params.get('paket')
   const refCode = (params.get('ref') || '').trim().toUpperCase() // iş ortağı yönlendirme kodu
+  const [returnSeed] = useState(() => loadPaymentReturn(params.get('payment_return')))
+  const paymentReturn = returnSeed.token
+  const [returnState, setReturnState] = useState(paymentReturn ? 'loading' : returnSeed.expired ? 'expired' : '')
   const [pkg, setPkg] = useState(PACKAGES.includes(urlPkg) ? urlPkg : 'Başlangıç')
   const [step, setStep] = useState(1)
   const [f, setF] = useState({ title: '', email: '', phone: '', tax_no: '', tax_office: '' })
@@ -87,6 +117,36 @@ export default function SatinAl() {
   useEffect(() => onCatalog(bumpCatalog), []) // katalog yüklenince fiyat güncellensin
   useEffect(() => { document.title = 'GANU · Satın Al'; window.scrollTo(0, 0) }, [])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [step])
+  useEffect(() => {
+    if (!paymentReturn) return
+    // Ham tokenı referrer/history yüzeyinde tutma; closure sorgu tamamlanana kadar korur.
+    const clean = new URL(window.location.href)
+    clean.searchParams.delete('payment_return')
+    window.history.replaceState(window.history.state, '', `${clean.pathname}${clean.search}${clean.hash}`)
+    let cancelled = false
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
+    ;(async () => {
+      let sawPending = false
+      for (let attempt = 0; attempt < 12 && !cancelled; attempt += 1) {
+        try {
+          const state = await posPaymentStatus(paymentReturn)
+          if (cancelled) return
+          if (state !== 'pending') { setReturnState(state); return }
+          sawPending = true
+          setReturnState('pending')
+        } catch {
+          // Geçici ağ/Edge hatasında tokenı kaybetme; bounded polling sürer.
+          if (!cancelled && attempt > 0) setReturnState('pending')
+        }
+        await wait(3000)
+      }
+      if (!cancelled) setReturnState(sawPending ? 'pending_timeout' : 'unavailable')
+    })()
+    return () => { cancelled = true }
+  }, [paymentReturn])
+  useEffect(() => {
+    if (['active', 'paid_pending_activation', 'failed', 'manual_review', 'unavailable', 'expired'].includes(returnState)) clearPaymentReturn()
+  }, [returnState])
 
   const set = (k) => (e) => {
     setErr('')
@@ -176,6 +236,34 @@ export default function SatinAl() {
     } catch (e) { throw new Error(e.message || 'Ödeme bildirimi kaydedilemedi.') }
     setResult({ mode: 'havale', withReceipt: !!(receiptUrl || receiptFile) })
     setStep(3)
+  }
+
+  if (returnState) {
+    const view = {
+      loading: ['Ödeme doğrulanıyor…', 'Sağlayıcı bildirimi güvenli sunucudan kontrol ediliyor.'],
+      pending: ['Ödeme sonucu bekleniyor…', 'Banka bildirimi henüz ulaşmadı; bu sayfa kısa süre otomatik kontrol edecek.'],
+      pending_timeout: ['Ödeme incelemede', 'Sonuç henüz kesinleşmedi. Tekrar ödeme yapmayın; ekibimiz mutabakatı kontrol edecek.'],
+      paid_pending_activation: ['Ödeme alındı', 'Tahsilat doğrulandı. Sanal ofis aktivasyonu ve sözleşme kontrolü hazırlanıyor.'],
+      active: ['Aktivasyon tamamlandı', 'Müşteri portalına doğrulanmış e-posta adresinizle güvenli giriş yapabilirsiniz.'],
+      failed: ['Ödeme tamamlanmadı', 'Tahsilat başarısız görünüyor. Yeniden denemeden önce bankanızdaki hareketi kontrol edin.'],
+      manual_review: ['Manuel inceleme gerekli', 'Tutar veya sağlayıcı bildirimi otomatik eşleşmedi. Tekrar ödeme yapmayın; ekibimiz kontrol edecek.'],
+      unavailable: ['Durum doğrulanamadı', 'Dönüş bağlantısı geçersiz, süresi dolmuş veya hizmet geçici olarak kullanılamıyor.'],
+      expired: ['Dönüş bağlantısının süresi doldu', 'Güvenli ödeme durumu anahtarı bir saat sonunda bu tarayıcıdan kaldırıldı.'],
+    }[returnState] || ['Ödeme durumu bekleniyor', 'Lütfen kısa süre sonra yeniden kontrol edin.']
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--paper, #F4F6F8)' }}>
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px clamp(20px,5vw,48px)', borderBottom: '2px solid var(--navy, #0A2540)' }}>
+          <a href={withBase('/')} style={{ display: 'inline-flex', color: 'var(--navy, #0A2540)' }} aria-label="Ana sayfa"><GanuMark style={{ height: 26, width: 'auto', display: 'block' }} /></a>
+        </header>
+        <main style={{ maxWidth: 620, margin: '0 auto', padding: '70px 20px' }}>
+          <section style={{ background: '#fff', border: '2px solid var(--navy, #0A2540)', borderRadius: 4, padding: 28 }} aria-live="polite">
+            <h1 style={{ marginTop: 0 }}>{view[0]}</h1><p>{view[1]}</p>
+            {returnState === 'active' && <Link className="btn btn-solid" to="/musteri">Müşteri portalına git →</Link>}
+            <a className="btn btn-line" href={withBase('/')} style={{ marginLeft: 10 }}>Ana sayfa</a>
+          </section>
+        </main>
+      </div>
+    )
   }
 
   return (

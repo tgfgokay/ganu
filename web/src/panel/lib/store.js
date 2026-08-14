@@ -482,6 +482,17 @@ export async function posPay(provider, { purchaseToken = '', email = '', name = 
   return data // { provider, mode, token?, iframe_url?, merchant_oid, amount }
 }
 
+/* Sağlayıcı dönüşündeki opak 32-byte tokenla yalnız minimal mutabakat durumu.
+   `paid=1` gibi tarayıcı query değerleri hiçbir zaman ödeme kanıtı değildir. */
+export async function posPaymentStatus(returnToken) {
+  if (!usingSupabase) throw new Error('Ödeme durumu yalnız güvenli sunucudan doğrulanabilir.')
+  const { data, error } = await supabase.functions.invoke('pos-payment', {
+    body: { action: 'status', return_token: String(returnToken || '') },
+  })
+  if (error || !data?.status) throw new Error(data?.error || error?.message || 'Ödeme durumu doğrulanamadı.')
+  return data.status
+}
+
 /* Config'te sanal POS açık mı? (varsayılan kapalı → kart ekranı simülasyon) */
 export function posEnabled() {
   const cfg = getConfig()

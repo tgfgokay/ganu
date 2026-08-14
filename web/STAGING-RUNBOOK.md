@@ -22,6 +22,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 6. `supabase/migrations/0005_rbac_auth_storage.sql` — gerçek staff RBAC + JWT/auth_uid private storage
 7. `supabase/migrations/0006_customer_portal_auth.sql` — doğrulanmış magic-link claim + JWT portal RPC; legacy anon portal kapalı
 8. `supabase/migrations/0007_purchase_flow.sql` — güvenli anonim aday/dekont + HMAC token + rate-limit/POS binding
+9. `supabase/migrations/0008_pos_reconciliation.sql` — callback terminal state + opak browser return/status
 
 ```bash
 set -euo pipefail
@@ -33,6 +34,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0004_prod_gate.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0005_rbac_auth_storage.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0006_customer_portal_auth.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0007_purchase_flow.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0008_pos_reconciliation.sql
 ```
 `supabase-schema.sql` migration klasöründe olmadığı için boş bir projede yalnız
 `supabase db push` çalıştırmak ana şemayı kurmaz; yukarıdaki sıra veya SQL Editor şarttır.
@@ -100,7 +102,7 @@ insert into public.pos_orders(merchant_oid, customer_id, amount, pkg, provider, 
 -- (poz) doğru tutar → 'ok' + müşteri işaretlenir
 select public.pos_settle('TEST_OID_1', 'success', 18990);             -- ok
 -- (neg) idempotency: aynı çağrı → 'idempotent', çift işlem YOK
-select public.pos_settle('TEST_OID_1', 'success', 18990);             -- idempotent
+select public.pos_settle('TEST_OID_1', 'success', 18990);             -- idempotent_success
 -- (neg) tutar uyuşmazlığı (yeni sipariş)
 insert into public.pos_orders(merchant_oid, customer_id, amount, pkg, provider, status)
  values ('TEST_OID_2', (select id from public.customers limit 1), 189.90, 'Pro', 'paytr', 'bekliyor');
@@ -175,6 +177,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/migrations/0008_pos_reconciliation.down.sql
 psql "$DB_URL" -f supabase/migrations/0007_purchase_flow.down.sql
 psql "$DB_URL" -f supabase/migrations/0006_customer_portal_auth.down.sql
 psql "$DB_URL" -f supabase/migrations/0005_rbac_auth_storage.down.sql
@@ -334,3 +337,47 @@ silip yeniden üretmesine bağlıdır; ters proxy değişirse bu varsayım doğr
 alınmaz. HMAC token + DB session binding, IP başlığından bağımsız zorunlu güvenlik sınırıdır.
 
 Canlı Supabase/Edge olmadan bunlar gözlenmiş sayılmaz; build/statik parse yalnız hazırlık kanıtıdır.
+
+## 9) 0008 POS callback / tarayıcı dönüş mutabakatı
+
+`supabase/tests/staging_0008_pos_reconciliation_tests.sql` tüm satırlarda PASS olmalı.
+Zorunlu HTTP/sağlayıcı kapıları:
+
+- POS init sonrası DB'de yalnız 64 hex SHA-256 `return_token_hash` bulunur; ham 32-byte
+  base64url token yalnız PayTR ok/fail URL'sinin `payment_return` query alanındadır.
+  Purchase HMAC tokenı, customer/order kimliği ve PII dönüş URL'sinde bulunmaz.
+- `SITE_URL=https://staging.example/ganu` için PayTR dönüşü
+  `https://staging.example/ganu/satin-al?payment_return=...` olmalı. `curl -I` ile bu
+  direct route SPA'yı 200/rewrite döndürmeli; 404 veya başka uygulamaya dönüşte staging
+  **FAIL**. Aynı kapı gelecekte `/en/...` ve blog rotalarını etkilemeyen genel SPA rewrite olmalı.
+- Geçerli token: yalnız `pending|paid_pending_activation|active|failed|manual_review`.
+  Yanıtta PII, customer/order id, access_code bulunmamalı. Forge/expired token 404;
+  61. status isteği 429. Rate-limit yardımcı katmandır; opak token zorunlu auth sınırıdır.
+- Sağlayıcı dönüşündeki eski `paid=1` veya elle yazılmış query ödeme kanıtı sayılmaz.
+  Frontend yalnız status RPC sonucunu gösterir, tokenı `history.replaceState` ile temizler
+  ve pending durumunu en fazla 12 kez/3 saniye aralıkla sorgular. Token query'den ilk
+  okumada aynı sekmenin `sessionStorage` alanına en fazla bir saatlik TTL ile alınır;
+  reload sırasında pending sorgusu devam eder. `active`, `paid_pending_activation`,
+  `failed`, `manual_review`, `unavailable`, `expired` terminalinde silinir;
+  `pending` ve `pending_timeout`
+  reload için saklanır. Tarayıcı testi query dönüşü → pending → reload → aynı durum
+  sorgusu akışını kanıtlamalı; build/statik sonuç bu browser davranışının canlı kanıtı değildir.
+- `creating`, `ready` ve `ambiguous` siparişlere geç success/fail callback atomik terminal
+  state yazmalı. Receipt session callback ile settle edilememeli. Tutar mismatch hem order
+  hem session için `manual_review`; customer ödeme alanları değişmemeli.
+- Bilinmeyen order callback'i non-2xx olmalı (PayTR retry durmamalı). Tekrar başarı
+  `idempotent_success`, tekrar başarısızlık `idempotent_failed` ve ikisi de 200 `OK`.
+
+Canlı PayTR/Supabase olmadan callback retry, direct-route rewrite ve HTTP sonuçları
+gözlenmiş PASS değildir; SQL/statik/build sonuçları yalnız hazırlık kanıtıdır.
+
+**Dönüş tokenı tehdit modeli:** Ham status-only token PayTR dönüş URL'sinde bulunmak
+zorundadır; bu nedenle sağlayıcı, reverse proxy/CDN ve browser history/access logları
+tokenı görebilir. Uygulama tokenı console/server loguna bilerek yazmaz, DB yalnız hash
+saklar, token PII/order/customer id içermez ve bir saatte dolar. `index.html` ayrıca
+`Referrer-Policy: strict-origin` meta politikası same-origin ve cross-origin isteklere
+yalnız scheme/host/port origin bilgisini gönderir; path/query içindeki tokenı taşımaz,
+domain-level referral ölçümünü korur. İlk navigation URL'si sağlayıcı, reverse proxy/CDN
+ve browser history/access loglarında yine görülebilir. Staging HTTP response header'ı
+daha gevşek bir policy ile meta politikasını ezmemeli; proxy/CDN access-log
+redaction/retention ayrıca doğrulanmalıdır.

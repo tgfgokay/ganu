@@ -126,7 +126,7 @@ begin
   r := public.pos_settle('TEST_OID_OK','success',18990);
   select status into s from public.pos_orders where merchant_oid='TEST_OID_OK';
   insert into _ganu_test_results(grp,name,expected,actual,result) values
-    ('pos_settle','tekrar callback → idempotent','idempotent',r,case when r='idempotent' then 'PASS' else 'FAIL' end),
+    ('pos_settle','tekrar callback → idempotent başarı','idempotent_success',r,case when r='idempotent_success' then 'PASS' else 'FAIL' end),
     ('pos_settle','tekrar callback → tek sonuç (başarılı sabit)','başarılı',s,case when s='başarılı' then 'PASS' else 'FAIL' end);
 
   -- 3c tutar uyuşmazlığı
