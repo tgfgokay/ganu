@@ -107,37 +107,30 @@ curl -s -X POST "$FN" -H "content-type: application/json" \
 ---
 
 ## 4) Rollback planı (staging'de sorun çıkarsa)
-Sıra TERSİNE. Her migration geri alınabilir:
+> ⚠️ **`git revert` yalnız KODU geri alır, veritabanını GERİ ALMAZ.** DB için
+> her migration'ın ayrı **down** dosyası vardır. Uygulama sırası **TERSİNE**:
 
-```sql
--- 0003 geri al
-drop function if exists public.set_portal_password(uuid, text);
-drop function if exists public.current_staff_role();
-drop table if exists public.staff_roles;
-alter table public.customers drop column if exists must_reset_password;
--- _pw_match'i eski (sha256/düz metin) haline döndürmek İSTENMEZ (güvenlik);
--- gerekiyorsa schema'daki eski tanımı elle geri yükle.
-
--- 0002 geri al
-drop function if exists public.owns_secure_object(text, text);
-drop policy if exists "staff_rw_secure_docs" on storage.objects;
--- bucket'ı silmeden önce nesneleri boşalt:
--- delete from storage.objects where bucket_id='secure-docs';
-delete from storage.buckets where id='secure-docs';
-
--- 0001 geri al
-drop function if exists public.pos_settle(text, text, bigint);
-alter table public.pos_orders
-  drop column if exists price_version, drop column if exists list_amount,
-  drop column if exists discount_code, drop column if exists discount_pct,
-  drop column if exists currency;
-drop table if exists public.discount_codes;
-drop table if exists public.packages;
+```bash
+# TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/migrations/0003_auth_hardening.down.sql
+psql "$DB_URL" -f supabase/migrations/0002_private_storage.down.sql
+psql "$DB_URL" -f supabase/migrations/0001_pricing_catalog.down.sql
+# (ya da her dosyanın içeriğini Supabase SQL editor'e sırayla yapıştır)
 ```
-- **Kod tarafı rollback:** `git revert be8ba55` (7 madde) — ancak staging düzeltmeleri
-  geçerse gerek yok. Frontend katalog wiring, Supabase yoksa sabitlere düşer (güvenli).
-- **Veri:** staging'de gerçek veri yok; tablo drop güvenli. Production'da ASLA drop'la
-  başlama — önce yedek/PITR.
+Down dosyaları:
+- `supabase/migrations/0001_pricing_catalog.down.sql` — pos_settle, kolonlar, discount_codes, packages
+- `supabase/migrations/0002_private_storage.down.sql` — owns_secure_object, policy, secure-docs bucket (nesneleri boşaltır)
+- `supabase/migrations/0003_auth_hardening.down.sql` — set_portal_password, staff_roles, must_reset_password
+
+**Tek yönlü / dikkat:**
+- 0003 down: legacy `portal_password` değerleri `''` yapıldı; **geri gelmez** (staging'de
+  sorun değil; production'da bu migration öncesi **PITR/yedek zorunlu**).
+- 0003 down: `_pw_match` güvenlik gereği eski (sha256/düz metin) sürüme **otomatik
+  dönmez** — acil durumda elle.
+- 0002 down: bucket silmeden önce **tüm secure-docs nesnelerini siler**.
+
+- **Kod rollback (ayrı):** `git revert be8ba55` — yalnız uygulama kodu. Frontend katalog
+  wiring Supabase yoksa sabitlere düşer (güvenli).
 
 ## 5) Çıkış kriteri (production'a geçiş)
 §2 + §3 tüm pozitif/negatif testler geçmeden `pos_enabled` açılmaz, production
