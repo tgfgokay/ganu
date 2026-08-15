@@ -23,6 +23,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 7. `supabase/migrations/0006_customer_portal_auth.sql` — doğrulanmış magic-link claim + JWT portal RPC; legacy anon portal kapalı
 8. `supabase/migrations/0007_purchase_flow.sql` — güvenli anonim aday/dekont + HMAC token + rate-limit/POS binding
 9. `supabase/migrations/0008_pos_reconciliation.sql` — callback terminal state + opak browser return/status
+10. `supabase/migrations/0009_legal_consent_evidence.sql` — exact legal metin sürümü + immutable ön bilgilendirme/erken ifa kanıtı + satış proof gate
 
 ```bash
 set -euo pipefail
@@ -35,6 +36,7 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0005_rbac_auth_storage.
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0006_customer_portal_auth.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0007_purchase_flow.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0008_pos_reconciliation.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0009_legal_consent_evidence.sql
 ```
 `supabase-schema.sql` migration klasöründe olmadığı için boş bir projede yalnız
 `supabase db push` çalıştırmak ana şemayı kurmaz; yukarıdaki sıra veya SQL Editor şarttır.
@@ -177,6 +179,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/migrations/0009_legal_consent_evidence.down.sql
 psql "$DB_URL" -f supabase/migrations/0008_pos_reconciliation.down.sql
 psql "$DB_URL" -f supabase/migrations/0007_purchase_flow.down.sql
 psql "$DB_URL" -f supabase/migrations/0006_customer_portal_auth.down.sql
@@ -370,6 +373,36 @@ Zorunlu HTTP/sağlayıcı kapıları:
 
 Canlı PayTR/Supabase olmadan callback retry, direct-route rewrite ve HTTP sonuçları
 gözlenmiş PASS değildir; SQL/statik/build sonuçları yalnız hazırlık kanıtıdır.
+
+## 10) Yasal kimlik ve çevrim içi satış kapısı
+
+Default/staging build, kurumsal kimlik/sürüm alanları eksikken çalışır; ancak `/satin-al`
+başvuru, ödeme ve dekont kabul etmeden fail-closed bilgi ekranı gösterir. TR satış CTA'ları
+checkout yerine `/mesafeli-satis#satis-kapali` durumuna gider. Altı yasal rota SSR üretilir,
+fakat kimlik tamamlanana kadar `noindex,nofollow` olur ve sitemap'e girmez.
+
+Production deploy variable ortamında `.env.example` içindeki tüm
+`GANU_LEGAL_*` alanları, tescil belgesi, onaylı saklama/veri-akışı envanteri ve avukat onaylı metinle birebir
+doğrulanmalıdır. Kurucu TC/kişisel adresi değil, yalnız tescilli şirket/veri sorumlusu
+bilgisi girilir. `GANU_LEGAL_APPROVED_AT` nihai hukuk onay tarihidir. Gate:
+
+```sh
+node scripts/check-legal-readiness.mjs
+```
+
+Eksik/geçersiz tek alan non-zero döndürür; `prod-gate.sh` bunu Supabase/POS kontrollerinden
+önce zorunlu çalıştırır. Bu statik gate tek başına satış açmaz. `0009` sonrası:
+
+1. `supabase/tests/staging_0009_legal_consent_tests.sql` tüm satırlarda PASS olmalı.
+2. HTTP create: checkbox alanlarından biri yok/false veya `legal_text_version` farklıysa 4xx ve customer/session 0; ikisi true ve exact sürümse customer+session timestamp/sürüm/IP-HMAC/UA-HMAC atomik oluşmalı. IP ve user-agent kanıtları `PURCHASE_FLOW_SECRET` ile alan ayrımlı (`legal-ip\\0`, `legal-ua\\0`) HMAC-SHA-256 değerleridir; anonim değil, takma adlı güvenlik verisidir. Rate-limit anahtarı ayrı `rate-limit-ip\\0` alanıyla üretilir.
+3. Aynı tokenın receipt ve POS yolları exact session kanıtını korumalı; DB'de evidence update denemesi red olmalı. Ham IP/user-agent saklanmaz.
+4. Test çıktıları redakte edilip SHA-256 rapor hash'leri alınır. Hash'ler production CI'ın encrypted `LEGAL_SQL_PROOF_SHA256` / `LEGAL_HTTP_PROOF_SHA256` secret'larına konur. Gerçek staging project ref ve doğrulanmış cross-border enum ile uygulama aktivasyonu `legal_activate_sale(staging_project_ref,sql_sha,http_sha,cross_border)` RPC'sinden yapılır. `service_role` config tablosunda yalnız SELECT sahibidir; doğrudan UPDATE edemez. SECURITY DEFINER aktivasyon RPC'si yalnız boş/kapalı satırı bir kez etkinleştirir, ikinci çağrı kanıtların üzerine yazmaz. DB owner/Supabase SQL Editor bu sınırın üstündeki ayrı ve denetlenmesi gereken güven köküdür; teknik olarak tabloyu değiştirebilir. CI `GANU_STAGING_PROJECT_REF` değerini bu kayıtla karşılaştırır ve staging ref production ref ile aynıysa hard-fail eder; DB satırı tek başına dış CI proof secret'larını üretmez.
+5. `LEGAL_TEXT_VERSION=2026-08-15.v1` hem `purchase-flow` hem `pos-payment` Edge secret store'a konur. Production gate DB config'in enabled, target project ref, exact text/retention/flow sürümü ve iki 64-hex proof hash'ini build env ile karşılaştırır.
+
+Production build sonrası ayrıca şu gözlenir: satış CTA'sı gerçek
+checkout'a gider, `/satin-al` formu açılır, legal sayfalar doğru kurumsal kimliği gösterir,
+`index,follow` olur ve sitemap alternate setine girer. Taslakların nihai hukuk onayı olmadan
+yalnız env doldurmak PASS kanıtı değildir.
 
 **Dönüş tokenı tehdit modeli:** Ham status-only token PayTR dönüş URL'sinde bulunmak
 zorundadır; bu nedenle sağlayıcı, reverse proxy/CDN ve browser history/access logları

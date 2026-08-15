@@ -4,8 +4,8 @@ import { pathToFileURL } from 'node:url'
 import { publicConfig } from './url-config.mjs'
 
 const config=publicConfig(),dist=path.resolve('dist'),ssr=path.resolve('dist-ssr/entry-server.js')
-const {render,indexableRoutes}=await import(`${pathToFileURL(ssr).href}?v=${Date.now()}`)
-const routes=indexableRoutes()
+const {render,prerenderRoutes}=await import(`${pathToFileURL(ssr).href}?v=${Date.now()}`)
+const routes=prerenderRoutes()
 const escape=(value)=>String(value).replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
 const json=(value)=>JSON.stringify(value).replace(/</g,'\\u003c')
 const shell=fs.readFileSync(path.join(dist,'index.html'),'utf8')
@@ -16,11 +16,8 @@ function seoHead(route){
   const tags=[
     `<title>${escape(route.seo.title)}</title>`,
     `<meta name="description" content="${escape(route.seo.description)}">`,
-    '<meta name="robots" content="index,follow">',
+    `<meta name="robots" content="${route.indexable===false?'noindex,nofollow':'index,follow'}">`,
     `<link rel="canonical" href="${escape(canonical)}">`,
-    `<link rel="alternate" hreflang="tr" href="${escape(tr)}">`,
-    `<link rel="alternate" hreflang="en" href="${escape(en)}">`,
-    `<link rel="alternate" hreflang="x-default" href="${escape(tr)}">`,
     `<meta property="og:type" content="${route.kind==='blog-article'?'article':'website'}">`,
     '<meta property="og:site_name" content="GANU">',
     `<meta property="og:locale" content="${route.locale==='tr'?'tr_TR':'en_US'}">`,
@@ -34,6 +31,8 @@ function seoHead(route){
     `<meta name="twitter:description" content="${escape(route.seo.description)}">`,
     `<meta name="twitter:image" content="${escape(config.absolute('/og.png'))}">`
   ]
+  if(tr)tags.splice(4,0,`<link rel="alternate" hreflang="tr" href="${escape(tr)}">`,`<link rel="alternate" hreflang="x-default" href="${escape(tr)}">`)
+  if(en)tags.splice(tr?6:4,0,`<link rel="alternate" hreflang="en" href="${escape(en)}">`)
   if(route.kind==='blog-article'){
     tags.push(`<meta property="article:published_time" content="${route.post.date}">`,`<meta property="article:modified_time" content="${route.post.updated}">`)
     const organization={'@type':'Organization',name:'GANU',url:config.absolute('/')}
@@ -50,7 +49,7 @@ function outFile(routePath){
   return clean?path.join(dist,clean,'index.html'):path.join(dist,'index.html')
 }
 for(const route of routes){
-  if(!route?.path||!route?.counterpart||!route?.seo?.title)throw new Error(`prerender route geçersiz: ${route?.path}`)
+  if(!route?.path||!route?.seo?.title)throw new Error(`prerender route geçersiz: ${route?.path}`)
   const file=outFile(route.path);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,page(route))
 }
 
@@ -59,10 +58,11 @@ for(const routePath of ['/satin-al','/panel','/musteri','/ortak']){
   const file=outFile(routePath);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,privateShell)
 }
 
-const sitemap=routes.map((route)=>{
-  const canonical=config.absolute(route.path),other=config.absolute(route.counterpart)
+const indexedRoutes=routes.filter((route)=>route.indexable!==false)
+const sitemap=indexedRoutes.map((route)=>{
+  const canonical=config.absolute(route.path),other=route.counterpart?config.absolute(route.counterpart):''
   const tr=route.locale==='tr'?canonical:other,en=route.locale==='en'?canonical:other
-  const alternates=[['tr',tr],['en',en],['x-default',tr]].map(([lang,href])=>`<xhtml:link rel="alternate" hreflang="${lang}" href="${escape(href)}"/>`).join('')
+  const alternates=[['tr',tr],['en',en],['x-default',tr]].filter(([,href])=>href).map(([lang,href])=>`<xhtml:link rel="alternate" hreflang="${lang}" href="${escape(href)}"/>`).join('')
   const lastmod=route.post?`<lastmod>${route.post.updated}</lastmod>`:''
   return `  <url><loc>${escape(canonical)}</loc>${alternates}${lastmod}</url>`
 }).join('\n')
@@ -77,4 +77,4 @@ fs.writeFileSync(path.join(dist,'404.html'),`<!doctype html>
 (function(){var l=window.location,k=${keep},parts=l.pathname.split('/'),base=parts.slice(0,1+k).join('/')+'/';
 l.replace(l.protocol+'//'+l.host+base+'?/'+parts.slice(1+k).join('/').replace(/&/g,'~and~')+(l.search?'&'+l.search.slice(1).replace(/&/g,'~and~'):'')+l.hash);})();
 </script><noscript><p>Bu sayfayı açmak için JavaScript gereklidir.</p></noscript></body></html>\n`)
-console.log(`prerender PASS (${routes.length} indexable + 4 private shells, base ${config.base})`)
+console.log(`prerender PASS (${routes.length} prerendered / ${indexedRoutes.length} indexed + 4 private shells, base ${config.base})`)

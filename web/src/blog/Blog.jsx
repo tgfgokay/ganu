@@ -3,6 +3,7 @@ import GanuMark from '../GanuMark.jsx'
 import { withBase } from '../base.js'
 import Markdown from './Markdown.jsx'
 import { blogCounterpart, blogIndexPath, blogPost, blogPostPath, blogPosts } from './content.js'
+import LegalLinks from '../legal/LegalLinks.jsx'
 
 const copy={
   tr:{label:'Bilgi Merkezi',title:'Sanal ofis ve şirket kuruluşu rehberleri',lead:'Resmî kaynaklara dayalı, ihtiyatlı ve uygulamaya dönük yazılar.',read:'Yazıyı oku',updated:'Güncellendi',back:'Tüm yazılar',lang:'Read in English',contact:'Sorunuz için bize yazın'},
@@ -12,7 +13,7 @@ function Header({locale,languageHref}){
   const c=copy[locale]
   return <header className="blog-mast"><a href={withBase(locale==='tr'?'/':'/en')} aria-label="GANU"><GanuMark/></a><nav><a href={withBase(blogIndexPath(locale))}>{c.back}</a>{languageHref&&<a className="lang-switch" href={withBase(languageHref)}>{locale==='tr'?'EN':'TR'}</a>}</nav></header>
 }
-function Footer({locale}){return <footer className="blog-footer"><span>© {new Date().getFullYear()} GANU</span><a href="mailto:info@ganu.com.tr">{copy[locale].contact}</a></footer>}
+function Footer({locale}){return <footer className="blog-footer"><span>© {new Date().getFullYear()} GANU</span><LegalLinks locale={locale} compact/><a href="mailto:info@ganu.com.tr">{copy[locale].contact}</a></footer>}
 export function BlogIndex({locale}){
   const c=copy[locale],posts=blogPosts.filter((post)=>post.locale===locale)
   return <div className="blog-shell"><Header locale={locale} languageHref={blogIndexPath(locale==='tr'?'en':'tr')}/><main><section className="blog-hero"><span>{c.label}</span><h1>{c.title}</h1><p>{c.lead}</p></section><div className="blog-grid">{posts.map((post)=><article className="blog-card" key={post.slug}><time dateTime={post.updated}>{c.updated}: {post.updated}</time><h2><a href={withBase(blogPostPath(post))}>{post.title}</a></h2><p>{post.description}</p><a href={withBase(blogPostPath(post))}>{c.read} →</a></article>)}</div></main><Footer locale={locale}/></div>

@@ -15,10 +15,16 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")/.." && pwd)"   # web/
 
+# Satış, doğrulanmış satıcı/veri sorumlusu kimliği ve avukat onay tarihi olmadan açılamaz.
+node "$DIR/scripts/check-legal-readiness.mjs"
+
 # 1) Yerel env değil, hedef projenin gerçek Edge Function secret listesi.
 : "${SUPABASE_PROJECT_REF:?PROD GATE FAIL: SUPABASE_PROJECT_REF gerekli}"
+: "${GANU_STAGING_PROJECT_REF:?PROD GATE FAIL: ayrı GANU_STAGING_PROJECT_REF gerekli}"
 : "${SUPABASE_ACCESS_TOKEN:?PROD GATE FAIL: SUPABASE_ACCESS_TOKEN gerekli (CI secret)}"
 : "${DB_URL:?PROD GATE FAIL: DB_URL gerekli (CI secret; repoya konmaz)}"
+: "${LEGAL_SQL_PROOF_SHA256:?PROD GATE FAIL: staging SQL rapor SHA-256 CI secret gerekli}"
+: "${LEGAL_HTTP_PROOF_SHA256:?PROD GATE FAIL: staging HTTP rapor SHA-256 CI secret gerekli}"
 
 # API/Functions/remote secrets ile DB'nin aynı Supabase projesi olduğuna bağlanır.
 bash "$DIR/scripts/check-db-project-binding.sh"
@@ -75,7 +81,19 @@ if [ "$signature" != "$expected" ]; then
   exit 3
 fi
 
-# 4) DB gate (owner/admin + audit kaydı)
+# 4) 0009 DB legal gate: build env'i, hedef project ve gözlenmiş SQL/HTTP kanıtı aynı olmalı.
+legal_db="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -At -F '|' -c "select enabled,text_version,retention_version,cross_border_status,consent_flow_version,tested_project_ref,sql_proof_sha256,http_proof_sha256 from public.legal_sale_config where id=true")"
+IFS='|' read -r legal_enabled legal_text legal_retention legal_cross legal_flow legal_project legal_sql_sha legal_http_sha <<< "$legal_db"
+if [ "$GANU_STAGING_PROJECT_REF" = "$SUPABASE_PROJECT_REF" ] || [ "$legal_enabled" != "t" ] || [ "$legal_text" != "$GANU_LEGAL_TEXT_VERSION" ] || \
+   [ "$legal_retention" != "$GANU_LEGAL_RETENTION_VERSION" ] || [ "$legal_cross" != "$GANU_LEGAL_CROSS_BORDER_STATUS" ] || \
+   [ "$legal_flow" != "$GANU_LEGAL_CONSENT_FLOW_VERSION" ] || [ "$legal_project" != "$GANU_STAGING_PROJECT_REF" ] || \
+   ! [[ "$LEGAL_SQL_PROOF_SHA256" =~ ^[0-9a-f]{64}$ ]] || ! [[ "$LEGAL_HTTP_PROOF_SHA256" =~ ^[0-9a-f]{64}$ ]] || \
+   [ "$legal_sql_sha" != "$LEGAL_SQL_PROOF_SHA256" ] || [ "$legal_http_sha" != "$LEGAL_HTTP_PROOF_SHA256" ]; then
+  echo "PROD GATE FAIL: 0009 legal config / staging SQL+HTTP kanıtı eksik veya hedefle uyuşmuyor." >&2
+  exit 5
+fi
+
+# 5) DB gate (owner/admin + audit kaydı)
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$DIR/supabase/prod_readiness_gate.sql"
 
 echo "PROD GATE PASS ✅ (remote fault secret yok + taze JWT/HMAC kanıtı + DB audit PASS)"

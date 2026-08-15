@@ -1,7 +1,12 @@
 create temp table _ganu_0008_results(name text,expected text,actual text,result text);
+update public.legal_sale_config set enabled=true,sql_tested_at=now(),http_tested_at=now() where id=true;
+create or replace function pg_temp.purchase_create_candidate(
+ p_customer uuid,p_session uuid,p_title text,p_email text,p_phone text,p_tax_no text,p_tc text,p_tax_office text,p_ref text,p_bni boolean,
+ p_package text,p_amount numeric,p_list numeric,p_price_version int,p_discount_code text,p_discount_pct int,p_currency text,p_expires_at timestamptz)
+returns boolean language sql as $$ select public.purchase_create_candidate_legal($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'2026-08-15.v1',true,true,repeat('a',64),repeat('b',64)) $$;
 do $$ declare cid uuid:=gen_random_uuid(); sid uuid:=gen_random_uuid(); r jsonb; x text; h text:=repeat('a',64);
 begin
- perform public.purchase_create_candidate(cid,sid,'TEST_0008','test-0008@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
+	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008','test-0008@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  r:=public.purchase_start_pos(sid,cid,'TEST_0008_AMBIG',18990,'Pro','paytr',1,18990,'',0,'TL',h,now()+interval '30 minutes');
  perform public.purchase_finish_pos_init('TEST_0008_AMBIG','ambiguous','','');
  x:=public.pos_settle('TEST_0008_AMBIG','success',1899000);
@@ -18,7 +23,7 @@ begin
  delete from public.pos_orders where customer_id=cid; delete from public.customers where id=cid;
 
  cid:=gen_random_uuid();sid:=gen_random_uuid();h:=repeat('b',64);
- perform public.purchase_create_candidate(cid,sid,'TEST_0008_MM','test-0008-mm@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
+	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008_MM','test-0008-mm@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  perform public.purchase_start_pos(sid,cid,'TEST_0008_MM',18990,'Pro','paytr',1,18990,'',0,'TL',h,now()+interval '30 minutes');
  x:=public.pos_settle('TEST_0008_MM','success',1);
  insert into _ganu_0008_results select 'mismatch terminal manual review','mismatch/manual_review/manual_review',x||'/'||o.init_state||'/'||s.settlement_state,
@@ -27,7 +32,7 @@ begin
  delete from public.pos_orders where customer_id=cid; delete from public.customers where id=cid;
 
  cid:=gen_random_uuid();sid:=gen_random_uuid();
- perform public.purchase_create_candidate(cid,sid,'TEST_0008_RECEIPT','test-0008-r@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
+	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008_RECEIPT','test-0008-r@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  perform public.purchase_record_claim(sid,cid,'','');
  insert into _ganu_0008_results select 'receipt session terminal','receipt_claimed',settlement_state,case when settlement_state='receipt_claimed' then 'PASS' else 'FAIL' end from public.purchase_sessions where id=sid;
  delete from public.customers where id=cid;
@@ -36,7 +41,7 @@ begin
 end $$;
 do $$ declare cid uuid:=gen_random_uuid(); sid uuid:=gen_random_uuid(); x text; ok boolean; h text:=repeat('c',64);
 begin
- perform public.purchase_create_candidate(cid,sid,'TEST_0008_CREATING','test-0008-c@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
+	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008_CREATING','test-0008-c@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  perform public.purchase_start_pos(sid,cid,'TEST_0008_CREATING',18990,'Pro','paytr',1,18990,'',0,'TL',h,now()+interval '30 minutes');
  x:=public.pos_settle('TEST_0008_CREATING','success',1899000);
  select init_state='callback_success' into ok from public.pos_orders where merchant_oid='TEST_0008_CREATING';
@@ -44,7 +49,7 @@ begin
  delete from public.pos_orders where customer_id=cid; delete from public.customers where id=cid;
 
  cid:=gen_random_uuid();sid:=gen_random_uuid();h:=repeat('d',64);
- perform public.purchase_create_candidate(cid,sid,'TEST_0008_READY_FAIL','test-0008-f@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
+	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008_READY_FAIL','test-0008-f@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  perform public.purchase_start_pos(sid,cid,'TEST_0008_READY_FAIL',18990,'Pro','paytr',1,18990,'',0,'TL',h,now()+interval '30 minutes');
  perform public.purchase_finish_pos_init('TEST_0008_READY_FAIL','ready','TOKEN','https://example.invalid/pay');
  x:=public.pos_settle('TEST_0008_READY_FAIL','failed',1899000);
@@ -56,7 +61,7 @@ begin
  delete from public.pos_orders where customer_id=cid; delete from public.customers where id=cid;
 
  cid:=gen_random_uuid();sid:=gen_random_uuid();h:=repeat('e',64);
- perform public.purchase_create_candidate(cid,sid,'TEST_0008_RECEIPT_CB','test-0008-rc@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
+	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008_RECEIPT_CB','test-0008-rc@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  perform public.purchase_record_claim(sid,cid,'','');
  insert into public.pos_orders(merchant_oid,customer_id,amount,pkg,provider,status,purchase_session_id,init_state,return_token_hash,return_expires_at)
  values('TEST_0008_RECEIPT_CB',cid,18990,'Pro','paytr','bekliyor',sid,'ready',h,now()+interval '30 minutes');
@@ -67,7 +72,7 @@ begin
 end $$;
 do $$ declare cid uuid:=gen_random_uuid(); sid uuid:=gen_random_uuid(); r jsonb;
 begin
- perform public.purchase_create_candidate(cid,sid,'TEST_0008_NULL','test-0008-null@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
+	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008_NULL','test-0008-null@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  r:=public.purchase_start_pos(sid,cid,'TEST_0008_NULL_HASH',18990,'Pro','paytr',1,18990,'',0,'TL',null,now()+interval '30 minutes');
  insert into _ganu_0008_results values('null return hash red','rejected',r->>'state',case when r->>'state'='rejected' then 'PASS' else 'FAIL' end);
  r:=public.purchase_start_pos(sid,cid,'TEST_0008_NULL_EXP',18990,'Pro','paytr',1,18990,'',0,'TL',repeat('f',64),null);
@@ -83,3 +88,4 @@ begin
 end $$;
 select * from _ganu_0008_results order by name;
 select result,count(*) from _ganu_0008_results group by result order by result;
+update public.legal_sale_config set enabled=false,sql_tested_at=null,http_tested_at=null where id=true;

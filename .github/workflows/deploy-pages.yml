@@ -1,0 +1,99 @@
+name: production-pages-deploy
+run-name: Production Pages deploy (readiness-gated)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+concurrency:
+  group: production-pages
+  cancel-in-progress: false
+
+jobs:
+  readiness:
+    uses: ./.github/workflows/prod-gate.yml
+    secrets: inherit
+
+  build:
+    needs: readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the real Pages target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROD_DEPLOY_INTEGRATED: ${{ vars.PROD_DEPLOY_INTEGRATED }}
+          GANU_PRODUCTION_ORIGIN: ${{ vars.GANU_PRODUCTION_ORIGIN }}
+          GANU_PRODUCTION_BASE: ${{ vars.GANU_PRODUCTION_BASE }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "tgfgokay/ganu"
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$PROD_DEPLOY_INTEGRATED" = "true"
+          test "$GANU_PRODUCTION_ORIGIN" = "https://ganu.com.tr"
+          test "$GANU_PRODUCTION_BASE" = "/"
+          pages="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")"
+          test "$(jq -r .build_type <<<"$pages")" = "workflow"
+          test "$(jq -r .https_enforced <<<"$pages")" = "true"
+          test "$(jq -r .cname <<<"$pages")" = "ganu.com.tr"
+          result="$(curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --write-out '%{http_code}|%{url_effective}' --output /dev/null \
+            https://ganu.com.tr/)"
+          test "$result" = "200|https://ganu.com.tr/"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - name: Build canonical root deployment
+        working-directory: web
+        env:
+          GANU_SITE_URL: https://ganu.com.tr
+          GANU_BASE: /
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GANU_LEGAL_TRADE_NAME: ${{ vars.GANU_LEGAL_TRADE_NAME }}
+          GANU_LEGAL_ADDRESS: ${{ vars.GANU_LEGAL_ADDRESS }}
+          GANU_LEGAL_TAX_OFFICE: ${{ vars.GANU_LEGAL_TAX_OFFICE }}
+          GANU_LEGAL_TAX_NUMBER: ${{ vars.GANU_LEGAL_TAX_NUMBER }}
+          GANU_LEGAL_MERSIS_NUMBER: ${{ vars.GANU_LEGAL_MERSIS_NUMBER }}
+          GANU_LEGAL_REGISTRY_OFFICE: ${{ vars.GANU_LEGAL_REGISTRY_OFFICE }}
+          GANU_LEGAL_REGISTRY_NUMBER: ${{ vars.GANU_LEGAL_REGISTRY_NUMBER }}
+          GANU_LEGAL_EMAIL: ${{ vars.GANU_LEGAL_EMAIL }}
+          GANU_LEGAL_PHONE: ${{ vars.GANU_LEGAL_PHONE }}
+          GANU_LEGAL_APPROVED_AT: ${{ vars.GANU_LEGAL_APPROVED_AT }}
+          GANU_LEGAL_TEXT_VERSION: ${{ vars.GANU_LEGAL_TEXT_VERSION }}
+          GANU_LEGAL_RETENTION_VERSION: ${{ vars.GANU_LEGAL_RETENTION_VERSION }}
+          GANU_LEGAL_CROSS_BORDER_STATUS: ${{ vars.GANU_LEGAL_CROSS_BORDER_STATUS }}
+          GANU_LEGAL_CONSENT_FLOW_VERSION: ${{ vars.GANU_LEGAL_CONSENT_FLOW_VERSION }}
+        run: |
+          npm run build
+          test "$(cat dist/CNAME)" = "ganu.com.tr"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -14,6 +14,14 @@ declare
   v_recent int;
   v_any_owner int;
 begin
+  if not exists(select 1 from public.legal_sale_config where id=true and enabled
+    and text_version='2026-08-15.v1' and retention_version='2026-08-15.v1' and consent_flow_version='0009'
+    and cross_border_status in ('none','adequacy','appropriate-safeguards')
+    and tested_project_ref is not null and sql_proof_sha256 ~ '^[0-9a-f]{64}$' and http_proof_sha256 ~ '^[0-9a-f]{64}$'
+    and sql_tested_at is not null and http_tested_at is not null and activated_at is not null) then
+    raise exception 'PROD GATE FAIL: 0009 legal consent staging SQL/HTTP kanıtı yok veya satış config kapalı';
+  end if;
+
   select count(*) into v_any_owner
     from public.staff_roles r
     join auth.users u on u.id = r.user_id

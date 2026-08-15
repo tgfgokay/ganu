@@ -9,6 +9,9 @@
 
 import { supabase, usingSupabase } from './supabase.js'
 import { withBase } from '../../base.js'
+import { PACKAGE_PRICES } from '../../catalog.js'
+export { PACKAGE_PRICES }
+export { PACKAGES, PACKAGE_MONTHLY, PACKAGE_CUSTOM, onCatalog, loadCatalog } from '../../catalog.js'
 
 const KEY = 'ganu.panel.v1'
 
@@ -535,7 +538,9 @@ export async function customerApply(form) {
     const { data, error } = await supabase.functions.invoke('purchase-flow', { body: {
       action: 'create', title: row.title, email: row.email, phone: row.phone,
       tax_no: form.tax_no || '', tax_office: row.tax_office, package_id: form.package,
-      code: form.code || '', ref,
+      code: form.code || '', ref, legal_text_version: form.legal_text_version,
+      preinfo_accepted: form.preinfo_accepted===true,
+      early_performance_requested: form.early_performance_requested===true,
     } })
     if (error || !data?.customer || !data?.purchase_token) throw new Error(data?.error || error?.message || 'Satın alma başlatılamadı.')
     return { ...data.customer, purchase_token: data.purchase_token, quote: data.quote, expires_at: data.expires_at }
@@ -687,49 +692,6 @@ export async function withCustomerNames(rows) {
 /* ---------- sabitler ---------- */
 export const MAIL_TYPES = ['mektup', 'kargo', 'tebligat']
 export const MAIL_STATUS = ['geldi', 'bildirildi', 'teslim', 'yönlendirildi', 'imha']
-const LOCAL_PACKAGES = ['Başlangıç', 'Pro', 'Kurumsal']
-export const PACKAGES = usingSupabase ? [] : [...LOCAL_PACKAGES]
-/* Tarife (14.08.2026 güncel — pazar-arastirma/rakip-fiyat-analizi-2026-08.md)
-   KDV DAHİL. Satın alma yıllık peşin tahsil edilir (yıllık ≈ 10 aylık = 2 ay bedava).
-   Kurumsal: özel teklif — sabit fiyatı yok (taban ~29.990 ₺). */
-export const PACKAGE_MONTHLY = usingSupabase ? {} : { 'Başlangıç': 999, 'Pro': 1899 }
-export const PACKAGE_PRICES = usingSupabase ? {} : { 'Başlangıç': 9990, 'Pro': 18990 }
-export const PACKAGE_CUSTOM = new Set(usingSupabase ? [] : ['Kurumsal'])
-
-/* ---------- Fiyat kataloğu tek gerçek kaynak (P0.2/#7) ----------
-   Supabase bağlıysa fiyatlar 'packages' tablosundan okunur ve yukarıdaki
-   objeler YERİNDE güncellenir; site, checkout, panel ve POS aynı değerleri
-   kullanır. Yerel/dev modda yukarıdaki sabitler geçerlidir.
-   Bileşenler onCatalog ile abone olup katalog yüklenince yeniden render eder. */
-const _catalogSubs = new Set()
-export function onCatalog(cb) { _catalogSubs.add(cb); return () => _catalogSubs.delete(cb) }
-export async function loadCatalog() {
-  if (!usingSupabase) return false
-  const { data, error } = await supabase
-    .from('packages').select('id,name,list_amount,monthly_amount,is_custom,active,sort')
-    .eq('active', true).order('sort')
-  if (error || !Array.isArray(data) || !data.length) {
-    PACKAGES.splice(0, PACKAGES.length)
-    for (const k of Object.keys(PACKAGE_PRICES)) delete PACKAGE_PRICES[k]
-    for (const k of Object.keys(PACKAGE_MONTHLY)) delete PACKAGE_MONTHLY[k]
-    PACKAGE_CUSTOM.clear()
-    _catalogSubs.forEach((cb) => { try { cb() } catch { /* yoksay */ } })
-    return false
-  }
-  for (const k of Object.keys(PACKAGE_PRICES)) delete PACKAGE_PRICES[k]
-  for (const k of Object.keys(PACKAGE_MONTHLY)) delete PACKAGE_MONTHLY[k]
-  PACKAGE_CUSTOM.clear()
-  const names = []
-  for (const p of data) {
-    names.push(p.id)
-    if (p.is_custom || !(Number(p.list_amount) > 0)) { PACKAGE_CUSTOM.add(p.id); continue }
-    PACKAGE_PRICES[p.id] = Number(p.list_amount)
-    if (p.monthly_amount != null) PACKAGE_MONTHLY[p.id] = Number(p.monthly_amount)
-  }
-  PACKAGES.splice(0, PACKAGES.length, ...names)
-  _catalogSubs.forEach((cb) => { try { cb() } catch { /* yoksay */ } })
-  return true
-}
 /* BNI Nişantaşı kaynaklı müşteri indirimi (%). Sitede GÖRÜNMEZ; yalnız panelde,
    müşteri "BNI" işaretliyse ödeme anında uygulanır. Oran ayda bir elle gözden
    geçirilir — değişecek tek yer burası. 0 = indirim yok. */
@@ -761,7 +723,7 @@ export function invStatus(inv) {
   return inv?.status || 'bekliyor'
 }
 export const PARTNER_STATUS = ['başvuru', 'aktif', 'pasif']
-export const PARTNER_PROFESSIONS = ['Mali müşavir', 'Avukat', 'Marka & patent vekili', 'Şirket kuruluşu danışmanı', 'Diğer']
+export { PARTNER_PROFESSIONS } from '../../site/partnership.js'
 export const DOC_TYPES = [
   { v: 'imza_sirkuleri', l: 'İmza Sirküleri' },
   { v: 'vergi_levhasi', l: 'Vergi Levhası' },

@@ -34,6 +34,7 @@ Sırayla uygula (Supabase SQL editor ya da `supabase db push`):
 7. `supabase/migrations/0006_customer_portal_auth.sql` — doğrulanmış e-posta claim, JWT portal RPC ve legacy anon portal kapatma.
 8. `supabase/migrations/0007_purchase_flow.sql` — Edge-only aday/dekont, HMAC purchase token, rate-limit ve POS session binding.
 9. `supabase/migrations/0008_pos_reconciliation.sql` — callback/session terminal mutabakatı, opak dönüş tokenı ve minimal ödeme durumu.
+10. `supabase/migrations/0009_legal_consent_evidence.sql` — satış öncesi exact metin sürümü, immutable ön bilgilendirme/erken ifa kanıtı ve staging proof gate.
 
 RLS notları:
 - `packages`: anon yalnız `active` okur; yazma personel.
@@ -67,8 +68,11 @@ RLS notları:
   indirim sorgusu hata verirse **fail-closed** durur, sabit fiyat fallback'i YOKTUR.
   İstemci tutarı **yok sayılır** (istemci yalnız `package_id`+kod yollar).
 - Sipariş kaydında `price_version`, `list_amount`, `discount_code/pct`, `currency` saklanır.
-- **Kalan (cutover'da):** site/checkout/panel de `packages`'tan beslensin (şu an
-  `store.js PACKAGE_PRICES` sabit; Supabase bağlanınca tablodan okunacak biçime alınır).
+- Site ve checkout cloud modda boş/fail-closed katalogla başlar; `loadCatalog()`
+  `packages` tablosunu yükleyince `PACKAGE_PRICES` görünümünü günceller. Sorgu hatası,
+  boş/pasif katalog veya geçersiz tutarda fiyat gösterimi ve satın alma kapalı kalır.
+  Yerel sabit demo fiyatları yalnız Supabase'siz geliştirme modundadır. Panelde paket
+  seçimi aynı yüklenmiş katalog görünümünü kullanır; canlı doğrulama staging bağlantısı ister.
 
 ## 6) Bağlantı tamamlama (URL + anon key gelince)
 ```bash
@@ -81,13 +85,16 @@ supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... SITE_URL=...
 supabase secrets set PAYTR_MERCHANT_ID=... PAYTR_MERCHANT_KEY=... PAYTR_MERCHANT_SALT=... PAYTR_TEST_MODE=1
 supabase secrets set PROD_GATE_HMAC_SECRET=... # en az 32 karakter; CI secret ile aynı
 supabase secrets set PURCHASE_FLOW_SECRET=...  # >=32 rastgele; purchase-flow + pos-payment ortak
+supabase secrets set LEGAL_TEXT_VERSION=2026-08-15.v1  # purchase-flow + pos-payment exact sürüm
 supabase functions deploy purchase-flow --no-verify-jwt
 supabase functions deploy pos-payment --no-verify-jwt
 supabase functions deploy admin-gate           # JWT doğrulaması açık; --no-verify-jwt YOK
 supabase functions deploy get-file             # JWT açık; access_code dosya erişimi YOK
+supabase functions deploy send-notification    # JWT açık; panel gerçek bildirim gönderimi
+supabase functions deploy issue-einvoice       # JWT açık; panel e-belge kesimi
 # personel kullanıcısı + rolü:
 #   Auth → Users → invite;  insert into staff_roles(user_id, role) values ('<uid>','owner');
-GANU_BASE=/ganu/ npm run build   # env gömülür → usingSupabase=true
+npm run build                    # production canonical ganu.com.tr kökünde; env gömülür
 # ardından gh-pages deploy
 ```
 

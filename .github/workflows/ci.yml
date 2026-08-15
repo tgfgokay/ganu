@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Dependency audit
+        run: npm audit --audit-level=low
+
+      - name: Validate shell scripts
+        run: bash -n scripts/*.sh
+
+      - name: Readiness negative fixture
+        run: npm run test:readiness
+
+      - name: Build canonical root
+        run: npm run build
+
+      - name: Build nested Pages base
+        env:
+          GANU_BASE: /ganu/
+        run: npm run build
+
+      - name: Build production-like Supabase and legal configuration
+        run: npm run test:production-build
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check all Supabase Edge Functions
+        run: >-
+          deno check
+          supabase/functions/admin-gate/index.ts
+          supabase/functions/get-file/index.ts
+          supabase/functions/issue-einvoice/index.ts
+          supabase/functions/pos-payment/index.ts
+          supabase/functions/purchase-flow/index.ts
+          supabase/functions/send-notification/index.ts
