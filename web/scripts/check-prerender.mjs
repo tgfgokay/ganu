@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { publicConfig } from './url-config.mjs'
 
 const config=publicConfig(),dist=path.resolve('dist')
+const marketing=process.env.GANU_MARKETING_ONLY==='true'
 const {render,prerenderRoutes}=await import(`${pathToFileURL(path.resolve('dist-ssr/entry-server.js')).href}?check=${Date.now()}`)
 const routes=prerenderRoutes(),expected=new Set(routes.filter((route)=>route.indexable!==false).map((route)=>config.absolute(route.path)))
 const seenTitles=new Set(),seenDescriptions=new Set(),seenCanonicals=new Set()
@@ -68,7 +69,11 @@ for(const forbidden of ['/panel','/musteri','/ortak','/satin-al'])if([...actual]
 for(const route of routes.filter((item)=>item.indexable===false))if(actual.has(config.absolute(route.path)))throw new Error(`${route.path}: draft legal sitemapte`)
 for(const routePath of ['/panel','/musteri','/ortak','/satin-al']){
   const html=fs.readFileSync(fileFor(routePath),'utf8')
-  if(!html.includes('noindex,nofollow')||!html.includes('<div id="root"></div>'))throw new Error(`${routePath}: private shell`)
+  if(marketing){
+    const root=rootBody(html)
+    if(!html.includes('noindex,nofollow')||!html.includes('data-prerendered')||!/<h1[ >]/.test(root))throw new Error(`${routePath}: marketing closed page`)
+    if(/<(?:form|input|select|textarea)\b/i.test(root))throw new Error(`${routePath}: marketing page veri formu içeriyor`)
+  }else if(!html.includes('noindex,nofollow')||!html.includes('<div id="root"></div>'))throw new Error(`${routePath}: private shell`)
 }
 const robots=fs.readFileSync(path.join(dist,'robots.txt'),'utf8')
 if(!robots.includes(`Sitemap: ${config.absolute('/sitemap.xml')}`))throw new Error('robots sitemap')

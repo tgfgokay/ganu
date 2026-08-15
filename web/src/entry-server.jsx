@@ -5,8 +5,10 @@ import SiteRoutes from './SiteRoutes.jsx'
 import { PUBLIC_ROUTES } from './site/routes.js'
 import { blogRoutes } from './blog/content.js'
 import { LEGAL_ROUTES } from './legal/routes.js'
+import { MARKETING_ROUTES } from './marketing/routes.js'
+import { marketingOnly } from './marketing/config.js'
 
 export function render(pathname){
   return renderToString(<React.StrictMode><StaticRouter location={pathname}><SiteRoutes/></StaticRouter></React.StrictMode>)
 }
-export function prerenderRoutes(){return [...PUBLIC_ROUTES,...blogRoutes(),...LEGAL_ROUTES]}
+export function prerenderRoutes(){return [...PUBLIC_ROUTES,...blogRoutes(),...LEGAL_ROUTES,...(marketingOnly?MARKETING_ROUTES:[])]}

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { publicConfig } from './url-config.mjs'
 
-const config=publicConfig(),dist=path.resolve('dist'),ssr=path.resolve('dist-ssr/entry-server.js')
+const config=publicConfig(),dist=path.resolve('dist'),ssr=path.resolve('dist-ssr/entry-server.js'),marketing=process.env.GANU_MARKETING_ONLY==='true'
 const {render,prerenderRoutes}=await import(`${pathToFileURL(ssr).href}?v=${Date.now()}`)
 const routes=prerenderRoutes()
 const escape=(value)=>String(value).replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
@@ -54,7 +54,7 @@ for(const route of routes){
 }
 
 const privateShell=shell.replace('<title>GANU</title>','<title>GANU · Güvenli uygulama</title>\n    <meta name="robots" content="noindex,nofollow">')
-for(const routePath of ['/satin-al','/panel','/musteri','/ortak']){
+if(!marketing)for(const routePath of ['/satin-al','/panel','/musteri','/ortak']){
   const file=outFile(routePath);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,privateShell)
 }
 
@@ -77,4 +77,4 @@ fs.writeFileSync(path.join(dist,'404.html'),`<!doctype html>
 (function(){var l=window.location,k=${keep},parts=l.pathname.split('/'),base=parts.slice(0,1+k).join('/')+'/';
 l.replace(l.protocol+'//'+l.host+base+'?/'+parts.slice(1+k).join('/').replace(/&/g,'~and~')+(l.search?'&'+l.search.slice(1).replace(/&/g,'~and~'):'')+l.hash);})();
 </script><noscript><p>Bu sayfayı açmak için JavaScript gereklidir.</p></noscript></body></html>\n`)
-console.log(`prerender PASS (${routes.length} prerendered / ${indexedRoutes.length} indexed + 4 private shells, base ${config.base})`)
+console.log(`prerender PASS (${routes.length} prerendered / ${indexedRoutes.length} indexed + 4 ${marketing?'closed pages':'private shells'}, base ${config.base})`)

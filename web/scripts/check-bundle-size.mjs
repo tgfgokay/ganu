@@ -4,12 +4,14 @@ import zlib from 'node:zlib'
 
 const assets=path.resolve('dist/assets')
 const files=fs.readdirSync(assets).filter((name)=>name.endsWith('.js'))
+const marketing=process.env.GANU_MARKETING_ONLY==='true'
 const limit=500*1024
 const oversized=files.map((name)=>({name,size:fs.statSync(path.join(assets,name)).size})).filter(({size})=>size>limit)
 if(oversized.length)throw new Error(`500 KiB üstü browser chunk: ${oversized.map(({name,size})=>`${name}=${size}`).join(', ')}`)
-for(const prefix of ['react-vendor-','motion-vendor-','PanelApp-','SatinAl-','MusteriPortal-','OrtakPortal-']){
+for(const prefix of marketing?['react-vendor-','motion-vendor-']:['react-vendor-','motion-vendor-','PanelApp-','SatinAl-','MusteriPortal-','OrtakPortal-']){
   if(!files.some((name)=>name.startsWith(prefix)))throw new Error(`beklenen güvenli chunk yok: ${prefix}`)
 }
+if(marketing&&files.some((name)=>/^(?:PanelApp|SatinAl|MusteriPortal|OrtakPortal|panel|supabase-vendor)-/.test(name)))throw new Error('marketing build private/Supabase chunk içeriyor')
 if(process.env.VITE_SUPABASE_URL&&!files.some((name)=>name.startsWith('supabase-vendor-')))throw new Error('Supabase env açıkken deferred supabase-vendor chunk yok')
 
 const html=fs.readFileSync(path.resolve('dist/index.html'),'utf8')
