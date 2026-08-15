@@ -328,23 +328,24 @@ function Pricing({ t, locale }) {
   }, [])
   const tiers = buildTiers(t)
   return (
-    <section className="section" id={locale==='tr'?'paketler':'plans'}>
+    <section className="section pricing-sec" id={locale==='tr'?'paketler':'plans'}>
       <div className="wrap">
-        <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>{t.pricing.kicker}</motion.span>
-          <motion.h2 variants={rise}><RichTitle value={t.pricing.title} dot /></motion.h2>
-        </motion.div>
-
-        <motion.div className="billing" {...reveal} variants={rise}>
-          <button type="button" role="switch" aria-checked={yearly}
-            aria-label={t.pricing.toggle}
-            className={`billing-toggle${yearly ? ' on' : ''}`} onClick={() => setYearly((v) => !v)}>
-            <span className={`opt${yearly ? '' : ' active'}`}>{t.pricing.monthly}</span>
-            <span className="knob" aria-hidden="true" />
-            <span className={`opt${yearly ? ' active' : ''}`}>{t.pricing.yearly}</span>
-          </button>
-          <span className="billing-note">{locale==='tr'?<>Yıllık öde, <b>2 ay bedava</b></>:t.pricing.note}</span>
-        </motion.div>
+        <div className="pricing-head">
+          <motion.div className="shead" {...reveal} variants={stagger}>
+            <motion.span className="kicker" variants={rise}>{t.pricing.kicker}</motion.span>
+            <motion.h2 variants={rise}><RichTitle value={t.pricing.title} dot /></motion.h2>
+          </motion.div>
+          <motion.div className="billing" {...reveal} variants={rise}>
+            <button type="button" role="switch" aria-checked={yearly}
+              aria-label={t.pricing.toggle}
+              className={`billing-toggle${yearly ? ' on' : ''}`} onClick={() => setYearly((v) => !v)}>
+              <span className={`opt${yearly ? '' : ' active'}`}>{t.pricing.monthly}</span>
+              <span className="knob" aria-hidden="true" />
+              <span className={`opt${yearly ? ' active' : ''}`}>{t.pricing.yearly}</span>
+            </button>
+            <span className="billing-note">{locale==='tr'?<>Yıllık öde, <b>2 ay bedava</b></>:t.pricing.note}</span>
+          </motion.div>
+        </div>
 
         <motion.div className="tiers" {...reveal} variants={stagger}>
           {tiers.map((tier) => (
