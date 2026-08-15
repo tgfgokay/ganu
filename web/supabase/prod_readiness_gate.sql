@@ -1,0 +1,47 @@
+-- ============================================================
+-- PROD READINESS GATE — deployment'ı DURDURAN kontrol
+-- psql -v ON_ERROR_STOP=1 ile çalıştır: FAIL → non-zero exit (CI durur).
+-- ------------------------------------------------------------
+-- Zorunlu DB audit kaydı: son 24 saatte admin-gate üzerinden owner/admin RPC.
+-- Bu kayıt ayrıcalıklı SQL Editor rolü tarafından taklit edilebilir; dolayısıyla
+-- tek başına kriptografik kanıt değildir. prod-gate.sh aynı koşuda ürettiği nonce'a
+-- bağlı admin-gate HMAC imzasını DB dışında doğruladıktan sonra bu dosyayı çalıştırır.
+--   • Yalnız staff_roles kaydı YETMEZ.
+--   • Elle set edilen request.jwt.claims uygulama testinde YETMEZ.
+-- ============================================================
+do $$
+declare
+  v_recent int;
+  v_any_owner int;
+begin
+  if not exists(select 1 from public.legal_sale_config where id=true and enabled
+    and text_version='2026-08-15.v1' and retention_version='2026-08-15.v1' and consent_flow_version='0009'
+    and cross_border_status in ('none','adequacy','appropriate-safeguards')
+    and tested_project_ref is not null and sql_proof_sha256 ~ '^[0-9a-f]{64}$' and http_proof_sha256 ~ '^[0-9a-f]{64}$'
+    and sql_tested_at is not null and http_tested_at is not null and activated_at is not null) then
+    raise exception 'PROD GATE FAIL: 0009 legal consent staging SQL/HTTP kanıtı yok veya satış config kapalı';
+  end if;
+
+  select count(*) into v_any_owner
+    from public.staff_roles r
+    join auth.users u on u.id = r.user_id
+   where r.role in ('owner','admin');
+  if v_any_owner = 0 then
+    raise exception 'PROD GATE FAIL: auth.users içinde gerçek owner/admin YOK (staff_roles boş ya da uid auth.users''ta değil).';
+  end if;
+
+  select count(*) into v_recent
+    from public.prod_gate_proof p
+   where p.method = 'jwt'
+     and exists (select 1 from auth.users   u where u.id = p.uid)
+     and exists (select 1 from public.staff_roles r where r.user_id = p.uid and r.role in ('owner','admin'))
+     and p.created_at > now() - interval '24 hours';
+
+  if v_recent < 1 then
+    raise exception
+      'PROD GATE FAIL: son 24 saatte gerçek JWT ile doğrulanmış owner/admin admin-RPC kanıtı YOK. '
+      '`admin-gate` fonksiyonunu gerçek owner access-token ile çağırıp kanıt üretin.';
+  end if;
+
+  raise notice 'PROD GATE PASS: % adet geçerli (jwt) owner/admin kanıtı bulundu.', v_recent;
+end $$;

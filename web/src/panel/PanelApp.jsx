@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, NavLink, useNavigate, Navigate } from 'react-router-dom'
 import GanuMark from '../GanuMark'
+import { withBase } from '../base'
 import { getUser, login, logout, resetPassword, authMode } from './lib/auth.js'
+import { loadCatalog, onCatalog } from './lib/store.js'
 import Dashboard from './pages/Dashboard.jsx'
 import Kargo from './pages/Kargo.jsx'
 import Faturalar from './pages/Faturalar.jsx'
@@ -109,7 +111,7 @@ function Shell({ children }) {
   return (
     <div className="pl-shell">
       <aside className={`pl-side${open ? ' open' : ''}`}>
-        <a href="/" className="pl-brand"><GanuMark /><span>panel</span></a>
+        <a href={withBase("/")} className="pl-brand"><GanuMark /><span>panel</span></a>
         <nav className="pl-nav">
           {link('/panel', ICONS.grid, 'Kontrol Paneli', true)}
           {link('/panel/kargo', ICONS.box, 'Kargo & Posta')}
@@ -131,7 +133,7 @@ function Shell({ children }) {
           <button className="pl-burger" aria-label="Menü" onClick={() => setOpen((v) => !v)}>
             <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
           </button>
-          <a href="/" className="pl-back">← Siteye dön</a>
+          <a href={withBase("/")} className="pl-back">← Siteye dön</a>
         </header>
         <div className="pl-content">{children}</div>
       </div>
@@ -142,9 +144,13 @@ function Shell({ children }) {
 export default function PanelApp() {
   const [authed, setAuthed] = useState(false)
   const [checking, setChecking] = useState(true)
+  const [, setCatalogVersion] = useState(0)
   useEffect(() => {
     document.title = 'GANU · Yönetim Paneli'
+    const unsubscribe=onCatalog(()=>setCatalogVersion((version)=>version+1))
+    void loadCatalog()
     getUser().then((u) => { setAuthed(!!u); setChecking(false) })
+    return unsubscribe
   }, [])
   if (checking) return <div className="pl-login"><div className="pl-empty">Yükleniyor…</div></div>
   if (!authed) return <LoginGate onOk={() => setAuthed(true)} />

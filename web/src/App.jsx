@@ -1,7 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect, useReducer } from 'react'
+import { withBase } from './base'
 import { motion, useScroll, useSpring, useTransform, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
-import { PACKAGE_MONTHLY, PACKAGE_PRICES } from './panel/lib/store.js'
+import { PACKAGE_MONTHLY, PACKAGE_PRICES, PACKAGE_CUSTOM, loadCatalog, onCatalog, usingSupabase } from './catalog.js'
+import LanguageSwitch from './site/LanguageSwitch.jsx'
+import { tr } from './site/locales/tr.js'
+import RichTitle from './site/RichTitle.jsx'
+import LegalLinks from './legal/LegalLinks.jsx'
+import { salesEnabled } from './legal/config.js'
 
 /* ---------- motion presets ---------- */
 const rise = {
@@ -19,20 +25,6 @@ const wipe = {
   show: { scaleX: 1, transition: { duration: 0.9, ease: [0.19, 1, 0.22, 1] } },
 }
 
-/* ---------- content ---------- */
-const services = [
-  { n: '01', t: 'Yasal İş Adresi', d: 'Şirketiniz için prestijli İstanbul iş adresi — resmi kayda uygun, vergi dairesi yoklamasına hazır.' },
-  { n: '02', t: 'Posta & Kargo', d: 'Gelen evrak ve kargolarınızı teslim alır, bildirir, dilerseniz yönlendiririz.' },
-  { n: '03', t: 'Telefon Karşılama', d: 'Kurumsal numara, çağrı karşılama ve yönlendirme ile her zaman ulaşılabilir olun.' },
-  { n: '04', t: 'Toplantı Odası', d: 'Saatlik veya günlük kullanabileceğiniz, donanımlı görüşme alanı.' },
-]
-
-const steps = [
-  { n: '1', ic: 'pick', t: 'Paketini seç', d: 'İhtiyacına uygun planı dakikalar içinde belirle, online öde.' },
-  { n: '2', ic: 'docs', t: 'Evrakları ilet', d: 'Gerekli belgeleri yükle; gerisini biz takip ederiz.' },
-  { n: '3', ic: 'address', t: 'Adresin hazır', d: 'Yasal iş adresin ve hizmetlerin aktif olur, kodun panele düşer.' },
-  { n: '4', ic: 'focus', t: 'İşine odaklan', d: 'Sen işini büyüt, posta-tebligat-idari yükü bize bırak.' },
-]
 const stepIcons = {
   pick: <><path d="M9 12l2 2 4-4" /><rect x="4" y="4" width="16" height="16" rx="2.5" /></>,
   docs: <><path d="M14 3v5h5" /><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M9 13h6M9 17h4" /></>,
@@ -40,85 +32,25 @@ const stepIcons = {
   focus: <><circle cx="12" cy="12" r="7.5" /><circle cx="12" cy="12" r="2.6" /><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" /></>,
 }
 
-/* Fiyat tek kaynak: store.js PACKAGE_MONTHLY / PACKAGE_PRICES.
-   Yıllık gösterim = yıllık peşin tutarın aylık karşılığı (₺/12, yuvarlanır). */
+/* Fiyat tek kaynak: store.js PACKAGE_MONTHLY / PACKAGE_PRICES (Supabase 'packages'
+   tablosundan yüklenir). Yıllık gösterim = yıllık peşin tutarın aylık karşılığı.
+   Katalog runtime yüklendiği için tiers RENDER anında hesaplanır (buildTiers). */
 const trTL = (n) => Math.round(n).toLocaleString('tr-TR')
-const tiers = [
-  { name: 'Başlangıç', m: trTL(PACKAGE_MONTHLY['Başlangıç']), y: trTL(PACKAGE_PRICES['Başlangıç'] / 12), per: '₺ / ay', feat: false, items: ['Yasal iş adresi', 'Posta & tebligat bildirimi', 'Müşteri paneli + belge kasası', 'Aylık 2 saat toplantı odası'] },
-  { name: 'Pro', m: trTL(PACKAGE_MONTHLY['Pro']), y: trTL(PACKAGE_PRICES['Pro'] / 12), per: '₺ / ay', feat: true, items: ['Başlangıç’taki her şey', 'Telefon karşılama', 'Kargo yönlendirme (aylık 2 gönderi)', 'Aylık 8 saat toplantı odası', 'Öncelikli destek'] },
-  { name: 'Kurumsal', m: 'Teklif', y: 'Teklif', per: '', custom: true, items: ['Pro’daki her şey', 'Mali müşavir paketi', 'Sınırsız toplantı odası', 'Özel hesap yöneticisi'] },
-]
-
-const marqueeItems = ['Yasal İş Adresi', 'Posta & Kargo', 'Telefon Karşılama', 'Toplantı Odası', 'Mali Müşavir']
-
-/* Müşteri yorumları — Google değerlendirmesi görünümü.
-   ⚠️ YER TUTUCU: Yayına almadan önce GERÇEK Google/işletme yorumlarıyla
-   değiştirin (ya da Google Places API'den çekin). Uydurma yorum yayınlamak
-   yanıltıcıdır. `googleUrl`'ü kendi işletme profilinizin linkiyle güncelleyin. */
-const googleReviewUrl = 'https://www.google.com/maps' // TODO: GANU işletme profili linki
-const reviews = [
-  { name: 'Merve A.', initials: 'MA', color: '#0A7C6B', stars: 5, when: '2 hafta önce', local: true,
-    text: 'Şirketi kurarken adres derdine hiç girmedim. Kargolarım aynı gün panele düşüyor, tebligat gelince anında haber veriyorlar. Kavacık adresi de müşterilere güven veriyor.' },
-  { name: 'Kaan D.', initials: 'KD', color: '#B4530A', stars: 5, when: '1 ay önce', local: false,
-    text: 'E-ticaret için aldım. Posta yönetimi ve yönlendirme kusursuz. Panelden faturamı görüp kartla ödedim, muhasebe tarafı çok rahatladı.' },
-  { name: 'Selin I.', initials: 'SI', color: '#5B3AA6', stars: 5, when: '1 ay önce', local: true,
-    text: 'Yıllarca farklı firmalarla uğraştım, ilk kez her şey tek panelde. Yoklama gününde bile aradılar, hazırladılar. Fiyatı da bölgeye göre çok makul.' },
-  { name: 'Emre T.', initials: 'ET', color: '#0A5AA6', stars: 5, when: '2 ay önce', local: false,
-    text: 'Serbest çalışıyorum, prestijli adres lazımdı. Başvuru + ödeme 5 dakika sürdü, ertesi gün adresim hazırdı. Destek ekibi gerçekten hızlı.' },
-  { name: 'Zeynep K.', initials: 'ZK', color: '#A60A4E', stars: 5, when: '3 ay önce', local: true,
-    text: 'Belgelerim belge kasasında, sözleşmem panelde, her şey düzenli. Telefon karşılama hizmeti sayesinde tek çağrı kaçırmadım. Tavsiye ederim.' },
-  { name: 'Burak Ş.', initials: 'BŞ', color: '#0A7C6B', stars: 4, when: '3 ay önce', local: false,
-    text: 'Fiyat/performans çok iyi. Toplantı odasını da ara sıra kullanıyorum. Tek dileğim mobil uygulama olması, gerisi harika.' },
-]
-
-const faqs = [
-  {
-    q: 'Sanal ofis yasal mı? Şirketimi bu adrese kurabilir miyim?',
-    a: 'Evet. Verdiğimiz adres; ticaret sicili ve vergi dairesi kaydında iş yeri adresi olarak ' +
-      'kullanılabilen gerçek bir İstanbul iş adresidir. Kuruluş ve tescil işlemlerini mali müşavirinle ' +
-      'yürütürsün; biz adresi, yoklamaya hazır fiziki ortamı ve gerekli adres kullanım belgelerini sağlarız.',
-  },
-  {
-    q: 'Vergi dairesi yoklaması gelirse ne oluyor?',
-    a: 'Adres fiziki olarak mevcuttur ve yoklamaya hazırdır (VUK 127). Yoklama anında adreste karşılama ' +
-      'yapılır, kaydı panele işlenir. Bu, adres kaynaklı re’sen terk riskini azaltmaya yönelik idari bir ' +
-      'destektir; hukuki veya mali danışmanlık ya da kesin sonuç garantisi değildir.',
-  },
-  {
-    q: 'Postam ve kargolarım bana nasıl ulaşıyor?',
-    a: 'Gelen evrak ve kargo teslim alınır, aynı gün panele işlenir ve sana bildirilir. Dilersen gel-al, ' +
-      'dilersen belirttiğin adrese yönlendirme yaparız; yönlendirmede kargo takip numarası da panele düşer.',
-  },
-  {
-    q: 'Adres ne kadar sürede aktif olur?',
-    a: 'Gerekli belgeler tamamlandığında adresin çoğu durumda 1 iş günü içinde kullanıma hazır olur. ' +
-      'Paket seçimi, evrak iletimi ve aktivasyon adımlarını “Süreç” bölümünde adım adım görebilirsin.',
-  },
-  {
-    q: 'Hangi belgeler gerekiyor? Şahıs şirketi de kullanabilir mi?',
-    a: 'Genellikle kimlik, (varsa) şirket bilgileri ve adres kullanımına dair imzalı belgeler yeterlidir. ' +
-      'Net ihtiyaç listesini ilk görüşmede iletiriz. Limited/anonim şirketlerin yanı sıra şahıs şirketleri ' +
-      've serbest meslek erbabı da yararlanabilir.',
-  },
-  {
-    q: 'Sözleşme süresi ve iptal nasıl işliyor?',
-    a: 'Paketler aylık veya yıllık seçilebilir; yıllık ödemede iki ay avantajlıdır. Yenileme tarihleri ' +
-      'panelde takip edilir ve öncesinde hatırlatılır. Koşulların ayrıntısını sözleşmede şeffaf biçimde paylaşırız.',
-  },
-  {
-    q: 'Kira stopajı ödeyecek miyim?',
-    a: 'Hayır. Hizmeti şirketimizden KDV’li fatura karşılığı aldığınız için, gerçek kişiden ofis ' +
-      'kiralamadaki gibi aylık kira stopajı beyan etme yükümlülüğünüz doğmaz. Faturayı doğrudan gider ' +
-      'yazarsınız — muhasebeniz sadeleşir. (Kendi durumunuz için mali müşavirinize danışmanızı öneririz.)',
-  },
-]
-
-const trust = [
-  { icon: 'pin', t: 'Gerçek fiziki adres', d: 'Kavacık’ta tabelası, katı ve kapı numarasıyla var olan bir ofis — yoklamaya hazır. Sanal, ama hayali değil.' },
-  { icon: 'log', t: 'Her şey kayıt altında', d: 'Gelen posta, tebligat, kargo ve yoklama; tarih-saatiyle tek panele işlenir. Dilediğinde geçmişe bakarsın.' },
-  { icon: 'shield', t: 'Belgelerin güvende', d: 'Erişim kodlu müşteri paneli ve belge kasası; kayıtların yalnızca sana görünür, KVKK’ya uygun saklanır.' },
-  { icon: 'user', t: 'Tek muhatap', d: 'Farklı firmalarla değil, tek ekiple çalışırsın; adres, posta ve idari işler tek elden yürür.' },
-]
+function buildTiers(t) {
+  return [
+    { name: 'Başlangıç', feat: false },
+    { name: 'Pro', feat: true },
+    { name: 'Kurumsal', feat: false },
+  ].map(({ name, feat }) => {
+    if (usingSupabase && PACKAGE_PRICES[name] == null && !PACKAGE_CUSTOM.has(name)) {
+      return { name, m: t.pricing.loadError, y: t.pricing.loadError, per: '', unavailable: true, items: t.pricing.items[name] || [] }
+    }
+    const custom = PACKAGE_CUSTOM.has(name) || PACKAGE_PRICES[name] == null
+    return custom
+      ? { name, m: t.pricing.quoteWord, y: t.pricing.quoteWord, per: '', custom: true, items: t.pricing.items[name] || [] }
+      : { name, m: trTL(PACKAGE_MONTHLY[name]), y: trTL(PACKAGE_PRICES[name] / 12), per: t.pricing.perMonth, feat, items: t.pricing.items[name] || [] }
+  })
+}
 
 const trustIcons = {
   pin: <><path d="M12 21s-6-5.2-6-10a6 6 0 1 1 12 0c0 4.8-6 10-6 10Z" /><circle cx="12" cy="11" r="2.3" /></>,
@@ -139,7 +71,7 @@ function ScrollBar() {
   )
 }
 
-function Nav() {
+function Nav({ t, locale }) {
   const [open, setOpen] = useState(false)
   const close = () => setOpen(false)
   return (
@@ -148,24 +80,26 @@ function Nav() {
       transition={{ duration: 0.7, ease: [0.19, 1, 0.22, 1] }}>
       <div className="wrap mast-inner">
         <a href="#top" className="wordmark" onClick={close} aria-label="GANU — ana sayfa"><GanuMark /></a>
-        <span className="mast-meta">Sanal Ofis · İstanbul</span>
-        <button className="nav-toggle" aria-label={open ? 'Menüyü kapat' : 'Menüyü aç'}
+        <span className="mast-meta">{t.meta}</span>
+        <button className="nav-toggle" aria-label={open ? t.chrome.closeMenu : t.chrome.openMenu}
           aria-expanded={open} aria-controls="nav-links" onClick={() => setOpen((v) => !v)}>
           {open
             ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
             : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>}
         </button>
         <div className={`links${open ? ' open' : ''}`} id="nav-links">
-          <a href="#hizmetler" onClick={close}>Hizmetler</a>
-          <a href="#nasil" onClick={close}>Süreç</a>
-          <a href="#paketler" onClick={close}>Paketler</a>
-          <a href="/is-ortakligi" onClick={close}>İş Ortaklığı</a>
-          <a href="/musteri" className="mast-login" onClick={close} aria-label="Müşteri girişi">
+          <a href={`#${locale==='tr'?'hizmetler':'services'}`} onClick={close}>{t.chrome.services}</a>
+          <a href={`#${locale==='tr'?'nasil':'process'}`} onClick={close}>{t.chrome.process}</a>
+          <a href={`#${locale==='tr'?'paketler':'plans'}`} onClick={close}>{t.chrome.plans}</a>
+          <a href={withBase(locale==='tr'?'/blog':'/en/blog')} onClick={close}>{t.chrome.blog}</a>
+          <a href={withBase(locale==='tr'?'/is-ortakligi':'/en/partnership')} onClick={close}>{t.chrome.partnership}</a>
+          {locale==='tr'&&<a href={withBase("/musteri")} className="mast-login" onClick={close} aria-label="Müşteri girişi">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 5 }}>
               <circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
-            </svg>Giriş
-          </a>
-          <a href="/satin-al" className="mast-cta" onClick={close}>Satın al →</a>
+            </svg>{t.chrome.customerLogin}
+          </a>}
+          {locale==='tr'?<a href={withBase(salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali')} className="mast-cta" onClick={close}>{salesEnabled?t.chrome.buy:'Satış hazırlıkta'} →</a>:<a href="mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote" className="mast-cta" onClick={close}>{t.chrome.buy} →</a>}
+          <LanguageSwitch locale={locale}/>
         </div>
       </div>
     </motion.nav>
@@ -260,7 +194,7 @@ function HeroPlate() {
   )
 }
 
-function Hero() {
+function Hero({ t, locale }) {
   return (
     <header className="hero hero--photo" id="top">
       <div className="hero-photo" aria-hidden="true" />
@@ -268,30 +202,27 @@ function Hero() {
       <div className="wrap">
         <motion.div className="hero-rule top" variants={wipe} initial="hidden" animate="show" aria-hidden="true" />
         <div className="hero-topline">
-          <motion.span variants={rise} initial="hidden" animate="show">Sayı 01 — İstanbul</motion.span>
-          <motion.span variants={rise} initial="hidden" animate="show" custom={1}>Anahtar teslim idari sekreterya</motion.span>
+          <motion.span variants={rise} initial="hidden" animate="show">{t.hero.eyebrow}</motion.span>
+          <motion.span variants={rise} initial="hidden" animate="show" custom={1}>{t.hero.eyebrow2}</motion.span>
         </div>
 
         <motion.h1 className="hero-title" variants={stagger} initial="hidden" animate="show">
-          <motion.span className="line" variants={rise}>Adresin</motion.span>
-          <motion.span className="line ital" variants={rise}>hazır,</motion.span>
-          <motion.span className="line" variants={rise}>gerisi bizde<span className="dot">.</span></motion.span>
+          <motion.span className="line" variants={rise}>{t.hero.lines[0]}</motion.span>
+          <motion.span className="line ital" variants={rise}>{t.hero.lines[1]}</motion.span>
+          <motion.span className="line" variants={rise}>{t.hero.lines[2]}<span className="dot">.</span></motion.span>
         </motion.h1>
 
         <div className="hero-foot">
           <motion.p className="lead" variants={rise} initial="hidden" animate="show" custom={2}>
-            Şirketine prestijli bir İstanbul iş adresi; posta yönetiminden telefon karşılamaya,
-            toplantı odasından tüm idari sürece kadar her şey tek elden yürütülür.
+            {t.hero.lead}
           </motion.p>
           <motion.div className="hero-side" variants={rise} initial="hidden" animate="show" custom={3}>
             <div className="hero-cta">
-              <a href="#paketler" className="btn btn-solid">Paketleri gör →</a>
-              <a href="#iletisim" className="btn btn-line">Bizimle görüş</a>
+              <a href={`#${locale==='tr'?'paketler':'plans'}`} className="btn btn-solid">{t.hero.primary} →</a>
+              <a href={`#${locale==='tr'?'iletisim':'contact'}`} className="btn btn-line">{t.hero.secondary}</a>
             </div>
             <dl className="stats">
-              <div><dt>1 gün</dt><dd>adres aktivasyonu</dd></div>
-              <div><dt>Tek elden</dt><dd>posta & takip</dd></div>
-              <div><dt>Beykoz</dt><dd>Kavacık / İstanbul</dd></div>
+              {t.hero.stats.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
             </dl>
           </motion.div>
         </div>
@@ -301,8 +232,8 @@ function Hero() {
   )
 }
 
-function Marquee() {
-  const row = [...marqueeItems, ...marqueeItems]
+function Marquee({ t }) {
+  const row = [...t.marquee, ...t.marquee]
   return (
     <div className="marquee" aria-hidden="true">
       <div className="marquee-track">
@@ -314,20 +245,20 @@ function Marquee() {
   )
 }
 
-function Services() {
+function Services({ t, locale }) {
   return (
-    <section className="section" id="hizmetler">
+    <section className="section" id={locale==='tr'?'hizmetler':'services'}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>İçindekiler — Hizmetler</motion.span>
-          <motion.h2 variants={rise}>Bir işletmenin ihtiyacı olan<br /><em>her şey</em>, tek çatı altında<span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{t.servicesKicker}</motion.span>
+          <motion.h2 variants={rise}><RichTitle value={t.servicesTitle} dot /></motion.h2>
         </motion.div>
         <motion.ol className="index" {...reveal} variants={stagger}>
-          {services.map((s) => (
-            <motion.li className="index-row" key={s.n} variants={rise}>
-              <span className="idx-num">{s.n}</span>
-              <h3 className="idx-title">{s.t}</h3>
-              <p className="idx-desc">{s.d}</p>
+          {t.services.map(([title,desc],i) => (
+            <motion.li className="index-row" key={title} variants={rise}>
+              <span className="idx-num">{String(i+1).padStart(2,'0')}</span>
+              <h3 className="idx-title">{title}</h3>
+              <p className="idx-desc">{desc}</p>
             </motion.li>
           ))}
         </motion.ol>
@@ -336,25 +267,24 @@ function Services() {
   )
 }
 
-function Steps() {
+function Steps({ t, locale }) {
   return (
-    <section className="section dark" id="nasil">
+    <section className="section dark" id={locale==='tr'?'nasil':'process'}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Süreç</motion.span>
-          <motion.h2 variants={rise}>Dört adımda<br />iş adresin hazır<span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{t.processKicker}</motion.span>
+          <motion.h2 variants={rise}><RichTitle value={t.processTitle} dot /></motion.h2>
         </motion.div>
         <motion.div className="flow" {...reveal} variants={stagger}>
           <motion.span className="flow-rail" variants={wipe} aria-hidden="true" />
-          {steps.map((s) => (
-            <motion.div className="flow-step" key={s.n} variants={rise}>
+          {t.steps.map(([ic,title,desc],i) => (
+            <motion.div className="flow-step" key={title} variants={rise}>
               <div className="flow-node">
-                <svg className="flow-ic" viewBox="0 0 24 24" aria-hidden="true">{stepIcons[s.ic]}</svg>
-                <span className="flow-n">{s.n}</span>
+                <svg className="flow-ic" viewBox="0 0 24 24" aria-hidden="true">{stepIcons[ic]}</svg>
+                <span className="flow-n">{i+1}</span>
               </div>
               <div className="flow-body">
-                <h3>{s.t}</h3>
-                <p>{s.d}</p>
+                <h3>{title}</h3><p>{desc}</p>
               </div>
             </motion.div>
           ))}
@@ -364,20 +294,19 @@ function Steps() {
   )
 }
 
-function Trust() {
+function Trust({ t }) {
   return (
     <section className="section" id="guven">
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Güvence — Neden GANU</motion.span>
-          <motion.h2 variants={rise}>Görünürde adres değil,<br /><em>gerçek</em> bir ofis<span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{t.trustKicker}</motion.span>
+          <motion.h2 variants={rise}><RichTitle value={t.trustTitle} dot /></motion.h2>
         </motion.div>
         <motion.div className="trust" {...reveal} variants={stagger}>
-          {trust.map((p) => (
-            <motion.div className="trust-item" key={p.t} variants={rise}>
-              <svg className="trust-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none">{trustIcons[p.icon]}</svg>
-              <h3>{p.t}</h3>
-              <p>{p.d}</p>
+          {t.trust.map(([icon,title,desc]) => (
+            <motion.div className="trust-item" key={title} variants={rise}>
+              <svg className="trust-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none">{trustIcons[icon]}</svg>
+              <h3>{title}</h3><p>{desc}</p>
             </motion.div>
           ))}
         </motion.div>
@@ -386,50 +315,57 @@ function Trust() {
   )
 }
 
-function Pricing() {
+function Pricing({ t, locale }) {
   const [yearly, setYearly] = useState(false)
+  const [, bumpCatalog] = useReducer((x) => x + 1, 0)
+  useEffect(() => {
+    const unsubscribe=onCatalog(bumpCatalog); void loadCatalog()
+    return unsubscribe
+  }, [])
+  const tiers = buildTiers(t)
   return (
-    <section className="section" id="paketler">
+    <section className="section" id={locale==='tr'?'paketler':'plans'}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Fiyat Cetveli — Paketler</motion.span>
-          <motion.h2 variants={rise}>Şeffaf, sade<br /><em>fiyatlandırma</em><span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{t.pricing.kicker}</motion.span>
+          <motion.h2 variants={rise}><RichTitle value={t.pricing.title} dot /></motion.h2>
         </motion.div>
 
         <motion.div className="billing" {...reveal} variants={rise}>
           <button type="button" role="switch" aria-checked={yearly}
-            aria-label="Yıllık faturalandırmaya geç"
+            aria-label={t.pricing.toggle}
             className={`billing-toggle${yearly ? ' on' : ''}`} onClick={() => setYearly((v) => !v)}>
-            <span className={`opt${yearly ? '' : ' active'}`}>Aylık</span>
+            <span className={`opt${yearly ? '' : ' active'}`}>{t.pricing.monthly}</span>
             <span className="knob" aria-hidden="true" />
-            <span className={`opt${yearly ? ' active' : ''}`}>Yıllık</span>
+            <span className={`opt${yearly ? ' active' : ''}`}>{t.pricing.yearly}</span>
           </button>
-          <span className="billing-note">Yıllık öde, <b>2 ay bedava</b></span>
+          <span className="billing-note">{locale==='tr'?<>Yıllık öde, <b>2 ay bedava</b></>:t.pricing.note}</span>
         </motion.div>
 
         <motion.div className="tiers" {...reveal} variants={stagger}>
-          {tiers.map((t) => (
-            <motion.div className={`tier${t.feat ? ' feat' : ''}`} key={t.name} variants={rise}>
+          {tiers.map((tier) => (
+            <motion.div className={`tier${tier.feat ? ' feat' : ''}`} key={tier.name} variants={rise}>
               <div className="tier-head">
-                <h3>{t.name}</h3>
-                {t.feat && <span className="tag">En popüler</span>}
+                <h3>{t.pricing.names[tier.name]}</h3>
+                {tier.feat && <span className="tag">{t.pricing.popular}</span>}
               </div>
               <div className="price">
-                {t.custom
-                  ? <span className="price-word">{t.m}</span>
-                  : <><span className="price-num">{yearly ? t.y : t.m}</span><span className="price-per">{t.per}</span></>}
+                {tier.custom || tier.unavailable
+                  ? <span className="price-word">{tier.m}</span>
+                  : <><span className="price-num">{yearly ? tier.y : tier.m}</span><span className="price-per">{tier.per}</span></>}
               </div>
               <div className="price-sub">
-                {t.custom ? 'ihtiyaca göre fiyat' : yearly ? 'yıllık faturalandırılır' : 'aylık faturalandırılır'}
+                {tier.unavailable ? t.pricing.catalog : tier.custom ? t.pricing.custom : yearly ? t.pricing.annual : t.pricing.monthlyBill}
               </div>
               <ul>
-                {t.items.map((i) => (
+                {tier.items.map((i) => (
                   <li key={i}><Check /><span>{i}</span></li>
                 ))}
               </ul>
-              <a href={`/satin-al?paket=${encodeURIComponent(t.name)}`} className={`btn ${t.feat ? 'btn-solid' : 'btn-line'}`}>
-                {t.custom ? 'Teklif al →' : 'Satın al →'}
-              </a>
+              {tier.unavailable
+                ? <span className="btn btn-line" aria-disabled="true">{t.pricing.unavailable}</span>
+                : locale==='tr'?<a href={withBase(salesEnabled?`/satin-al?paket=${encodeURIComponent(tier.name)}`:'/mesafeli-satis#satis-kapali')} className={`btn ${tier.feat ? 'btn-solid' : 'btn-line'}`}>{salesEnabled?(tier.custom?t.pricing.quote:t.pricing.purchase):'Satış hazırlıkta'} →</a>
+                :<a href={`mailto:merhaba@ganu.com.tr?subject=${encodeURIComponent(`Quote: ${t.pricing.names[tier.name]}`)}`} className={`btn ${tier.feat?'btn-solid':'btn-line'}`}>{t.pricing.quote} →</a>}
             </motion.div>
           ))}
         </motion.div>
@@ -438,29 +374,29 @@ function Pricing() {
   )
 }
 
-function Faq() {
+function Faq({ t, locale }) {
   const [open, setOpen] = useState(0)
   return (
-    <section className="section" id="sss">
+    <section className="section" id={locale==='tr'?'sss':'faq'}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Sık Sorulanlar — SSS</motion.span>
-          <motion.h2 variants={rise}>Aklındaki sorular,<br /><em>net</em> yanıtlar<span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{t.faqKicker}</motion.span>
+          <motion.h2 variants={rise}><RichTitle value={t.faqTitle} dot /></motion.h2>
         </motion.div>
         <motion.div className="faq" {...reveal} variants={stagger}>
-          {faqs.map((f, i) => {
+          {t.faqs.map(([q,a], i) => {
             const isOpen = open === i
             return (
-              <motion.div className={`faq-item${isOpen ? ' open' : ''}`} key={f.q} variants={rise}>
+              <motion.div className={`faq-item${isOpen ? ' open' : ''}`} key={q} variants={rise}>
                 <h3>
                   <button type="button" className="faq-q" aria-expanded={isOpen}
                     aria-controls={`faq-a-${i}`} onClick={() => setOpen(isOpen ? -1 : i)}>
-                    <span className="faq-qt">{f.q}</span>
+                    <span className="faq-qt">{q}</span>
                     <span className="faq-ico" aria-hidden="true" />
                   </button>
                 </h3>
                 <div className="faq-a" id={`faq-a-${i}`} role="region">
-                  <p>{f.a}</p>
+                  <p>{a}</p>
                 </div>
               </motion.div>
             )
@@ -471,16 +407,16 @@ function Faq() {
   )
 }
 
-function CtaBand() {
+function CtaBand({ t, locale }) {
   return (
-    <section className="section cta-sec" id="iletisim">
+    <section className="section cta-sec" id={locale==='tr'?'iletisim':'contact'}>
       <div className="wrap">
         <motion.div className="cta-band" {...reveal} variants={stagger}>
-          <motion.h2 variants={rise}>Şirketine<br /><em>prestijli</em> bir adres<span className="dot">.</span></motion.h2>
-          <motion.p variants={rise}>Bugün başla; yasal adresin yarın hazır. 30 saniyede satın al, evrakları biz takip edelim.</motion.p>
-          <motion.a variants={rise} href="/satin-al" className="btn btn-solid big">Satın almaya başla →</motion.a>
+          <motion.h2 variants={rise}><RichTitle value={t.cta.title} dot /></motion.h2>
+          <motion.p variants={rise}>{t.cta.text}</motion.p>
+          <motion.a variants={rise} href={locale==='tr'?withBase(salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali'):'mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote'} className="btn btn-solid big">{locale==='tr'&&!salesEnabled?'Satış hazırlıkta':t.cta.button} →</motion.a>
           <motion.p variants={rise} style={{ marginTop: 12, fontSize: 14, opacity: 0.75 }}>
-            Sorunuz mu var? <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a>
+            {t.cta.question} <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a>
           </motion.p>
         </motion.div>
       </div>
@@ -488,44 +424,40 @@ function CtaBand() {
   )
 }
 
-function Footer() {
+function Footer({ t, locale }) {
   return (
     <footer className="colophon">
       <div className="wrap">
         <div className="colo-mark"><GanuMark /></div>
         <div className="colo-grid">
           <div className="colo-lead">
-            <p>Anahtar teslim sanal ofis &amp; idari sekreterya. Adresin hazır, gerisi bizde.</p>
+            <p>{t.footer.lead}</p>
           </div>
           <div>
-            <h4>Hizmetler</h4>
+            <h4>{t.chrome.services}</h4>
             <ul>
-              <li><a href="#hizmetler">Yasal adres</a></li>
-              <li><a href="#hizmetler">Posta yönetimi</a></li>
-              <li><a href="#hizmetler">Telefon karşılama</a></li>
-              <li><a href="#hizmetler">Toplantı odası</a></li>
+              {t.services.map(([x])=><li key={x}><a href={`#${locale==='tr'?'hizmetler':'services'}`}>{x}</a></li>)}
             </ul>
           </div>
           <div>
-            <h4>İş Ortaklığı</h4>
+            <h4>{t.chrome.partnership}</h4>
             <ul>
-              <li><a href="/is-ortakligi">Ortak ol · komisyon</a></li>
-              <li><a href="/ortak">Ortak girişi</a></li>
-              <li><a href="/avukat">Avukatlar için</a></li>
-              <li><a href="/mali-musavir">Mali müşavirler için</a></li>
+              <li><a href={withBase(locale==='tr'?'/is-ortakligi':'/en/partnership')}>{locale==='tr'?'Ortak ol · komisyon':'Referral programme'}</a></li>
+              <li><a href={withBase(locale==='tr'?'/avukat':'/en/lawyers')}>{locale==='tr'?'Avukatlar için':'For law firms'}</a></li>
+              <li><a href={withBase(locale==='tr'?'/mali-musavir':'/en/accountants')}>{locale==='tr'?'Mali müşavirler için':'For accountants & advisers'}</a></li>
+              <li><a href={withBase(locale==='tr'?'/blog':'/en/blog')}>{t.chrome.blog}</a></li>
             </ul>
           </div>
           <div>
-            <h4>Kurumsal</h4>
+            <h4>{locale==='tr'?'Kurumsal':'Company'}</h4>
             <ul>
-              <li><a href="/musteri"><b>Müşteri girişi</b></a></li>
-              <li><a href="/satin-al">Satın al</a></li>
-              <li><a href="#paketler">Paketler</a></li>
-              <li><a href="#sss">SSS</a></li>
+              {locale==='tr'&&<li><a href={withBase('/musteri')}><b>{t.chrome.customerLogin}</b></a></li>}
+              <li><a href={`#${locale==='tr'?'paketler':'plans'}`}>{t.chrome.plans}</a></li>
+              <li><a href={`#${locale==='tr'?'sss':'faq'}`}>{locale==='tr'?'SSS':'FAQ'}</a></li>
             </ul>
           </div>
           <div>
-            <h4>İletişim</h4>
+            <h4>{t.chrome.contact}</h4>
             <ul>
               <li>Kavacık Mah. Okul Cad.</li>
               <li>No:29 · Beykoz / İstanbul</li>
@@ -535,99 +467,29 @@ function Footer() {
           </div>
         </div>
         <p className="colo-legal">
-          Yoklama, tebligat ve re’sen terk süreçlerine ilişkin hizmetlerimiz idari destek ve fiziki iş adresi
-          sağlama niteliğindedir; hukuki veya mali danışmanlık hizmeti ya da kesin sonuç garantisi içermez.
+          {t.footer.legal}
         </p>
+        <LegalLinks locale={locale}/>
         <div className="colo-bottom">
-          <span>© {new Date().getFullYear()} GANU · Sanal Ofis · İstanbul</span>
-          <span>Tüm hakları saklıdır.</span>
+          <span>© {new Date().getFullYear()} GANU · {t.meta}</span><LanguageSwitch locale={locale}/>
+          <span>{t.chrome.rights}</span>
         </div>
       </div>
     </footer>
   )
 }
 
-/* Google "G" logo — inline, çok renkli */
-const GoogleG = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
-    <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z" />
-    <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z" />
-    <path fill="#FBBC05" d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24s.85 6.91 2.34 9.88l7.35-5.7z" />
-    <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z" />
-  </svg>
-)
-const Stars = ({ n = 5, size = 15 }) => (
-  <span aria-label={`${n} / 5 yıldız`} style={{ display: 'inline-flex', gap: 1 }}>
-    {[1, 2, 3, 4, 5].map((i) => (
-      <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
-        fill={i <= n ? '#FBBC05' : '#dbe2ea'}>
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-      </svg>
-    ))}
-  </span>
-)
-
-function ReviewCard({ r }) {
-  return (
-    <figure className="rv-card">
-      <div className="rv-top">
-        <span className="rv-av" style={{ background: r.color }}>{r.initials}</span>
-        <div className="rv-who">
-          <figcaption className="rv-name">{r.name}</figcaption>
-          <span className="rv-meta">{r.local ? 'Yerel Rehber · ' : ''}{r.when}</span>
-        </div>
-        <span className="rv-g" title="Google değerlendirmesi"><GoogleG /></span>
-      </div>
-      <Stars n={r.stars} />
-      <blockquote className="rv-text">{r.text}</blockquote>
-    </figure>
-  )
-}
-
-function Reviews() {
-  const loop = [...reviews, ...reviews] // kesintisiz kayış için iki kopya
-  const avg = (reviews.reduce((s, r) => s + r.stars, 0) / reviews.length).toFixed(1)
-  return (
-    <section className="section reviews-sec" id="yorumlar" aria-label="Müşteri yorumları">
-      <div className="wrap">
-        <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Müşteri Deneyimi</motion.span>
-          <motion.h2 variants={rise}>Kullananlar ne diyor<span className="dot">?</span></motion.h2>
-        </motion.div>
-        <motion.a className="rv-rating" href={googleReviewUrl} target="_blank" rel="noreferrer" {...reveal} variants={rise}>
-          <GoogleG size={22} />
-          <b>{avg}</b>
-          <Stars n={Math.round(avg)} size={17} />
-          <span className="rv-rating-meta">Google değerlendirmeleri · <span className="rv-link">Yorum yaz →</span></span>
-        </motion.a>
-      </div>
-      <div className="rv-marquee" aria-hidden="false">
-        <div className="rv-track">
-          {loop.map((r, i) => <ReviewCard key={i} r={r} />)}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-export default function App() {
+export default function App({ content=tr, locale='tr' }) {
+  const t={...content.home,chrome:content.chrome}
   return (
     <MotionConfig reducedMotion="user">
-      <a href="#hizmetler" className="skip">İçeriğe geç</a>
+      <a href={`#${locale==='tr'?'hizmetler':'services'}`} className="skip">{content.chrome.skip}</a>
       <ScrollBar />
-      <Nav />
+      <Nav t={t} locale={locale}/>
       <main>
-        <Hero />
-        <Marquee />
-        <Services />
-        <Steps />
-        <Trust />
-        <Reviews />
-        <Pricing />
-        <Faq />
-        <CtaBand />
+        <Hero t={t} locale={locale}/><Marquee t={t}/><Services t={t} locale={locale}/><Steps t={t} locale={locale}/><Trust t={t}/><Pricing t={t} locale={locale}/><Faq t={t} locale={locale}/><CtaBand t={t} locale={locale}/>
       </main>
-      <Footer />
+      <Footer t={t} locale={locale}/>
     </MotionConfig>
   )
 }

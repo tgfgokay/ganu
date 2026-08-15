@@ -1,0 +1,58 @@
+name: prod-readiness-check
+run-name: Production readiness check (deployment yapmaz)
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch: {}
+  workflow_call: {}
+
+jobs:
+  gate:
+    name: Readiness gate (deploy entegrasyonu gerekli)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require real production deploy integration
+        env:
+          PROD_DEPLOY_INTEGRATED: ${{ vars.PROD_DEPLOY_INTEGRATED }}
+        run: |
+          if [ "$PROD_DEPLOY_INTEGRATED" != "true" ]; then
+            echo "::error::Bu repoda production deploy job'ı gate'e bağlı değil. Readiness PASS/deploy engelleme iddiası geçersiz; entegrasyon tamamlanana kadar hard-fail."
+            exit 4
+          fi
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Production readiness gate
+        env:
+          DB_URL: ${{ secrets.PROD_DB_URL }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          GANU_STAGING_PROJECT_REF: ${{ vars.GANU_STAGING_PROJECT_REF }}
+          ADMIN_GATE_URL: https://${{ vars.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/admin-gate
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROD_OWNER_ACCESS_TOKEN: ${{ secrets.PROD_OWNER_ACCESS_TOKEN }}
+          PROD_GATE_HMAC_SECRET: ${{ secrets.PROD_GATE_HMAC_SECRET }}
+          # Tescil belgesi + avukat onayıyla doğrulanan PUBLIC kurumsal kimlik.
+          # Biri eksikse web/scripts/check-legal-readiness.mjs hard-fail eder.
+          GANU_LEGAL_TRADE_NAME: ${{ vars.GANU_LEGAL_TRADE_NAME }}
+          GANU_LEGAL_ADDRESS: ${{ vars.GANU_LEGAL_ADDRESS }}
+          GANU_LEGAL_TAX_OFFICE: ${{ vars.GANU_LEGAL_TAX_OFFICE }}
+          GANU_LEGAL_TAX_NUMBER: ${{ vars.GANU_LEGAL_TAX_NUMBER }}
+          GANU_LEGAL_MERSIS_NUMBER: ${{ vars.GANU_LEGAL_MERSIS_NUMBER }}
+          GANU_LEGAL_REGISTRY_OFFICE: ${{ vars.GANU_LEGAL_REGISTRY_OFFICE }}
+          GANU_LEGAL_REGISTRY_NUMBER: ${{ vars.GANU_LEGAL_REGISTRY_NUMBER }}
+          GANU_LEGAL_EMAIL: ${{ vars.GANU_LEGAL_EMAIL }}
+          GANU_LEGAL_PHONE: ${{ vars.GANU_LEGAL_PHONE }}
+          GANU_LEGAL_APPROVED_AT: ${{ vars.GANU_LEGAL_APPROVED_AT }}
+          GANU_LEGAL_TEXT_VERSION: ${{ vars.GANU_LEGAL_TEXT_VERSION }}
+          GANU_LEGAL_RETENTION_VERSION: ${{ vars.GANU_LEGAL_RETENTION_VERSION }}
+          GANU_LEGAL_CROSS_BORDER_STATUS: ${{ vars.GANU_LEGAL_CROSS_BORDER_STATUS }}
+          GANU_LEGAL_CONSENT_FLOW_VERSION: ${{ vars.GANU_LEGAL_CONSENT_FLOW_VERSION }}
+          LEGAL_SQL_PROOF_SHA256: ${{ secrets.LEGAL_SQL_PROOF_SHA256 }}
+          LEGAL_HTTP_PROOF_SHA256: ${{ secrets.LEGAL_HTTP_PROOF_SHA256 }}
+        run: bash web/scripts/prod-gate.sh

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { mail, customers, withCustomerNames, notifyEvent, fileToStoredUrl, trackingUrl, MAIL_TYPES, MAIL_STATUS, CARRIERS } from '../lib/store.js'
+import { SecureImage } from '../components/SecureAsset.jsx'
 import { Modal, StatusBadge, TypeBadge, fmtDate } from './_ui.jsx'
 
 const emptyForm = () => ({
@@ -108,7 +109,7 @@ export default function Kargo() {
               <tr key={r.id}>
                 <td>
                   {r.photo_url
-                    ? <img src={r.photo_url} alt="" className="pl-thumb" onClick={() => setLightbox(r.photo_url)} />
+                    ? <SecureImage stored={r.photo_url} alt="" className="pl-thumb" onClick={(e) => setLightbox(e.currentTarget.src)} />
                     : <span className="pl-thumb pl-thumb-empty">—</span>}
                 </td>
                 <td>
@@ -170,7 +171,7 @@ function KargoForm({ modal, custs, onClose, onSave }) {
     if (!file) return
     setBusy(true)
     try {
-      const url = await fileToStoredUrl(file, { maxW: 1000, quality: 0.6 })
+      const url = await fileToStoredUrl(file, { maxW: 1000, quality: 0.6, prefix: 'mail', customerId: f.customer_id })
       set('photo_url', url)
     } catch { alert('Fotoğraf yüklenemedi.') }
     setBusy(false)
@@ -262,7 +263,7 @@ function KargoForm({ modal, custs, onClose, onSave }) {
           <input type="file" accept="image/*" onChange={onPhoto} />
           {f.photo_url && (
             <div className="pl-photo-preview">
-              <img src={f.photo_url} alt="Önizleme" />
+              <SecureImage stored={f.photo_url} alt="Önizleme" />
               <button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => set('photo_url', '')}>Kaldır</button>
             </div>
           )}

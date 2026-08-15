@@ -1,29 +1,19 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import App from './App.jsx'
-import Avukat from './Avukat.jsx'
-import MaliMusavir from './MaliMusavir.jsx'
-import IsOrtakligi from './IsOrtakligi.jsx'
-import SatinAl from './SatinAl.jsx'
-import PanelApp from './panel/PanelApp.jsx'
-import MusteriPortal from './panel/MusteriPortal.jsx'
-import OrtakPortal from './panel/OrtakPortal.jsx'
+import { BrowserRouter } from 'react-router-dom'
+import SiteRoutes from './SiteRoutes.jsx'
 import './index.css'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+const root=document.getElementById('root')
+const tree=(
   <React.StrictMode>
     <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '') || '/'}>
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/avukat" element={<Avukat />} />
-        <Route path="/mali-musavir" element={<MaliMusavir />} />
-        <Route path="/is-ortakligi" element={<IsOrtakligi />} />
-        <Route path="/satin-al" element={<SatinAl />} />
-        <Route path="/panel/*" element={<PanelApp />} />
-        <Route path="/musteri/*" element={<MusteriPortal />} />
-        <Route path="/ortak/*" element={<OrtakPortal />} />
-      </Routes>
+      <SiteRoutes/>
     </BrowserRouter>
-  </React.StrictMode>,
+  </React.StrictMode>
 )
+if(root.hasChildNodes()){
+  ReactDOM.hydrateRoot(root,tree)
+  requestAnimationFrame(()=>root.removeAttribute('data-prerendered'))
+}
+else ReactDOM.createRoot(root).render(tree)

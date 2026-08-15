@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import GanuMark from '../GanuMark'
+import { withBase } from '../base'
 import {
-  customerLogin, customerLoginEmail, customerChangePassword,
+  customerLogin, customerLoginEmail, customerChangePassword, usingSupabase,
+  customerSendMagicLink, customerCloudRestore, customerCloudLogout, onCustomerAuthChange,
   requestThread, sendRequestMessage, invStatus, getConfig,
   REQUEST_KINDS, timeSlots,
   portalBundle, portalCreateRequest, portalSendMessage, portalCreateBooking, portalSetKvkk,
 } from './lib/store.js'
+import { SecureImage, SecureLink } from './components/SecureAsset.jsx'
 import { Modal, StatusBadge, TypeBadge, DaysBadge, fmtDate, fmtTL } from './pages/_ui.jsx'
 import './panel.css'
 
@@ -17,16 +20,35 @@ export default function MusteriPortal() {
 
   useEffect(() => {
     document.title = 'GANU · Müşteri Portalı'
+    if (usingSupabase) {
+      let live = true
+      const restore = async () => {
+        try { const c = await customerCloudRestore(); if (live) setCust(c) }
+        catch { if (live) setCust(null) }
+        finally { if (live) setChecking(false) }
+      }
+      restore()
+      const unsubscribe = onCustomerAuthChange((event) => {
+        if (event === 'SIGNED_OUT') { setCust(null); setChecking(false) }
+        else restore()
+      })
+      return () => { live = false; unsubscribe() }
+    }
     const saved = localStorage.getItem(SKEY)
     if (saved) customerLogin(saved).then((c) => { setCust(c); setChecking(false) })
     else setChecking(false)
   }, [])
 
   if (checking) return <div className="pl-login"><div className="pl-empty">Yükleniyor…</div></div>
-  if (!cust) return <PortalLogin onOk={(c) => { localStorage.setItem(SKEY, c.access_code); setCust(c) }} />
+  const logout = async () => {
+    if (usingSupabase) await customerCloudLogout()
+    else localStorage.removeItem(SKEY)
+    setCust(null)
+  }
+  if (!cust) return <PortalLogin onOk={(c) => { if (!usingSupabase) localStorage.setItem(SKEY, c.access_code); setCust(c) }} />
   if (!cust.kvkk_consent_at) return <KvkkGate cust={cust} onAccept={setCust}
-    onLogout={() => { localStorage.removeItem(SKEY); setCust(null) }} />
-  return <PortalHome cust={cust} onLogout={() => { localStorage.removeItem(SKEY); setCust(null) }} />
+    onLogout={logout} />
+  return <PortalHome cust={cust} onLogout={logout} />
 }
 
 /* KVKK aydınlatma + açık rıza — onaylanmadan portal açılmaz (6698 s. KVKK) */
@@ -66,9 +88,16 @@ function PortalLogin({ onOk }) {
   const [pass, setPass] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
   const submit = async (e) => {
     e.preventDefault()
     setBusy(true); setErr('')
+    if (usingSupabase) {
+      const r = await customerSendMagicLink(email)
+      setBusy(false)
+      if (r.ok) setSent(true); else setErr(r.error)
+      return
+    }
     const r = await customerLoginEmail({ email, password: pass })
     setBusy(false)
     if (r.ok) onOk(r.customer); else { setErr(r.error); setPass('') }
@@ -78,20 +107,21 @@ function PortalLogin({ onOk }) {
       <form className="pl-login-card" onSubmit={submit}>
         <div className="pl-login-mark"><GanuMark /></div>
         <h1>Müşteri Girişi</h1>
-        <p>E-posta ve şifrenizle giriş yapın</p>
+        <p>{usingSupabase ? 'E-postanıza güvenli giriş bağlantısı gönderelim' : 'E-posta ve şifrenizle giriş yapın'}</p>
         <label htmlFor="em">E-posta</label>
         <input id="em" type="email" value={email} autoFocus autoComplete="username"
           onChange={(e) => { setEmail(e.target.value); setErr('') }}
           className={err ? 'err' : ''} placeholder="ad@firma.com" />
-        <label htmlFor="pw">Şifre</label>
-        <input id="pw" type="password" value={pass} autoComplete="current-password"
-          onChange={(e) => { setPass(e.target.value); setErr('') }}
-          className={err ? 'err' : ''} placeholder="••••••••" />
+        {!usingSupabase && <><label htmlFor="pw">Şifre</label>
+          <input id="pw" type="password" value={pass} autoComplete="current-password"
+            onChange={(e) => { setPass(e.target.value); setErr('') }}
+            className={err ? 'err' : ''} placeholder="••••••••" /></>}
+        {sent && <span style={{ fontSize: 13, color: 'var(--ok, #059669)' }}>Giriş bağlantısı gönderildi. E-postanızı kontrol edin.</span>}
         {err && <span className="pl-login-err">{err}</span>}
         <button type="submit" className="pl-btn pl-btn-solid" disabled={busy}>
-          {busy ? 'Giriş yapılıyor…' : 'Giriş yap →'}</button>
+          {busy ? 'Gönderiliyor…' : usingSupabase ? 'Giriş bağlantısı gönder →' : 'Giriş yap →'}</button>
         <span className="pl-login-hint">
-          İlk şifreniz, satın alma sonrası verilen <b>erişim kodunuzdur</b> — girince değiştirebilirsiniz.
+          {usingSupabase ? 'Bağlantı yalnız doğrulanmış e-posta adresinize gönderilir. ' : <>İlk şifreniz, satın alma sonrası verilen <b>erişim kodunuzdur</b>. </>}
           Sorun için: <a href="mailto:merhaba@ganu.com.tr" className="pl-link">merhaba@ganu.com.tr</a>
         </span>
       </form>
@@ -138,10 +168,10 @@ function PortalHome({ cust, onLogout }) {
   return (
     <div className="pl-portal">
       <header className="pl-portal-top">
-        <a href="/" className="pl-brand"><GanuMark /><span>müşteri</span></a>
+        <a href={withBase("/")} className="pl-brand"><GanuMark /><span>müşteri</span></a>
         <div className="pl-portal-user">
           <span>{cust.title}</span>
-          <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setPwModal(true)}>Şifre</button>
+          {!usingSupabase && <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setPwModal(true)}>Şifre</button>}
           <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={onLogout}>Çıkış</button>
         </div>
       </header>
@@ -172,7 +202,7 @@ function PortalHome({ cust, onLogout }) {
             {ml.length === 0 && <div className="pl-empty">Henüz gönderi yok.</div>}
             {ml.map((m) => (
               <div className="pl-row" key={m.id}>
-                {m.photo_url ? <img src={m.photo_url} alt="" className="pl-thumb" /> : <TypeBadge t={m.type} />}
+                {m.photo_url ? <SecureImage stored={m.photo_url} portal alt="" className="pl-thumb" /> : <TypeBadge t={m.type} />}
                 <div className="grow">
                   <div className="t1">{m.type === 'tebligat' ? '⚠️ Resmi Tebligat' : m.sender || m.type}</div>
                   <div className="t2">{fmtDate(m.received_date)} · {m.sender || '—'}</div>
@@ -234,7 +264,7 @@ function PortalHome({ cust, onLogout }) {
               {docs.map((d) => (
                 <div className="pl-row" key={d.id}>
                   <div className="grow"><div className="t1">{d.name}</div>{d.note && <div className="t2">{d.note}</div>}</div>
-                  {d.file_url && <a className="pl-btn pl-btn-ghost pl-btn-sm" href={d.file_url} download={d.name}>İndir</a>}
+                  {d.file_url && <SecureLink className="pl-btn pl-btn-ghost pl-btn-sm" stored={d.file_url} portal download={d.name}>İndir</SecureLink>}
                 </div>
               ))}
             </div>
@@ -282,7 +312,7 @@ function PortalHome({ cust, onLogout }) {
       {reqModal && <TalepForm mailId={reqModal.mail_id} onClose={() => setReqModal(null)} onSave={sendReq} />}
       {chatReq && <TalepSohbet req={chatReq} from="musteri" cust={cust} onClose={() => setChatReq(null)} />}
       {payInv && <OdemeModal inv={payInv} cust={cust} onClose={() => setPayInv(null)} />}
-      {pwModal && <SifreModal cust={cust} onClose={() => setPwModal(false)} />}
+      {!usingSupabase && pwModal && <SifreModal cust={cust} onClose={() => setPwModal(false)} />}
     </div>
   )
 }

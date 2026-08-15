@@ -8,6 +8,10 @@
    ============================================================ */
 
 import { supabase, usingSupabase } from './supabase.js'
+import { withBase } from '../../base.js'
+import { PACKAGE_PRICES } from '../../catalog.js'
+export { PACKAGE_PRICES }
+export { PACKAGES, PACKAGE_MONTHLY, PACKAGE_CUSTOM, onCatalog, loadCatalog } from '../../catalog.js'
 
 const KEY = 'ganu.panel.v1'
 
@@ -296,7 +300,7 @@ export async function partnerApply(form) {
     phone: (form.phone || '').trim(),
     iban: (form.iban || '').trim(),
     tax_no: (form.tax_no || '').trim(),
-    commission_rate: 0,
+    commission_rate: 10, // standart yönlendirme komisyonu %10 (onayda panelden değiştirilebilir)
     access_code: '',
     status: 'başvuru',
     notes: (form.notes || '').trim(),
@@ -343,9 +347,7 @@ export async function customerLogin(code) {
   const q = (code || '').trim().toUpperCase()
   if (!q) return null
   if (usingSupabase) {
-    const { data } = await supabase.rpc('portal_login_code', { p_code: q })
-    const c = Array.isArray(data) ? data[0] : data
-    return c && c.status !== 'ayrıldı' && c.status !== 'aday' ? c : null
+    return null // cloud: access_code oturumu 0006 ile kapalı
   }
   const cs = await customers.list()
   const c = cs.find((x) => (x.access_code || '').toUpperCase() === q)
@@ -375,13 +377,7 @@ export async function customerLoginEmail({ email = '', password = '' } = {}) {
   const pw = (password || '').trim()
   if (!id || !pw) return { ok: false, error: 'E-posta ve şifre gerekli.' }
   if (usingSupabase) {
-    // anon tablo okuyamaz — RPC e-posta + parola/kod doğrular, sadece o kaydı döner
-    const { data, error } = await supabase.rpc('portal_login', { p_email: id, p_pass: pw })
-    if (error) return { ok: false, error: 'Giriş yapılamadı. Tekrar deneyin.' }
-    const c = Array.isArray(data) ? data[0] : data
-    if (!c) return { ok: false, error: 'E-posta veya şifre hatalı.' }
-    if (c.status === 'aday') return { ok: false, error: 'Hesabınız henüz aktif değil — ödeme/aktivasyon bekleniyor.' }
-    return { ok: true, customer: c }
+    return { ok: false, error: 'Bulut girişinde şifre yerine e-posta giriş bağlantısını kullanın.' }
   }
   const cs = await customers.list()
   const c = cs.find((x) =>
@@ -402,11 +398,7 @@ export async function customerChangePassword(customerId, oldPass, newPass) {
   const newP = (newPass || '').trim()
   if (newP.length < 4) return { ok: false, error: 'Yeni şifre en az 4 karakter olmalı.' }
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_change_password', {
-      p_customer_id: customerId, p_old: oldP, p_new: newP,
-    })
-    if (error || !data) return { ok: false, error: 'Mevcut şifre hatalı.' }
-    return { ok: true }
+    return { ok: false, error: 'Bulut portalı magic-link kullanır; portal şifresi yoktur.' }
   }
   const c = await customers.get(customerId)
   if (!c) return { ok: false, error: 'Kayıt bulunamadı.' }
@@ -417,20 +409,54 @@ export async function customerChangePassword(customerId, oldPass, newPass) {
   return { ok: true }
 }
 
+export async function customerSendMagicLink(email = '') {
+  if (!usingSupabase) return { ok: false, error: 'Magic-link yalnız bulut modunda kullanılabilir.' }
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) return { ok: false, error: 'E-posta gerekli.' }
+  const emailRedirectTo = `${window.location.origin}${withBase('/musteri')}`
+  const { error } = await supabase.auth.signInWithOtp({ email: normalized, options: { emailRedirectTo } })
+  return error ? { ok: false, error: 'Giriş bağlantısı gönderilemedi. Tekrar deneyin.' } : { ok: true }
+}
+
+export async function customerCloudRestore({ claim = true } = {}) {
+  if (!usingSupabase) return null
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError || !session) return null
+  let { data, error } = await supabase.rpc('customer_me')
+  if (!error && data) return data
+  if (!claim) return null
+  ;({ data, error } = await supabase.rpc('claim_customer_by_email'))
+  if (error || !data) throw new Error('Bu doğrulanmış e-posta için benzersiz aktif müşteri kaydı bulunamadı.')
+  return data
+}
+
+export function onCustomerAuthChange(callback) {
+  if (!usingSupabase) return () => {}
+  const { data } = supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'SIGNED_OUT') callback(event)
+  })
+  return () => data.subscription.unsubscribe()
+}
+
+export async function customerCloudLogout() {
+  if (usingSupabase) await supabase.auth.signOut()
+}
+
 /* ---------- havale dekontu bildirimi ----------
    Müşteri /satin-al havale sekmesinden dekont yükler. Kayıt 'aday'
    kalır; panelde onay kuyruğuna düşer (dashboard.paymentClaims).
    Yönetici dekontu görüp "Ödeme geldi" ile aktive eder.
    (Gerçek otomatik eşleşme banka API'si gerektirir — ileride.) */
-export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount = 0, pkg = '', sender = '' } = {}) {
+export async function submitPaymentReceipt(customerId, { receiptUrl = '', receiptFile = null, purchaseToken = '', amount = 0, pkg = '', sender = '' } = {}) {
   if (usingSupabase) {
-    // anon UPDATE yok — RPC yalnız 'aday' kaydına dekont yazar
-    const { data, error } = await supabase.rpc('purchase_submit_receipt', {
-      p_customer_id: customerId, p_url: receiptUrl,
-      p_expected: Number(amount) || 0, p_pkg: pkg, p_sender: sender,
-    })
-    if (error || !data) throw new Error(error?.message || 'Dekont kaydedilemedi.')
-    return true
+    if (!purchaseToken) throw new Error('Satın alma oturumu eksik.')
+    let body
+    if (receiptFile) {
+      body = new FormData(); body.append('purchase_token', purchaseToken); body.append('sender', sender); body.append('file', receiptFile)
+    } else body = { action: 'claim', purchase_token: purchaseToken, sender }
+    const { data, error } = await supabase.functions.invoke('purchase-flow', { body })
+    if (error || !data?.ok) throw new Error(data?.error || error?.message || 'Ödeme bildirimi kaydedilemedi.')
+    return data
   }
   return customers.update(customerId, {
     payment_receipt_url: receiptUrl,
@@ -446,15 +472,28 @@ export async function submitPaymentReceipt(customerId, { receiptUrl = '', amount
    ekranına yönlendirmek için iframe_url / redirect döner. Yalnız Supabase
    bağlıyken çalışır (secret'lar sunucuda). Sağlayıcı: 'paytr' | 'iyzico'.
    Config'te pos_enabled açık değilse UI bu yolu kullanmaz (simülasyon kalır). */
-export async function posPay(provider, { customerId, amount, pkg = '', email = '', name = '', phone = '' } = {}) {
+export async function posPay(provider, { purchaseToken = '', email = '', name = '', phone = '' } = {}) {
   if (!usingSupabase) throw new Error('Sanal POS için Supabase bağlı olmalı (yerel modda simülasyon çalışır).')
-  if (!customerId || !(Number(amount) > 0)) throw new Error('customerId ve geçerli tutar zorunlu.')
+  if (!purchaseToken) throw new Error('Güvenli satın alma oturumu zorunlu.')
+  // P0.3: TUTAR İSTEMCİDEN GÖNDERİLMEZ. Sunucu, package_id + izinli indirim
+  // kodundan fiyatı kendisi hesaplar; istemcinin ilettiği tutar yok sayılır.
   const { data, error } = await supabase.functions.invoke('pos-payment', {
-    body: { action: 'init', provider, customer_id: customerId, amount: Number(amount), pkg, email, name, phone },
+    body: { action: 'init', provider, purchase_token: purchaseToken, email, name, phone },
   })
   if (error) throw new Error(error.message || 'POS başlatılamadı.')
   if (data?.error) throw new Error(data.error)
-  return data // { provider, mode, token?, iframe_url?, merchant_oid }
+  return data // { provider, mode, token?, iframe_url?, merchant_oid, amount }
+}
+
+/* Sağlayıcı dönüşündeki opak 32-byte tokenla yalnız minimal mutabakat durumu.
+   `paid=1` gibi tarayıcı query değerleri hiçbir zaman ödeme kanıtı değildir. */
+export async function posPaymentStatus(returnToken) {
+  if (!usingSupabase) throw new Error('Ödeme durumu yalnız güvenli sunucudan doğrulanabilir.')
+  const { data, error } = await supabase.functions.invoke('pos-payment', {
+    body: { action: 'status', return_token: String(returnToken || '') },
+  })
+  if (error || !data?.status) throw new Error(data?.error || error?.message || 'Ödeme durumu doğrulanamadı.')
+  return data.status
 }
 
 /* Config'te sanal POS açık mı? (varsayılan kapalı → kart ekranı simülasyon) */
@@ -496,11 +535,15 @@ export async function customerApply(form) {
     notes: [form.package ? `İstenen paket: ${form.package}` : '', refNote, (form.notes || '').trim()].filter(Boolean).join(' · '),
   }
   if (usingSupabase) {
-    // anon INSERT policy dönüş satırı vermez — id'yi istemci üretir
-    const id = crypto.randomUUID()
-    const { error } = await supabase.from('customers').insert({ ...row, id, partner_id: partner_id || null })
-    if (error) throw error
-    return { ...row, id }
+    const { data, error } = await supabase.functions.invoke('purchase-flow', { body: {
+      action: 'create', title: row.title, email: row.email, phone: row.phone,
+      tax_no: form.tax_no || '', tax_office: row.tax_office, package_id: form.package,
+      code: form.code || '', ref, legal_text_version: form.legal_text_version,
+      preinfo_accepted: form.preinfo_accepted===true,
+      early_performance_requested: form.early_performance_requested===true,
+    } })
+    if (error || !data?.customer || !data?.purchase_token) throw new Error(data?.error || error?.message || 'Satın alma başlatılamadı.')
+    return { ...data.customer, purchase_token: data.purchase_token, quote: data.quote, expires_at: data.expires_at }
   }
   return customers.create(row)
 }
@@ -512,7 +555,7 @@ export async function customerApply(form) {
 export async function portalBundle(cust) {
   if (!cust?.id) return null
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_bundle', { p_customer_id: cust.id, p_code: cust.access_code || '' })
+    const { data, error } = await supabase.rpc('portal_bundle_jwt')
     if (error || !data) return null
     return {
       customer: data.customer, contracts: data.contracts || [], mail: data.mail || [],
@@ -534,10 +577,8 @@ export async function portalBundle(cust) {
 
 export async function portalCreateRequest(cust, { kind = 'yönlendirme', note = '', mail_id = '' } = {}) {
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_create_request', {
-      p_customer_id: cust.id, p_code: cust.access_code || '',
-      p_mail_id: mail_id || null, p_kind: kind, p_note: note,
-    })
+    const { data, error } = await supabase.rpc('portal_create_request_jwt', {
+      p_mail_id: mail_id || null, p_kind: kind, p_note: note })
     if (error) throw error
     return Array.isArray(data) ? data[0] : data
   }
@@ -548,9 +589,7 @@ export async function portalSendMessage(cust, requestId, text) {
   const t = (text || '').trim()
   if (!t) return null
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_send_message', {
-      p_customer_id: cust.id, p_code: cust.access_code || '', p_request_id: requestId, p_text: t,
-    })
+    const { data, error } = await supabase.rpc('portal_send_message_jwt', { p_request_id: requestId, p_text: t })
     if (error) throw error
     return Array.isArray(data) ? data[0] : data
   }
@@ -559,8 +598,7 @@ export async function portalSendMessage(cust, requestId, text) {
 
 export async function portalCreateBooking(cust, form) {
   if (usingSupabase) {
-    const { data, error } = await supabase.rpc('portal_create_booking', {
-      p_customer_id: cust.id, p_code: cust.access_code || '',
+    const { data, error } = await supabase.rpc('portal_create_booking_jwt', {
       p_date: form.date, p_start: form.start, p_end: form.end,
       p_attendees: Number(form.attendees) || 1, p_note: form.note || '',
     })
@@ -573,9 +611,9 @@ export async function portalCreateBooking(cust, form) {
 export async function portalSetKvkk(cust) {
   const at = new Date().toISOString()
   if (usingSupabase) {
-    const { error } = await supabase.rpc('portal_set_kvkk', { p_customer_id: cust.id, p_code: cust.access_code || '' })
+    const { data, error } = await supabase.rpc('portal_set_kvkk_jwt')
     if (error) throw error
-    return { ...cust, kvkk_consent_at: at }
+    return data || { ...cust, kvkk_consent_at: at }
   }
   const updated = await customers.update(cust.id, { kvkk_consent_at: at })
   return updated || { ...cust, kvkk_consent_at: at }
@@ -654,12 +692,6 @@ export async function withCustomerNames(rows) {
 /* ---------- sabitler ---------- */
 export const MAIL_TYPES = ['mektup', 'kargo', 'tebligat']
 export const MAIL_STATUS = ['geldi', 'bildirildi', 'teslim', 'yönlendirildi', 'imha']
-export const PACKAGES = ['Başlangıç', 'Pro', 'Kurumsal']
-/* Tarife (03.07.2026 rakip analizi — pazar-arastirma/rakip-fiyat-analizi-2026-07.md)
-   KDV DAHİL. Satın alma yıllık peşin tahsil edilir (≈%17 indirimli).
-   Kurumsal: özel teklif — sabit fiyatı yok. */
-export const PACKAGE_MONTHLY = { 'Başlangıç': 799, 'Pro': 1499 }   // aylık, ₺
-export const PACKAGE_PRICES = { 'Başlangıç': 7990, 'Pro': 14990 }  // yıllık peşin, ₺
 /* BNI Nişantaşı kaynaklı müşteri indirimi (%). Sitede GÖRÜNMEZ; yalnız panelde,
    müşteri "BNI" işaretliyse ödeme anında uygulanır. Oran ayda bir elle gözden
    geçirilir — değişecek tek yer burası. 0 = indirim yok. */
@@ -691,7 +723,7 @@ export function invStatus(inv) {
   return inv?.status || 'bekliyor'
 }
 export const PARTNER_STATUS = ['başvuru', 'aktif', 'pasif']
-export const PARTNER_PROFESSIONS = ['Mali müşavir', 'Avukat', 'Marka & patent vekili', 'Şirket kuruluşu danışmanı', 'Diğer']
+export { PARTNER_PROFESSIONS } from '../../site/partnership.js'
 export const DOC_TYPES = [
   { v: 'imza_sirkuleri', l: 'İmza Sirküleri' },
   { v: 'vergi_levhasi', l: 'Vergi Levhası' },
@@ -837,31 +869,53 @@ export function trackingUrl(carrier, code) {
   return c && code ? c.url(code) : ''
 }
 
-/* ---------- dosya/foto → depolanabilir URL ----------
+/* ---------- dosya/foto → depolanabilir referans (P0.5) ----------
    Yerel mod: görseli küçültüp dataURL üretir (tarayıcıda saklanır).
-   Bulut modu: Supabase Storage 'mail-photos' bucket'ına yükler, public
-   URL döner — DB satırına dev dataURL gömülmez, tablo şişmez. */
-const STORAGE_BUCKET = 'mail-photos'
+   Bulut modu: PRIVATE 'secure-docs' bucket'ına yükler ve DB'ye "secure:<path>"
+   (public URL DEĞİL) saklar. Görüntülemede resolveStoredUrl() kısa ömürlü
+   signed URL çözer. Böylece kalıcı public link tutulmaz. */
+const STORAGE_BUCKET = 'secure-docs' // PRIVATE (public=false). Bkz. 0002_private_storage.sql
+const SIGNED_TTL = 300               // saniye (kısa ömürlü)
 
-async function uploadToStorage(blob, ext = 'jpg') {
-  const path = `${new Date().toISOString().slice(0, 10)}/${uid()}.${ext}`
+async function uploadToStorage(blob, ext = 'jpg', prefix = 'mail', customerId = '') {
+  if (!customerId || !/^[0-9a-f-]{36}$/i.test(customerId)) throw new Error('Güvenli yükleme için müşteri kimliği gerekli.')
+  if (!['mail', 'receipts', 'customers'].includes(prefix)) throw new Error('Geçersiz storage kapsamı.')
+  const safeExt = String(ext || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'bin'
+  const path = `${prefix}/${customerId}/${uid()}-${uid()}.${safeExt}`
   const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {
     contentType: blob.type || 'application/octet-stream', upsert: false,
   })
   if (error) throw error
-  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path)
-  return data?.publicUrl || ''
+  return `secure:${path}` // public URL değil — DB'ye referans saklanır
 }
 
-export async function fileToStoredUrl(file, { maxW = 1000, quality = 0.6 } = {}) {
+/* Depolanan referansı görüntülenebilir URL'e çevirir.
+   - "secure:<path>" → kısa ömürlü signed URL (private bucket)
+   - dataURL / http(s) (eski/yerel) → olduğu gibi döner */
+export async function resolveStoredUrl(stored, { portal = false } = {}) {
+  if (!stored) return ''
+  if (typeof stored === 'string' && stored.startsWith('secure:')) {
+    if (!usingSupabase) return ''
+    const path = stored.slice('secure:'.length)
+    if (portal) {
+      const { data, error } = await supabase.functions.invoke('get-file', { body: { path } })
+      if (error) return ''
+      return data?.url || ''
+    }
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path, SIGNED_TTL)
+    if (error) return ''
+    return data?.signedUrl || ''
+  }
+  return stored // dataURL / eski public URL — dokunma
+}
+
+export async function fileToStoredUrl(file, { maxW = 1000, quality = 0.6, prefix = 'customers', customerId = '' } = {}) {
   if (!file) return ''
   const isImage = file.type.startsWith('image/')
   if (usingSupabase) {
-    try {
-      if (!isImage) return await uploadToStorage(file, (file.name || '').split('.').pop() || 'bin')
-      const small = await shrinkImage(file, { maxW, quality })
-      return await uploadToStorage(small, 'jpg')
-    } catch { /* Storage kurulmamışsa dataURL'e düş */ }
+    if (!isImage) return await uploadToStorage(file, (file.name || '').split('.').pop() || 'bin', prefix, customerId)
+    const small = await shrinkImage(file, { maxW, quality })
+    return await uploadToStorage(small, 'jpg', prefix, customerId)
   }
   if (!isImage) {
     // görsel değilse (PDF vb.) doğrudan dataURL — yerel modda küçük tut

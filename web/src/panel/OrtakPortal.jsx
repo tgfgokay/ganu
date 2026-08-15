@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import GanuMark from '../GanuMark'
+import { withBase } from '../base'
 import { partnerLogin } from './lib/store.js'
 import { StatusBadge, fmtTL } from './pages/_ui.jsx'
 import './panel.css'
@@ -43,7 +44,7 @@ function PortalLogin({ onOk }) {
         {err && <span className="pl-login-err">Kod bulunamadı ya da hesap henüz aktif değil</span>}
         <button type="submit" className="pl-btn pl-btn-solid">Giriş yap →</button>
         <span className="pl-login-hint">
-          Henüz ortak değil misiniz? <a href="/is-ortakligi">İş ortağı olun →</a>
+          Henüz ortak değil misiniz? <a href={withBase("/is-ortakligi")}>İş ortağı olun →</a>
         </span>
       </form>
     </div>
@@ -52,7 +53,7 @@ function PortalLogin({ onOk }) {
 
 function PortalHome({ p, onLogout }) {
   const refs = p.customers || []
-  const refLink = `${window.location.origin}/satin-al?ref=${encodeURIComponent(p.access_code || '')}`
+  const refLink = `${window.location.origin}${withBase(`/satin-al?ref=${encodeURIComponent(p.access_code || '')}`)}`
   const [copied, setCopied] = useState(false)
   const copyLink = async () => {
     try { await navigator.clipboard.writeText(refLink); setCopied(true); setTimeout(() => setCopied(false), 1600) } catch { /* pano izni yok */ }
@@ -66,7 +67,7 @@ function PortalHome({ p, onLogout }) {
   return (
     <div className="pl-portal">
       <header className="pl-portal-top">
-        <a href="/" className="pl-brand"><GanuMark /><span>iş ortağı</span></a>
+        <a href={withBase("/")} className="pl-brand"><GanuMark /><span>iş ortağı</span></a>
         <div className="pl-portal-user">
           <span>{p.name}</span>
           <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={onLogout}>Çıkış</button>

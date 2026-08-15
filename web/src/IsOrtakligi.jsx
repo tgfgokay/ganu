@@ -1,7 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
+import { withBase } from './base'
 import { motion, useScroll, useSpring, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
-import { partnerApply, PARTNER_PROFESSIONS } from './panel/lib/store.js'
+import LanguageSwitch from './site/LanguageSwitch.jsx'
+import LegalLinks from './legal/LegalLinks.jsx'
+import { tr } from './site/locales/tr.js'
+import RichTitle from './site/RichTitle.jsx'
+import { PARTNER_PROFESSIONS, partnershipPayload, showPartnerCommercialFields } from './site/partnership.js'
 
 /* ---------- motion presets (App.jsx ile aynı dil) ---------- */
 const rise = {
@@ -19,25 +24,6 @@ const wipe = {
   show: { scaleX: 1, transition: { duration: 0.9, ease: [0.19, 1, 0.22, 1] } },
 }
 
-/* ---------- içerik ---------- */
-const marquee = ['Komisyonlu Ortaklık', 'Avukatlar', 'Mali Müşavirler', 'Marka & Patent', 'Şirket Kuruluşu', 'Şeffaf Panel', 'Düzenli Ödeme']
-
-const values = [
-  { n: '01', t: 'Her müşteride komisyon', d: 'Yönlendirdiğin her müşteri için belirlenen oranda komisyon kazanırsın; ödemeler IBAN’ına düzenli yapılır.' },
-  { n: '02', t: 'Şeffaf ortak paneli', d: 'Kaç müşteri getirdiğini, komisyon oranını ve biriken hakedişini kendi panelinden anlık, net görürsün.' },
-  { n: '03', t: 'Tek muhatap, tek elden', d: 'Adres, posta, tebligat ve yoklama sürecini biz yürütürüz. Sen mesleğine odaklan, idari yükü bize bırak.' },
-  { n: '04', t: 'Mesleğine göre esnek', d: 'Avukat, mali müşavir, marka-patent vekili, şirket kuruluşu danışmanı… Kim olursan ol, aynı program.' },
-  { n: '05', t: 'Müşterine değer', d: 'Müşterine prestijli İstanbul iş adresi ve düzenli idari destek sunar, ilişkini güçlendirirsin.' },
-  { n: '06', t: 'Düzenli hakediş', d: 'Ay sonunda ya da üç ayda bir serbest meslek makbuzunu kes, gönder; hakedişini IBAN’ına ödeyelim.' },
-]
-
-const steps = [
-  { n: '1', t: 'Başvur', d: 'Formu doldur; mesleğini ve ödeme için IBAN’ını bırak.' },
-  { n: '2', t: 'Onaylanır', d: 'Başvurunu değerlendirir, komisyon oranını belirler, giriş kodunu veririz.' },
-  { n: '3', t: 'Müşterini yönlendir', d: 'Adres ihtiyacı olan müşterilerini bize yönlendir.' },
-  { n: '4', t: 'Komisyonunu al', d: 'Hakedişini panelden izle; makbuzunu kes, IBAN’ına ödeyelim.' },
-]
-
 /* “Sen kimsin?” — meslek seçenekleri (form select ile aynı liste) */
 const roles = PARTNER_PROFESSIONS
 
@@ -47,7 +33,7 @@ function ScrollBar() {
   return <motion.div className="progress" style={{ scaleX: x, transformOrigin: '0%' }} aria-hidden="true" />
 }
 
-function Nav() {
+function Nav({ p, locale }) {
   const [open, setOpen] = useState(false)
   const close = () => setOpen(false)
   return (
@@ -55,55 +41,49 @@ function Nav() {
       initial={{ y: -60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.7, ease: [0.19, 1, 0.22, 1] }}>
       <div className="wrap mast-inner">
-        <a href="/" className="wordmark" onClick={close} aria-label="GANU — ana sayfa"><GanuMark /></a>
-        <span className="mast-meta">İş Ortaklığı · İstanbul</span>
-        <button className="nav-toggle" aria-label={open ? 'Menüyü kapat' : 'Menüyü aç'}
+        <a href={withBase(locale==='tr'?'/':'/en')} className="wordmark" onClick={close} aria-label="GANU"><GanuMark /></a>
+        <span className="mast-meta">{p.meta}</span>
+        <button className="nav-toggle" aria-label={open ? (locale==='tr'?'Menüyü kapat':'Close menu') : (locale==='tr'?'Menüyü aç':'Open menu')}
           aria-expanded={open} aria-controls="nav-links" onClick={() => setOpen((v) => !v)}>
           {open
             ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
             : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>}
         </button>
         <div className={`links${open ? ' open' : ''}`} id="nav-links">
-          <a href="#neden" onClick={close}>Neden ortak ol</a>
-          <a href="#nasil" onClick={close}>Süreç</a>
-          <a href="/ortak" onClick={close}>Ortak girişi</a>
-          <a href="#basvuru" className="mast-cta" onClick={close}>Ortak ol →</a>
+          <a href={`#${locale==='tr'?'neden':'why'}`} onClick={close}>{p.nav[0]}</a>
+          <a href={`#${locale==='tr'?'nasil':'process'}`} onClick={close}>{p.nav[1]}</a>
+          {locale==='tr'&&<a href={withBase('/ortak')} onClick={close}>{p.nav[2]}</a>}
+          <a href={`#${locale==='tr'?'basvuru':'apply'}`} className="mast-cta" onClick={close}>{p.nav[3]} →</a><LanguageSwitch locale={locale}/>
         </div>
       </div>
     </motion.nav>
   )
 }
 
-function Hero() {
+function Hero({ p, locale }) {
   return (
     <header className="hero" id="top">
       <div className="wrap">
         <motion.div className="hero-rule top" variants={wipe} initial="hidden" animate="show" aria-hidden="true" />
         <div className="hero-topline">
-          <motion.span variants={rise} initial="hidden" animate="show">İş Ortaklığı — İstanbul</motion.span>
-          <motion.span variants={rise} initial="hidden" animate="show" custom={1}>Komisyonlu yönlendirme programı</motion.span>
+          <motion.span variants={rise} initial="hidden" animate="show">{p.hero.eyebrow}</motion.span>
+          <motion.span variants={rise} initial="hidden" animate="show" custom={1}>{p.hero.eyebrow2}</motion.span>
         </div>
 
         <motion.h1 className="hero-title" variants={stagger} initial="hidden" animate="show">
-          <motion.span className="line" variants={rise}>Sen yönlendir,</motion.span>
-          <motion.span className="line ital" variants={rise}>gerisi</motion.span>
-          <motion.span className="line" variants={rise}>bizde<span className="dot">.</span></motion.span>
+          <motion.span className="line" variants={rise}>{p.hero.lines[0]}</motion.span><motion.span className="line ital" variants={rise}>{p.hero.lines[1]}</motion.span><motion.span className="line" variants={rise}>{p.hero.lines[2]}<span className="dot">.</span></motion.span>
         </motion.h1>
 
         <div className="hero-foot">
           <motion.p className="lead" variants={rise} initial="hidden" animate="show" custom={2}>
-            Avukat, mali müşavir, marka-patent vekili ya da şirket kuruluşu danışmanı ol — müşterini GANU’ya
-            yönlendir; adres ve posta sürecini tek elden biz yürütelim, sen her müşteri için komisyonunu al.
+            {p.hero.lead}
           </motion.p>
           <motion.div className="hero-side" variants={rise} initial="hidden" animate="show" custom={3}>
             <div className="hero-cta">
-              <a href="#basvuru" className="btn btn-solid">Ortak ol →</a>
-              <a href="/ortak" className="btn btn-line">Ortak girişi</a>
+              <a href={`#${locale==='tr'?'basvuru':'apply'}`} className="btn btn-solid">{p.hero.primary} →</a>{locale==='tr'&&<a href={withBase('/ortak')} className="btn btn-line">{p.hero.secondary}</a>}
             </div>
             <dl className="stats">
-              <div><dt>Komisyon</dt><dd>her müşteride</dd></div>
-              <div><dt>Panelden</dt><dd>şeffaf takip</dd></div>
-              <div><dt>Düzenli</dt><dd>IBAN’a ödeme</dd></div>
+              {p.hero.stats.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
             </dl>
           </motion.div>
         </div>
@@ -113,8 +93,8 @@ function Hero() {
   )
 }
 
-function Marquee() {
-  const row = [...marquee, ...marquee]
+function Marquee({ p }) {
+  const row = [...p.marquee, ...p.marquee]
   return (
     <div className="marquee" aria-hidden="true">
       <div className="marquee-track">
@@ -126,20 +106,16 @@ function Marquee() {
   )
 }
 
-function Value() {
+function Value({ p, locale }) {
   return (
-    <section className="section" id="neden">
+    <section className="section" id={locale==='tr'?'neden':'why'}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Neden GANU — İş ortaklığı</motion.span>
-          <motion.h2 variants={rise}>Müşterini yönlendir,<br />kalan iş <em>bizde</em><span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{p.valueKicker}</motion.span><motion.h2 variants={rise}><RichTitle value={p.valueTitle} dot /></motion.h2>
         </motion.div>
         <motion.ol className="index" {...reveal} variants={stagger}>
-          {values.map((s) => (
-            <motion.li className="index-row" key={s.n} variants={rise}>
-              <span className="idx-num">{s.n}</span>
-              <h3 className="idx-title">{s.t}</h3>
-              <p className="idx-desc">{s.d}</p>
+          {p.values.map(([title,desc],i) => (
+            <motion.li className="index-row" key={title} variants={rise}><span className="idx-num">{String(i+1).padStart(2,'0')}</span><h3 className="idx-title">{title}</h3><p className="idx-desc">{desc}</p>
             </motion.li>
           ))}
         </motion.ol>
@@ -148,20 +124,16 @@ function Value() {
   )
 }
 
-function Steps() {
+function Steps({ p, locale }) {
   return (
-    <section className="section dark" id="nasil">
+    <section className="section dark" id={locale==='tr'?'nasil':'process'}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Süreç</motion.span>
-          <motion.h2 variants={rise}>Dört adımda<br />ortaklık başlasın<span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{locale==='tr'?'Süreç':'Process'}</motion.span><motion.h2 variants={rise}><RichTitle value={p.processTitle} dot /></motion.h2>
         </motion.div>
         <motion.div className="steps" {...reveal} variants={stagger}>
-          {steps.map((s) => (
-            <motion.div className="step" key={s.n} variants={rise}>
-              <div className="step-num">{s.n}</div>
-              <h3>{s.t}</h3>
-              <p>{s.d}</p>
+          {p.steps.map(([title,desc],i) => (
+            <motion.div className="step" key={title} variants={rise}><div className="step-num">{i+1}</div><h3>{title}</h3><p>{desc}</p>
             </motion.div>
           ))}
         </motion.div>
@@ -171,19 +143,17 @@ function Steps() {
 }
 
 /* “Sen kimsin?” — meslek seçince formu doldurur ve başvuruya kaydırır */
-function Roles({ onPick }) {
+function Roles({ onPick, p, locale }) {
   return (
     <section className="section pa-roles-sec">
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Kimler ortak olabilir</motion.span>
-          <motion.h2 variants={rise}>Sen <em>kimsin</em>?<span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{p.rolesKicker}</motion.span><motion.h2 variants={rise}><RichTitle value={p.rolesTitle} dot /></motion.h2>
         </motion.div>
         <motion.div className="pa-roles" {...reveal} variants={stagger}>
           {roles.map((r) => (
             <motion.button type="button" className="pa-role" key={r} variants={rise} onClick={() => onPick(r)}>
-              <span className="pa-role-t">{r}</span>
-              <span className="pa-role-cta">Bu benim →</span>
+              <span className="pa-role-t">{locale==='tr'?r:({'Mali müşavir':'Accountant / tax adviser','Avukat':'Lawyer','Marka & patent vekili':'IP adviser','Şirket kuruluşu danışmanı':'Company formation adviser','Diğer':'Other'}[r]||r)}</span><span className="pa-role-cta">{p.roleCta} →</span>
             </motion.button>
           ))}
         </motion.div>
@@ -194,7 +164,7 @@ function Roles({ onPick }) {
 
 const emptyForm = () => ({ name: '', profession: PARTNER_PROFESSIONS[0], contact: '', email: '', phone: '', iban: '', tax_no: '', notes: '' })
 
-function Apply({ formRef, profession }) {
+function Apply({ formRef, profession, p, locale }) {
   const [f, setF] = useState(emptyForm())
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
@@ -206,22 +176,22 @@ function Apply({ formRef, profession }) {
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!f.name.trim() || !f.email.trim()) { setErr('Lütfen firma adı ve e-posta alanlarını doldurun.'); return }
+    if (!f.name.trim() || !f.email.trim()) { setErr(p.required); return }
     setErr(''); setBusy(true)
     try {
-      await partnerApply(f)
+      const { partnerApply } = await import('./panel/lib/store.js')
+      await partnerApply(partnershipPayload(f, locale))
       setSent(true)
     } catch {
-      setErr('Başvuru şu an gönderilemedi. Lütfen merhaba@ganu.com.tr adresine yazın.')
+      setErr(p.sendError)
     } finally { setBusy(false) }
   }
 
   return (
-    <section className="section pa-apply-sec" id="basvuru" ref={formRef}>
+    <section className="section pa-apply-sec" id={locale==='tr'?'basvuru':'apply'} ref={formRef}>
       <div className="wrap">
         <motion.div className="shead" {...reveal} variants={stagger}>
-          <motion.span className="kicker" variants={rise}>Başvuru</motion.span>
-          <motion.h2 variants={rise}>İş ortağı <em>ol</em><span className="dot">.</span></motion.h2>
+          <motion.span className="kicker" variants={rise}>{p.applyKicker}</motion.span><motion.h2 variants={rise}><RichTitle value={p.applyTitle} dot /></motion.h2>
         </motion.div>
 
         {sent ? (
@@ -229,55 +199,51 @@ function Apply({ formRef, profession }) {
             <div className="pa-success-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24"><path d="m4 12 5 5L20 6" /></svg>
             </div>
-            <h3>Başvurunu aldık.</h3>
-            <p>
-              En kısa sürede döneriz. Onaydan sonra komisyon oranın belirlenir ve sana bir <b>giriş kodu</b> iletiriz;
-              bununla <a href="/ortak">ortak paneline</a> girip getirdiğin müşterileri ve biriken hakedişini izlersin.
-            </p>
+            <h3>{p.successTitle}</h3><p>{p.successText}</p>
           </motion.div>
         ) : (
           <motion.form className="pa-form" {...reveal} variants={rise} onSubmit={submit}>
             <div className="pa-grid">
               <div className="pa-field">
-                <label htmlFor="pa-name">Ad / firma adı *</label>
+                <label htmlFor="pa-name">{p.fields.name}</label>
                 <input id="pa-name" value={f.name} onChange={(e) => set('name', e.target.value)}
-                  placeholder="ör. Yılmaz Mali Müşavirlik" required />
+                  placeholder={p.placeholders.name} required />
               </div>
               <div className="pa-field">
-                <label htmlFor="pa-prof">Mesleğin *</label>
+                <label htmlFor="pa-prof">{p.fields.profession}</label>
                 <select id="pa-prof" value={f.profession} onChange={(e) => set('profession', e.target.value)}>
-                  {PARTNER_PROFESSIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+                  {PARTNER_PROFESSIONS.map((x) => <option key={x} value={x}>{locale==='tr'?x:({'Mali müşavir':'Accountant / tax adviser','Avukat':'Lawyer','Marka & patent vekili':'IP adviser','Şirket kuruluşu danışmanı':'Company formation adviser','Diğer':'Other'}[x]||x)}</option>)}
                 </select>
               </div>
               <div className="pa-field">
-                <label htmlFor="pa-contact">Yetkili kişi</label>
+                <label htmlFor="pa-contact">{p.fields.contact}</label>
                 <input id="pa-contact" value={f.contact} onChange={(e) => set('contact', e.target.value)}
-                  placeholder="Ad Soyad" />
+                  placeholder={p.placeholders.contact} />
               </div>
               <div className="pa-field">
-                <label htmlFor="pa-phone">Telefon</label>
+                <label htmlFor="pa-phone">{p.fields.phone}</label>
                 <input id="pa-phone" value={f.phone} onChange={(e) => set('phone', e.target.value)}
-                  placeholder="05.." inputMode="tel" />
+                  placeholder={p.placeholders.phone} inputMode="tel" />
               </div>
               <div className="pa-field">
-                <label htmlFor="pa-email">E-posta *</label>
+                <label htmlFor="pa-email">{p.fields.email}</label>
                 <input id="pa-email" type="email" value={f.email} onChange={(e) => set('email', e.target.value)}
-                  placeholder="ornek@firma.com" required />
+                  placeholder={p.placeholders.email} required />
               </div>
-              <div className="pa-field">
-                <label htmlFor="pa-tax">Vergi / T.C. no</label>
+              {showPartnerCommercialFields(locale)&&<div className="pa-field">
+                <label htmlFor="pa-tax">{p.fields.tax}</label>
                 <input id="pa-tax" value={f.tax_no} onChange={(e) => set('tax_no', e.target.value)}
-                  placeholder="Makbuz için" inputMode="numeric" />
-              </div>
-              <div className="pa-field pa-wide">
-                <label htmlFor="pa-iban">IBAN <span className="pa-hint">— komisyon ödemesi bu hesaba yapılır</span></label>
+                  placeholder={p.placeholders.tax} />
+              </div>}
+              {showPartnerCommercialFields(locale)&&<div className="pa-field pa-wide">
+                <label htmlFor="pa-iban">{p.fields.iban} <span className="pa-hint">— {p.fields.ibanHint}</span></label>
                 <input id="pa-iban" value={f.iban} onChange={(e) => set('iban', e.target.value)}
-                  placeholder="TR.. .... .... .... .... .... .." />
-              </div>
+                  placeholder={p.placeholders.iban} />
+              </div>}
               <div className="pa-field pa-wide">
-                <label htmlFor="pa-note">Not</label>
+                <label htmlFor="pa-note">{p.fields.note}</label>
                 <textarea id="pa-note" rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)}
-                  placeholder="Eklemek istediğin bir şey var mı?" />
+                  placeholder={p.placeholders.note} />
               </div>
             </div>
 
@@ -285,11 +251,10 @@ function Apply({ formRef, profession }) {
 
             <div className="pa-foot">
               <button type="submit" className="btn btn-solid big" disabled={busy}>
-                {busy ? 'Gönderiliyor…' : 'Başvuruyu gönder →'}
+                {busy ? p.sending : `${p.send} →`}
               </button>
               <p className="pa-kvkk">
-                Bilgilerin yalnızca ortaklık başvurunu değerlendirmek için kullanılır, KVKK’ya uygun saklanır.
-                Zaten ortak mısın? <a href="/ortak">Ortak girişi →</a>
+                {p.privacy}
               </p>
             </div>
           </motion.form>
@@ -299,34 +264,29 @@ function Apply({ formRef, profession }) {
   )
 }
 
-function Footer() {
+function Footer({ p, locale }) {
   return (
     <footer className="colophon">
       <div className="wrap">
         <div className="colo-mark"><GanuMark /></div>
         <div className="colo-grid">
           <div className="colo-lead">
-            <p>Anahtar teslim sanal ofis &amp; idari sekreterya. Sen yönlendir, gerisi bizde.</p>
+            <p>{locale==='tr'?'Anahtar teslim sanal ofis & idari sekreterya. Sen yönlendir, gerisi bizde.':'International referrals backed by a real Istanbul office-service team.'}</p>
           </div>
           <div>
-            <h4>İş Ortaklığı</h4>
+            <h4>{locale==='tr'?'İş Ortaklığı':'Partnership'}</h4>
             <ul>
-              <li><a href="#neden">Neden ortak ol</a></li>
-              <li><a href="#nasil">Süreç</a></li>
-              <li><a href="#basvuru">Ortak ol</a></li>
-              <li><a href="/ortak">Ortak girişi</a></li>
+              <li><a href={`#${locale==='tr'?'neden':'why'}`}>{p.nav[0]}</a></li><li><a href={`#${locale==='tr'?'nasil':'process'}`}>{p.nav[1]}</a></li><li><a href={`#${locale==='tr'?'basvuru':'apply'}`}>{p.nav[3]}</a></li>{locale==='tr'&&<li><a href={withBase('/ortak')}>{p.nav[2]}</a></li>}
             </ul>
           </div>
           <div>
-            <h4>Kurumsal</h4>
+            <h4>{locale==='tr'?'Kurumsal':'Company'}</h4>
             <ul>
-              <li><a href="/#nasil">Süreç</a></li>
-              <li><a href="/#paketler">Paketler</a></li>
-              <li><a href="/">Ana sayfa</a></li>
+              <li><a href={withBase(locale==='tr'?'/#nasil':'/en#process')}>{locale==='tr'?'Süreç':'Process'}</a></li><li><a href={withBase(locale==='tr'?'/#paketler':'/en#plans')}>{locale==='tr'?'Paketler':'Services'}</a></li><li><a href={withBase(locale==='tr'?'/blog':'/en/blog')}>Blog</a></li><li><a href={withBase(locale==='tr'?'/':'/en')}>{locale==='tr'?'Ana sayfa':'Home'}</a></li>
             </ul>
           </div>
           <div>
-            <h4>İletişim</h4>
+            <h4>{locale==='tr'?'İletişim':'Contact'}</h4>
             <ul>
               <li>Kavacık Mah. Okul Cad.</li>
               <li>No:29 · Beykoz / İstanbul</li>
@@ -336,23 +296,22 @@ function Footer() {
           </div>
         </div>
         <p className="colo-legal">
-          İş ortaklığı; müşteri yönlendirmesine dayalı komisyonlu bir tanıtım iş birliğidir. Adres, posta, tebligat ve
-          yoklama süreçlerine ilişkin hizmetlerimiz idari destek ve fiziki iş adresi sağlama niteliğindedir; hukuki
-          veya mali danışmanlık hizmeti ya da kesin sonuç garantisi içermez.
+          {p.legal}
         </p>
+        <LegalLinks locale={locale}/>
         <div className="colo-bottom">
-          <span>© {new Date().getFullYear()} GANU · Sanal Ofis · İstanbul</span>
-          <span>Tüm hakları saklıdır.</span>
+          <span>© {new Date().getFullYear()} GANU · {p.meta}</span>
+          <LanguageSwitch locale={locale}/><span>{locale==='tr'?'Tüm hakları saklıdır.':'All rights reserved.'}</span>
         </div>
       </div>
     </footer>
   )
 }
 
-export default function IsOrtakligi() {
+export default function IsOrtakligi({ content=tr, locale='tr' }) {
+  const p=content.partnership
   const [pickedRole, setPickedRole] = useState('')
   const formRef = useRef(null)
-  useEffect(() => { document.title = 'GANU · İş Ortaklığı — Komisyonlu Yönlendirme' }, [])
 
   const pick = (r) => {
     setPickedRole(r)
@@ -361,18 +320,13 @@ export default function IsOrtakligi() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <a href="#neden" className="skip">İçeriğe geç</a>
+      <a href={`#${locale==='tr'?'neden':'why'}`} className="skip">{content.chrome.skip}</a>
       <ScrollBar />
-      <Nav />
+      <Nav p={p} locale={locale}/>
       <main>
-        <Hero />
-        <Marquee />
-        <Value />
-        <Steps />
-        <Roles onPick={pick} />
-        <Apply formRef={formRef} profession={pickedRole} />
+        <Hero p={p} locale={locale}/><Marquee p={p}/><Value p={p} locale={locale}/><Steps p={p} locale={locale}/><Roles onPick={pick} p={p} locale={locale}/><Apply formRef={formRef} profession={pickedRole} p={p} locale={locale}/>
       </main>
-      <Footer />
+      <Footer p={p} locale={locale}/>
     </MotionConfig>
   )
 }

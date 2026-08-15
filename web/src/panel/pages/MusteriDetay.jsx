@@ -7,6 +7,7 @@ import {
 } from '../lib/store.js'
 import { Modal, StatusBadge, TypeBadge, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
 import { TalepSohbet } from '../MusteriPortal.jsx'
+import { SecureImage, SecureLink } from '../components/SecureAsset.jsx'
 
 const docLabel = (v) => (DOC_TYPES.find((d) => d.v === v) || {}).l || v
 
@@ -144,9 +145,9 @@ export default function MusteriDetay() {
               <div style={{ marginBottom: 14 }}>
                 <div className="t2" style={{ marginBottom: 6 }}>Yüklenen dekont:</div>
                 {c.payment_receipt_url.startsWith('data:image') || /\.(png|jpe?g|webp)$/i.test(c.payment_receipt_url)
-                  ? <img src={c.payment_receipt_url} alt="dekont" onClick={() => setLightbox(c.payment_receipt_url)}
+                  ? <SecureImage stored={c.payment_receipt_url} alt="dekont" onClick={(e) => setLightbox(e.currentTarget.src)}
                       style={{ maxHeight: 160, borderRadius: 6, border: '1px solid #e4e9ef', cursor: 'zoom-in' }} />
-                  : <a className="pl-btn pl-btn-ghost pl-btn-sm" href={c.payment_receipt_url} target="_blank" rel="noreferrer">📄 Dekontu aç (PDF)</a>}
+                  : <SecureLink className="pl-btn pl-btn-ghost pl-btn-sm" stored={c.payment_receipt_url} target="_blank" rel="noreferrer">📄 Dekontu aç (PDF)</SecureLink>}
               </div>
             )}
 
@@ -293,14 +294,14 @@ export default function MusteriDetay() {
                 <div className="t1">{d.name}</div>
                 {d.note && <div className="t2">{d.note}</div>}
               </div>
-              {d.file_url && <a className="pl-btn pl-btn-ghost pl-btn-sm" href={d.file_url} download={d.name}>İndir</a>}
+              {d.file_url && <SecureLink className="pl-btn pl-btn-ghost pl-btn-sm" stored={d.file_url} download={d.name}>İndir</SecureLink>}
               <button className="pl-btn pl-btn-danger pl-btn-sm" onClick={() => delDoc(d)}>Sil</button>
             </div>
           ))}
         </div>
       </div>
 
-      {docModal && <BelgeForm onClose={() => setDocModal(false)} onSave={saveDoc} />}
+      {docModal && <BelgeForm customerId={id} onClose={() => setDocModal(false)} onSave={saveDoc} />}
       {chatReq && <TalepSohbet req={chatReq} from="ganu" onClose={() => setChatReq(null)} />}
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(10,37,64,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24, cursor: 'zoom-out' }}>
@@ -311,7 +312,7 @@ export default function MusteriDetay() {
   )
 }
 
-function BelgeForm({ onClose, onSave }) {
+function BelgeForm({ customerId, onClose, onSave }) {
   const [f, setF] = useState({ name: '', type: 'diger', note: '', file_url: '' })
   const [busy, setBusy] = useState(false)
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
@@ -319,7 +320,7 @@ function BelgeForm({ onClose, onSave }) {
     const file = e.target.files?.[0]; if (!file) return
     setBusy(true)
     try {
-      const url = await fileToStoredUrl(file, { maxW: 1400, quality: 0.7 })
+      const url = await fileToStoredUrl(file, { maxW: 1400, quality: 0.7, prefix: 'customers', customerId })
       setF((s) => ({ ...s, file_url: url, name: s.name || file.name }))
     } catch { alert('Dosya yüklenemedi.') }
     setBusy(false)

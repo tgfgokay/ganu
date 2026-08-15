@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useReducer } from 'react'
+import { withBase } from './base'
 import { useSearchParams, Link } from 'react-router-dom'
 import GanuMark from './GanuMark'
-import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar } from './panel/lib/store.js'
+import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posPaymentStatus, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar, loadCatalog, onCatalog, usingSupabase } from './panel/lib/store.js'
+import LegalLinks from './legal/LegalLinks.jsx'
+import { salesEnabled } from './legal/config.js'
+import { LEGAL_TEXT_VERSION } from './legal/policy.js'
+import { POS_RETURN_STORAGE_KEY } from './site/storageInventory.js'
 
 /* ============================================================
    /satin-al — 3 adımlı satın alma sayfası
@@ -50,28 +55,109 @@ function Steps({ current }) {
 
 const field = { display: 'flex', flexDirection: 'column', gap: 6 }
 const labelS = { fontSize: 13, fontWeight: 700, color: 'var(--navy, #0A2540)' }
+const POS_RETURN_KEY = POS_RETURN_STORAGE_KEY
+const POS_RETURN_TTL_MS = 60 * 60 * 1000
+const RETURN_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/
+
+function loadPaymentReturn(queryToken) {
+  const raw = String(queryToken || '').trim()
+  try {
+    if (raw) {
+      if (RETURN_TOKEN_RE.test(raw)) sessionStorage.setItem(POS_RETURN_KEY, JSON.stringify({ token: raw, expiresAt: Date.now() + POS_RETURN_TTL_MS }))
+      return { token: raw, expired: false }
+    }
+    const saved = JSON.parse(sessionStorage.getItem(POS_RETURN_KEY) || 'null')
+    if (!saved) return { token: '', expired: false }
+    if (!RETURN_TOKEN_RE.test(String(saved.token || '')) || !Number.isFinite(Number(saved.expiresAt)) || Number(saved.expiresAt) <= Date.now()) {
+      sessionStorage.removeItem(POS_RETURN_KEY)
+      return { token: '', expired: true }
+    }
+    return { token: saved.token, expired: false }
+  } catch {
+    try { sessionStorage.removeItem(POS_RETURN_KEY) } catch { /* storage kapalı */ }
+    return { token: raw, expired: false }
+  }
+}
+
+function clearPaymentReturn() {
+  try { sessionStorage.removeItem(POS_RETURN_KEY) } catch { /* storage kapalı */ }
+}
 
 export default function SatinAl() {
   const [params] = useSearchParams()
   const urlPkg = params.get('paket')
   const refCode = (params.get('ref') || '').trim().toUpperCase() // iş ortağı yönlendirme kodu
+  const [returnSeed] = useState(() => salesEnabled ? loadPaymentReturn(params.get('payment_return')) : { token: '', expired: false })
+  const paymentReturn = returnSeed.token
+  const [returnState, setReturnState] = useState(paymentReturn ? 'loading' : returnSeed.expired ? 'expired' : '')
   const [pkg, setPkg] = useState(PACKAGES.includes(urlPkg) ? urlPkg : 'Başlangıç')
   const [step, setStep] = useState(1)
   const [f, setF] = useState({ title: '', email: '', phone: '', tax_no: '', tax_office: '' })
   const [err, setErr] = useState('')
   const [cust, setCust] = useState(null)       // adım 1'de oluşan aday kaydı
-  const [payTab, setPayTab] = useState('kart') // kart | havale
+  // Kart sekmesi başlangıcı: POS açık ya da geliştirme modu değilse doğrudan havale.
+  const [payTab, setPayTab] = useState(() => (posEnabled() || import.meta.env.DEV) ? 'kart' : 'havale') // kart | havale
   const [result, setResult] = useState(null)   // { mode:'kart', code } | { mode:'havale' }
   const [codeInput, setCodeInput] = useState('') // müşterinin girdiği indirim kodu
   const [discount, setDiscount] = useState(null) // { code, pct } | null
+  const [serverQuote, setServerQuote] = useState(null)
   const [codeMsg, setCodeMsg] = useState('')     // kod geri bildirimi
+  const [preinfoAccepted, setPreinfoAccepted] = useState(false)
+  const [earlyPerformanceRequested, setEarlyPerformanceRequested] = useState(false)
   const cfg = getConfig()
   const listPrice = PACKAGE_PRICES[pkg]
   const isCorp = pkg === 'Kurumsal'
-  const price = discount && listPrice ? indirimliTutar(listPrice, discount.pct) : listPrice
+  const catalogUnavailable = !isCorp && !(Number(listPrice) > 0)
+  const price = serverQuote?.amount ?? (discount && listPrice ? indirimliTutar(listPrice, discount.pct) : listPrice)
 
+  /* Kart ödeme modu (P0.4 — prod'da demo kesinlikle kapalı):
+     - 'pos'  : gerçek sanal POS (pos_enabled açık)
+     - 'demo' : test kartı SİMÜLASYONU — YALNIZCA geliştirme (import.meta.env.DEV)
+     - 'off'  : POS yok + production → kart sekmesi hiç gösterilmez, sadece havale */
+  const cardMode = posEnabled() ? 'pos' : (import.meta.env.DEV ? 'demo' : 'off')
+  const payMethods = cardMode === 'off'
+    ? [['havale', '🏦', 'Havale / EFT']]
+    : [['kart', '💳', 'Kredi kartı'], ['havale', '🏦', 'Havale / EFT']]
+
+  const [, bumpCatalog] = useReducer((x) => x + 1, 0)
+  useEffect(() => {
+    const unsubscribe=onCatalog(bumpCatalog); void loadCatalog()
+    return unsubscribe
+  }, [])
   useEffect(() => { document.title = 'GANU · Satın Al'; window.scrollTo(0, 0) }, [])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [step])
+  useEffect(() => {
+    if (!paymentReturn) return
+    // Ham tokenı referrer/history yüzeyinde tutma; closure sorgu tamamlanana kadar korur.
+    const clean = new URL(window.location.href)
+    clean.searchParams.delete('payment_return')
+    window.history.replaceState(window.history.state, '', `${clean.pathname}${clean.search}${clean.hash}`)
+    let cancelled = false
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
+    ;(async () => {
+      let sawPending = false
+      for (let attempt = 0; attempt < 12 && !cancelled; attempt += 1) {
+        try {
+          const state = await posPaymentStatus(paymentReturn)
+          if (cancelled) return
+          if (state !== 'pending') { setReturnState(state); return }
+          sawPending = true
+          setReturnState('pending')
+        } catch {
+          // Geçici ağ/Edge hatasında tokenı kaybetme; bounded polling sürer.
+          if (!cancelled && attempt > 0) setReturnState('pending')
+        }
+        await wait(3000)
+      }
+      if (!cancelled) setReturnState(sawPending ? 'pending_timeout' : 'unavailable')
+    })()
+    return () => { cancelled = true }
+  }, [paymentReturn])
+  useEffect(() => {
+    if (['active', 'paid_pending_activation', 'failed', 'manual_review', 'unavailable', 'expired'].includes(returnState)) clearPaymentReturn()
+  }, [returnState])
+
+  if (!salesEnabled) return <div className="legal-shell"><header className="legal-mast"><a href={withBase('/')} aria-label="Ana sayfa"><GanuMark/></a></header><main><section className="sales-closed"><p className="legal-kicker">LANSMAN ÖNCESİ GÜVENLİK KAPISI</p><h1>Çevrim içi satış henüz açık değil</h1><p>Satıcı/veri sorumlusu tescil bilgileri ve yasal metin onay tarihi tamamlanmadan başvuru, ödeme veya dekont kabul edilmez.</p><a className="btn btn-solid" href="mailto:merhaba@ganu.com.tr?subject=GANU%20bilgi%20talebi">Bilgi isteyin →</a><LegalLinks locale="tr"/></section></main></div>
 
   const set = (k) => (e) => {
     setErr('')
@@ -80,16 +166,24 @@ export default function SatinAl() {
 
   /* indirim kodu uygula — kod sahibi (ör. BNI üyesi) kendi girer */
   const applyCode = () => {
+    const normalized = String(codeInput || '').trim().toUpperCase().replace(/\s+/g, '')
+    if (usingSupabase) {
+      if (!normalized) return
+      setDiscount({ code: normalized, pct: 0, pending: true })
+      setCodeMsg('Kod, ödeme başlatılırken güvenli sunucuda doğrulanacak.')
+      return
+    }
     const d = indirimCoz(codeInput)
     if (d) { setDiscount(d); setCodeMsg(`✓ %${d.pct} indirim uygulandı`) }
     else { setDiscount(null); setCodeMsg('Kod geçersiz.') }
   }
-  const clearCode = () => { setDiscount(null); setCodeInput(''); setCodeMsg('') }
+  const clearCode = () => { setDiscount(null); setServerQuote(null); setCodeInput(''); setCodeMsg('') }
   const bniPct = discount ? discount.pct : 0
 
   /* Adım 1 → 2: aday kaydı oluştur */
   const submitInfo = async (e) => {
     e.preventDefault()
+    if (catalogUnavailable) return setErr('Fiyat kataloğuna ulaşılamadı; güvenlik nedeniyle satış başlatılmadı.')
     const email = f.email.trim(), phone = f.phone.trim()
     if (!f.title.trim()) return setErr('Şirket ünvanı / adınız zorunlu.')
     if (!email && !phone) return setErr('E-posta ya da telefondan en az birini yazın.')
@@ -97,7 +191,16 @@ export default function SatinAl() {
     if (email && !validEmail(email)) return setErr('E-posta hatalı görünüyor — ör. ad@firma.com')
     const vkn = f.tax_no.replace(/\D/g, '')
     if (!isCorp && vkn.length !== 10 && vkn.length !== 11) return setErr('Vergi no (10 hane) ya da TC kimlik no (11 hane) zorunlu — faturanız otomatik kesilir.')
-    const row = await customerApply({ ...f, package: pkg, ref: refCode, bni: !!discount })
+    let row
+    if (!preinfoAccepted) return setErr('Ön bilgilendirme ve mesafeli sözleşme metinlerine eriştiğinizi teyit edin.')
+    if (!earlyPerformanceRequested) return setErr('Mevcut aktivasyon akışı için 14 günlük süre dolmadan hizmete başlanması talebiniz gereklidir.')
+    try { row = await customerApply({ ...f, package: pkg, ref: refCode, code: discount?.code || '', bni: !!discount, legal_text_version: LEGAL_TEXT_VERSION, preinfo_accepted: true, early_performance_requested: true }) }
+    catch (e) { return setErr(e.message || 'Satın alma başlatılamadı.') }
+    if (row.quote) {
+      setServerQuote(row.quote)
+      if (row.quote.discount_pct) setDiscount({ code: row.quote.discount_code, pct: row.quote.discount_pct })
+      else if (discount) { setDiscount(null); setCodeMsg('Kod geçersiz veya pasif; indirim uygulanmadı.') }
+    }
     setCust(row)
     if (isCorp) { setResult({ mode: 'teklif' }); setStep(3) }
     else setStep(2)
@@ -115,8 +218,9 @@ export default function SatinAl() {
      Tahsilat sonrası sağlayıcı callback'i DB'yi işaretler, dönüşte panel onaylar. */
   const startPos = async () => {
     const provider = cfg.pos_provider || 'paytr'
+    // P0.3: tutar sunucuda hesaplanır — istemci yalnız paket + izinli indirim kodu iletir.
     const out = await posPay(provider, {
-      customerId: cust.id, amount: price, pkg,
+      purchaseToken: cust.purchase_token,
       email: f.email, name: f.title, phone: f.phone,
     })
     const url = out?.iframe_url || out?.redirect_url || out?.payment_url
@@ -127,11 +231,13 @@ export default function SatinAl() {
   /* Havale: dekont yükle + bildirim.
      - Ayarda "dekontla otomatik aktivasyon" AÇIK ve dekont varsa → anında
        aktive et (karttaki gibi kod ekranda). Aksi halde onay kuyruğuna düşer. */
-  const onTransferClaim = async ({ receiptUrl = '' } = {}) => {
-    if (cfg.auto_activate_receipt && receiptUrl) {
+  const onTransferClaim = async ({ receiptUrl = '', receiptFile = null } = {}) => {
+    // P0.4: Dekontla otomatik aktivasyon YALNIZCA geliştirmede. Production'da
+    // dekont ödeme kanıtı değildir; personel onay kuyruğuna (inceleme) düşer.
+    if (!usingSupabase && cfg.auto_activate_receipt && import.meta.env.DEV && receiptUrl) {
       try {
         // dekontu da kaydet, sonra aktive et
-        await submitPaymentReceipt(cust.id, { receiptUrl, amount: price, pkg, sender: f.title })
+        await submitPaymentReceipt(cust.id, { receiptUrl, receiptFile, purchaseToken: cust.purchase_token, amount: price, pkg, sender: f.title })
         const updated = await activateAfterPayment(cust, pkg, price, { bniPct })
         setResult({ mode: 'kart', code: updated.access_code })
         setStep(3)
@@ -139,19 +245,47 @@ export default function SatinAl() {
       } catch { /* hata olursa aşağıdaki kuyruğa düşür */ }
     }
     try {
-      await submitPaymentReceipt(cust.id, { receiptUrl, amount: price, pkg, sender: f.title })
-    } catch { /* bildirim düşmese de müşteri onayını göster */ }
-    setResult({ mode: 'havale', withReceipt: !!receiptUrl })
+      await submitPaymentReceipt(cust.id, { receiptUrl, receiptFile, purchaseToken: cust.purchase_token, amount: price, pkg, sender: f.title })
+    } catch (e) { throw new Error(e.message || 'Ödeme bildirimi kaydedilemedi.') }
+    setResult({ mode: 'havale', withReceipt: !!(receiptUrl || receiptFile) })
     setStep(3)
+  }
+
+  if (returnState) {
+    const view = {
+      loading: ['Ödeme doğrulanıyor…', 'Sağlayıcı bildirimi güvenli sunucudan kontrol ediliyor.'],
+      pending: ['Ödeme sonucu bekleniyor…', 'Banka bildirimi henüz ulaşmadı; bu sayfa kısa süre otomatik kontrol edecek.'],
+      pending_timeout: ['Ödeme incelemede', 'Sonuç henüz kesinleşmedi. Tekrar ödeme yapmayın; ekibimiz mutabakatı kontrol edecek.'],
+      paid_pending_activation: ['Ödeme alındı', 'Tahsilat doğrulandı. Sanal ofis aktivasyonu ve sözleşme kontrolü hazırlanıyor.'],
+      active: ['Aktivasyon tamamlandı', 'Müşteri portalına doğrulanmış e-posta adresinizle güvenli giriş yapabilirsiniz.'],
+      failed: ['Ödeme tamamlanmadı', 'Tahsilat başarısız görünüyor. Yeniden denemeden önce bankanızdaki hareketi kontrol edin.'],
+      manual_review: ['Manuel inceleme gerekli', 'Tutar veya sağlayıcı bildirimi otomatik eşleşmedi. Tekrar ödeme yapmayın; ekibimiz kontrol edecek.'],
+      unavailable: ['Durum doğrulanamadı', 'Dönüş bağlantısı geçersiz, süresi dolmuş veya hizmet geçici olarak kullanılamıyor.'],
+      expired: ['Dönüş bağlantısının süresi doldu', 'Güvenli ödeme durumu anahtarı bir saat sonunda bu tarayıcıdan kaldırıldı.'],
+    }[returnState] || ['Ödeme durumu bekleniyor', 'Lütfen kısa süre sonra yeniden kontrol edin.']
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--paper, #F4F6F8)' }}>
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px clamp(20px,5vw,48px)', borderBottom: '2px solid var(--navy, #0A2540)' }}>
+          <a href={withBase('/')} style={{ display: 'inline-flex', color: 'var(--navy, #0A2540)' }} aria-label="Ana sayfa"><GanuMark style={{ height: 26, width: 'auto', display: 'block' }} /></a>
+        </header>
+        <main style={{ maxWidth: 620, margin: '0 auto', padding: '70px 20px' }}>
+          <section style={{ background: '#fff', border: '2px solid var(--navy, #0A2540)', borderRadius: 4, padding: 28 }} aria-live="polite">
+            <h1 style={{ marginTop: 0 }}>{view[0]}</h1><p>{view[1]}</p>
+            {returnState === 'active' && <Link className="btn btn-solid" to="/musteri">Müşteri portalına git →</Link>}
+            <a className="btn btn-line" href={withBase('/')} style={{ marginLeft: 10 }}>Ana sayfa</a>
+          </section>
+        </main>
+      </div>
+    )
   }
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--paper, #F4F6F8)' }}>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px clamp(20px,5vw,48px)', borderBottom: '2px solid var(--navy, #0A2540)' }}>
-        <a href="/" style={{ display: 'inline-flex', color: 'var(--navy, #0A2540)' }} aria-label="Ana sayfa">
+        <a href={withBase("/")} style={{ display: 'inline-flex', color: 'var(--navy, #0A2540)' }} aria-label="Ana sayfa">
           <GanuMark style={{ height: 26, width: 'auto', display: 'block' }} />
         </a>
-        <a href="/" style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy, #0A2540)' }}>← Siteye dön</a>
+        <a href={withBase("/")} style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy, #0A2540)' }}>← Siteye dön</a>
       </header>
 
       <main style={{ maxWidth: 620, margin: '0 auto', padding: '10px 20px 80px' }}>
@@ -162,11 +296,13 @@ export default function SatinAl() {
           border: '2px solid var(--navy, #0A2540)', borderRadius: 4, padding: '14px 18px', background: '#fff', marginBottom: 22 }}>
           <div>
             <div style={{ fontWeight: 800, fontSize: 17 }}>{pkg} Paketi</div>
-            <div style={{ fontSize: 13, opacity: 0.65 }}>{isCorp ? 'ihtiyaca göre fiyatlanır' : `yıllık peşin · ≈₺${Math.round(price / 12).toLocaleString('tr-TR')}/ay'a gelir`}</div>
+            <div style={{ fontSize: 13, opacity: 0.65 }}>{isCorp ? 'ihtiyaca göre fiyatlanır' : catalogUnavailable ? 'fiyat kataloğu bağlantısı gerekli' : `yıllık peşin · ≈₺${Math.round(price / 12).toLocaleString('tr-TR')}/ay'a gelir`}</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             {isCorp ? (
               <div style={{ fontWeight: 800, fontSize: 20 }}>Özel teklif</div>
+            ) : catalogUnavailable ? (
+              <div style={{ fontWeight: 800, fontSize: 17, color: '#b91c1c' }}>Satış geçici kapalı</div>
             ) : (
               <>
                 {discount && <div style={{ fontSize: 13, opacity: 0.5, textDecoration: 'line-through' }}>₺{listPrice.toLocaleString('tr-TR')}</div>}
@@ -188,7 +324,7 @@ export default function SatinAl() {
             <label style={{ ...labelS, display: 'block', marginBottom: 8 }}>İndirim kodunuz var mı?</label>
             {discount ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--teal-dark, #04352c)' }}>✓ {discount.code} — %{discount.pct} indirim uygulandı</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--teal-dark, #04352c)' }}>{discount.pending ? '⏳' : '✓'} {discount.code}{discount.pending ? ' — sunucuda doğrulanacak' : ` — %${discount.pct} indirim uygulandı`}</span>
                 <button type="button" className="btn btn-line" style={{ padding: '5px 12px', fontSize: 13 }} onClick={clearCode}>Kaldır</button>
               </div>
             ) : (
@@ -212,7 +348,7 @@ export default function SatinAl() {
               <label style={labelS} htmlFor="sa-title">Şirket ünvanı / adınız *</label>
               <input id="sa-title" className="sa-in" value={f.title} onChange={set('title')} required autoFocus placeholder="ör. Yıldız E-Ticaret Ltd. Şti." />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="sa-2col">
               <div style={field}>
                 <label style={labelS} htmlFor="sa-mail">E-posta</label>
                 <input id="sa-mail" className="sa-in" type="email" inputMode="email" value={f.email} onChange={set('email')} placeholder="ad@firma.com" />
@@ -222,7 +358,7 @@ export default function SatinAl() {
                 <input id="sa-tel" className="sa-in" type="tel" inputMode="tel" value={f.phone} onChange={set('phone')} placeholder="05xx xxx xx xx" />
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <div className="sa-2col">
               <div style={field}>
                 <label style={labelS} htmlFor="sa-vkn">Vergi no / TC kimlik no {isCorp ? '' : '*'}</label>
                 <input id="sa-vkn" className="sa-in" inputMode="numeric" maxLength={11} value={f.tax_no}
@@ -236,29 +372,34 @@ export default function SatinAl() {
             <span style={{ fontSize: 12.5, opacity: 0.65, marginTop: -6 }}>
               Bu bilgilerle faturanız ödemenin ardından otomatik düzenlenip e-postanıza gönderilir.
             </span>
+            <label className="legal-ack"><input type="checkbox" checked={preinfoAccepted} onChange={(e)=>setPreinfoAccepted(e.target.checked)}/><span><a href={withBase('/mesafeli-satis')} target="_blank" rel="noreferrer">Ön bilgilendirme ve mesafeli hizmet metnine</a> eriştim; ödeme öncesi inceleyebildim. Bu bir açık rıza beyanı değildir.</span></label>
+            <label className="legal-ack"><input type="checkbox" checked={earlyPerformanceRequested} onChange={(e)=>setEarlyPerformanceRequested(e.target.checked)}/><span>Hizmetin 14 günlük cayma süresi dolmadan başlatılmasını açıkça talep ediyorum. Bunun, hizmete başlanmasına ilişkin cayma hakkı istisnasını gündeme getirebileceği konusunda bilgilendirildim; bu ifade diğer yasal haklardan genel feragat değildir.</span></label>
             {err && <span style={{ color: '#b91c1c', fontSize: 14, fontWeight: 600 }}>{err}</span>}
-            <button type="submit" className="btn btn-solid big" style={{ width: '100%' }}>
+            <button type="submit" className="btn btn-solid big" style={{ width: '100%' }} disabled={catalogUnavailable||!preinfoAccepted||!earlyPerformanceRequested}>
               {isCorp ? 'Teklif iste →' : 'Ödemeye geç →'}
             </button>
             <span style={{ fontSize: 13, opacity: 0.65, textAlign: 'center' }}>30 saniyede tamamlanır · Sözleşme + KVKK metinleri aktivasyonda paylaşılır</span>
+            <LegalLinks locale="tr" compact/>
           </form>
         )}
 
         {step === 2 && (
           <div style={{ background: '#fff', border: '2px solid var(--line, #dbe2ea)', borderRadius: 4, padding: 22 }}>
             {/* ödeme yöntemi sekmeleri */}
-            <div className="pay-tabs">
-              {[['kart', '💳', 'Kredi kartı'], ['havale', '🏦', 'Havale / EFT']].map(([k, ic, l]) => (
+            <div className="pay-tabs" style={payMethods.length === 1 ? { gridTemplateColumns: '1fr' } : undefined}>
+              {payMethods.map(([k, ic, l]) => (
                 <button key={k} type="button" onClick={() => setPayTab(k)} className={`pay-tab${payTab === k ? ' on' : ''}`}>
                   <span aria-hidden="true">{ic}</span>{l}
                 </button>
               ))}
             </div>
             {payTab === 'kart'
-              ? (posEnabled()
+              ? (cardMode === 'pos'
                   ? <PosPay amount={price} provider={cfg.pos_provider || 'paytr'} onStart={startPos} />
-                  : <CardPay amount={price} onPaid={onCardPaid} />)
-              : <TransferPay cfg={cfg} applicant={f.title || cust?.title} pkg={pkg} amount={price} onClaim={onTransferClaim} />}
+                  : import.meta.env.DEV
+                    ? <CardPay amount={price} onPaid={onCardPaid} />
+                    : <PaymentUnavailable onTransfer={() => setPayTab('havale')} />)
+              : <TransferPay cfg={cfg} applicant={f.title || cust?.title} customerId={cust?.id} pkg={pkg} amount={price} onClaim={onTransferClaim} />}
           </div>
         )}
 
@@ -321,6 +462,9 @@ export default function SatinAl() {
           transition: border-color .2s;
         }
         .sa-in:focus { outline: none; border-color: var(--teal, #00D4B2); }
+        /* checkout ikili alanlar — dar ekranda (≤480px) tek kolona iner */
+        .sa-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 480px) { .sa-2col { grid-template-columns: 1fr; } }
 
         /* ---- Ödeme adımı ---- */
         .pay-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
@@ -412,7 +556,20 @@ export default function SatinAl() {
   )
 }
 
-/* ---- Kart ödeme (TEST MODU — tahsilat yok, simülasyon) ---- */
+/* Kart ödemesi kapalı (POS bağlı değil + production) — simülasyon ASLA gösterilmez.
+   Kullanıcı havaleye yönlendirilir; hiçbir aktivasyon tetiklenmez. */
+function PaymentUnavailable({ onTransfer }) {
+  return (
+    <div style={{ display: 'grid', gap: 14, textAlign: 'center', padding: '8px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff7e6', border: '1.5px solid #f0c36d', borderRadius: 10, padding: '10px 14px', fontSize: 13, fontWeight: 600, color: '#7a5b12', textAlign: 'left' }}>
+        💳 Kredi kartı ile ödeme çok yakında. Şimdilik <b>banka havalesi / EFT</b> ile güvenle ödeyebilirsiniz.
+      </div>
+      <button type="button" className="pay-btn" onClick={onTransfer}>Havale / EFT ile öde →</button>
+    </div>
+  )
+}
+
+/* ---- Kart ödeme (TEST MODU — tahsilat yok, simülasyon; YALNIZCA geliştirmede) ---- */
 /* Gerçek sanal POS ödemesi — sağlayıcının güvenli 3D Secure ekranına yönlendirir.
    Kart bilgisi bu ekrana GİRİLMEZ; sağlayıcıda girilir (PCI-DSS uyumlu). */
 function PosPay({ amount, provider, onStart }) {
@@ -521,7 +678,7 @@ function CardPay({ amount, onPaid }) {
             value={c.name} onChange={set('name', (v) => v.toUpperCase())} onFocus={() => setFlip(false)} />
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div className="sa-2col">
         <div>
           <label className="pay-lab" htmlFor="cp-exp">Son kullanma</label>
           <div className="pay-field">
@@ -554,9 +711,10 @@ function CardPay({ amount, onPaid }) {
 }
 
 /* ---- Havale / EFT — banka bilgileri + dekont yükleme ---- */
-function TransferPay({ cfg, applicant, pkg, amount, onClaim }) {
+function TransferPay({ cfg, applicant, customerId, pkg, amount, onClaim }) {
   const [copied, setCopied] = useState('')
   const [receipt, setReceipt] = useState('')   // yüklenen dekont (dataURL)
+  const [receiptFile, setReceiptFile] = useState(null)
   const [fileName, setFileName] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -570,13 +728,23 @@ function TransferPay({ cfg, applicant, pkg, amount, onClaim }) {
     if (file.size > 8 * 1024 * 1024) { setErr('Dosya çok büyük (en fazla 8 MB).'); return }
     setErr(''); setBusy(true)
     try {
-      const url = await fileToStoredUrl(file, { maxW: 1600, quality: 0.7 })
-      setReceipt(url); setFileName(file.name)
+      if (usingSupabase) { setReceiptFile(file); setReceipt(URL.createObjectURL(file)); setFileName(file.name) }
+      else {
+        const url = await fileToStoredUrl(file, { maxW: 1600, quality: 0.7, prefix: 'receipts', customerId })
+        setReceipt(url); setFileName(file.name)
+      }
     } catch { setErr('Dosya yüklenemedi, tekrar deneyin.') }
     setBusy(false)
   }
 
-  const isImg = receipt.startsWith('data:image')
+  const isImg = receiptFile ? receiptFile.type.startsWith('image/') : receipt.startsWith('data:image')
+
+  const claim = async () => {
+    setErr(''); setBusy(true)
+    try { await onClaim({ receiptUrl: usingSupabase ? '' : receipt, receiptFile }) }
+    catch (e) { setErr(e.message || 'Bildirim kaydedilemedi.'); setBusy(false); return }
+    setBusy(false)
+  }
 
   const Row = ({ label, value, tag }) => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--line, #dbe2ea)', flexWrap: 'wrap' }}>
@@ -624,7 +792,7 @@ function TransferPay({ cfg, applicant, pkg, amount, onClaim }) {
               <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fileName || 'Dekont eklendi'}</div>
               <div style={{ fontSize: 12.5, color: 'var(--teal-dark, #04352c)' }}>✓ Eklendi — göndermeye hazır</div>
             </div>
-            <button type="button" className="btn btn-line" style={{ padding: '4px 10px', fontSize: 13 }} onClick={() => { setReceipt(''); setFileName('') }}>Kaldır</button>
+            <button type="button" className="btn btn-line" style={{ padding: '4px 10px', fontSize: 13 }} onClick={() => { if (receipt.startsWith('blob:')) URL.revokeObjectURL(receipt); setReceipt(''); setReceiptFile(null); setFileName('') }}>Kaldır</button>
           </div>
         ) : (
           <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, border: '2px dashed rgba(10,37,64,.35)', borderRadius: 4, padding: '22px 14px', cursor: 'pointer', background: '#fff', textAlign: 'center' }}>
@@ -638,7 +806,7 @@ function TransferPay({ cfg, applicant, pkg, amount, onClaim }) {
       </div>
 
       <button type="button" className="btn btn-solid big" style={{ width: '100%' }}
-        onClick={() => onClaim({ receiptUrl: receipt })} disabled={busy}>
+        onClick={claim} disabled={busy}>
         {receipt ? 'Dekontu gönder ve ödemeyi bildir ✓' : 'Dekontsuz bildir (sonra iletirim)'}
       </button>
       <span style={{ fontSize: 13, opacity: 0.65, textAlign: 'center' }}>
