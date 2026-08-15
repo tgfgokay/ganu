@@ -47,6 +47,8 @@ delete from _ganu_test_results;
 do $$
 declare
   v_cid       uuid := gen_random_uuid();   -- ana TEST müşteri
+  v_cid_mm    uuid := gen_random_uuid();   -- mismatch POS müşterisi
+  v_cid_nocust uuid := gen_random_uuid();  -- customer kaybı POS müşterisi
   v_legacy    uuid := gen_random_uuid();   -- legacy parola testi müşterisi
   v_other     uuid := gen_random_uuid();   -- var olmayan başka müşteri (path testi)
   v_sid_ok    uuid := gen_random_uuid();
@@ -63,6 +65,9 @@ begin
   insert into public.discount_codes(code,pct,active) values ('TEST_DISC',15,true);
   insert into public.customers(id,title,status,access_code,portal_password)
     values (v_cid,'TEST_Müşteri','aktif',v_code,'');
+  insert into public.customers(id,title,status,access_code,portal_password) values
+    (v_cid_mm,'TEST_Müşteri_MM','aktif','TEST_CODE_MM',''),
+    (v_cid_nocust,'TEST_Müşteri_NOCUST','aktif','TEST_CODE_NOCUST','');
   insert into public.customers(id,title,status,access_code,portal_password)
     values (v_legacy,'TEST_Legacy','aktif','TEST_LEGACY_CODE',
             'sha256:'||encode(digest('eski','sha256'),'hex'));  -- legacy (sha256) parola
@@ -70,8 +75,8 @@ begin
     use_kind,used_at,legal_text_version,preinfo_accepted_at,early_performance_requested_at,legal_ip_hash,legal_user_agent_hash)
   values
     (v_sid_ok,v_cid,'Pro',189.90,189.90,1,'TL',now()+interval '30 minutes','pos',now(),'2026-08-15.v1',now(),now(),repeat('a',64),repeat('b',64)),
-    (v_sid_mm,v_cid,'Pro',189.90,189.90,1,'TL',now()+interval '30 minutes','pos',now(),'2026-08-15.v1',now(),now(),repeat('c',64),repeat('d',64)),
-    (v_sid_nocust,v_cid,'Pro',189.90,189.90,1,'TL',now()+interval '30 minutes','pos',now(),'2026-08-15.v1',now(),now(),repeat('e',64),repeat('f',64));
+    (v_sid_mm,v_cid_mm,'Pro',189.90,189.90,1,'TL',now()+interval '30 minutes','pos',now(),'2026-08-15.v1',now(),now(),repeat('c',64),repeat('d',64)),
+    (v_sid_nocust,v_cid_nocust,'Pro',189.90,189.90,1,'TL',now()+interval '30 minutes','pos',now(),'2026-08-15.v1',now(),now(),repeat('e',64),repeat('f',64));
 
   -- ============================================================
   -- 1) _pw_match — yalnız bcrypt kabul; sha256/düz metin/boş red
@@ -153,7 +158,7 @@ begin
 
   -- 3c tutar uyuşmazlığı
   insert into public.pos_orders(merchant_oid,customer_id,amount,pkg,provider,status,purchase_session_id,init_state,price_version,list_amount,currency)
-    values ('TEST_OID_MM', v_cid, 189.90, 'Pro','paytr','bekliyor',v_sid_mm,'ready',1,189.90,'TL');
+    values ('TEST_OID_MM', v_cid_mm, 189.90, 'Pro','paytr','bekliyor',v_sid_mm,'ready',1,189.90,'TL');
   r := public.pos_settle('TEST_OID_MM','success',100);
   select status into s from public.pos_orders where merchant_oid='TEST_OID_MM';
   select count(*) into n from public.security_events where kind='pos_amount_mismatch' and detail->>'merchant_oid'='TEST_OID_MM';
@@ -164,7 +169,7 @@ begin
 
   -- 3d müşteri güncelleme hatası → exception + sipariş 'bekliyor' kalır (atomik)
   insert into public.pos_orders(merchant_oid,customer_id,amount,pkg,provider,status,purchase_session_id,init_state,price_version,list_amount,currency)
-    values ('TEST_OID_NOCUST', v_cid, 189.90, 'Pro','paytr','bekliyor',v_sid_nocust,'ready',1,189.90,'TL');
+    values ('TEST_OID_NOCUST', v_cid_nocust, 189.90, 'Pro','paytr','bekliyor',v_sid_nocust,'ready',1,189.90,'TL');
   update public.pos_orders set customer_id = null, purchase_session_id = null where merchant_oid='TEST_OID_NOCUST'; -- müşteri kaybı simülasyonu
   begin
     r := public.pos_settle('TEST_OID_NOCUST','success',18990);
@@ -334,7 +339,7 @@ begin
   -- ============ TEMİZLİK (yalnız TEST_ filtreli — geniş DELETE YOK) ============
   delete from public.pos_orders    where merchant_oid like 'TEST_%';
   delete from public.security_events where coalesce(detail->>'merchant_oid','') like 'TEST_%';
-  delete from public.customers     where id in (v_cid, v_legacy);
+  delete from public.customers     where id in (v_cid, v_cid_mm, v_cid_nocust, v_legacy);
   delete from public.discount_codes where code like 'TEST_%';
   delete from public.packages      where id like 'TEST_%';
 
@@ -345,7 +350,7 @@ exception when others then
   begin
     delete from public.pos_orders    where merchant_oid like 'TEST_%';
     delete from public.security_events where coalesce(detail->>'merchant_oid','') like 'TEST_%';
-    delete from public.customers     where title in ('TEST_Müşteri','TEST_Legacy');
+    delete from public.customers     where title like 'TEST_Müşteri%' or title='TEST_Legacy';
     delete from public.discount_codes where code like 'TEST_%';
     delete from public.packages      where id like 'TEST_%';
   exception when others then null;
@@ -365,7 +370,7 @@ select result, count(*) from _ganu_test_results group by result order by result;
 -- Hepsi 0 olmalı. Değilse hangi kayıtların kaldığını gösterir.
 select 'pos_orders'     as tablo, count(*) as kalan_test_kaydi from public.pos_orders    where merchant_oid like 'TEST_%'
 union all select 'security_events', count(*) from public.security_events where coalesce(detail->>'merchant_oid','') like 'TEST_%'
-union all select 'customers',       count(*) from public.customers     where title in ('TEST_Müşteri','TEST_Legacy')
+union all select 'customers',       count(*) from public.customers     where title like 'TEST_Müşteri%' or title='TEST_Legacy'
 union all select 'discount_codes',  count(*) from public.discount_codes where code like 'TEST_%'
 union all select 'packages',        count(*) from public.packages      where id like 'TEST_%';
 commit;

@@ -72,8 +72,9 @@ begin
  cid:=gen_random_uuid();sid:=gen_random_uuid();h:=repeat('e',64);
 	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008_RECEIPT_CB','test-0008-rc@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  perform public.purchase_record_claim(sid,cid,'','');
- insert into public.pos_orders(merchant_oid,customer_id,amount,pkg,provider,status,purchase_session_id,init_state,return_token_hash,return_expires_at)
- values('TEST_0008_RECEIPT_CB',cid,18990,'Pro','paytr','bekliyor',sid,'ready',h,now()+interval '30 minutes');
+ insert into public.pos_orders(merchant_oid,customer_id,amount,pkg,provider,status,purchase_session_id,init_state,
+  return_token_hash,return_expires_at,price_version,list_amount,currency)
+ values('TEST_0008_RECEIPT_CB',cid,18990,'Pro','paytr','bekliyor',sid,'ready',h,now()+interval '30 minutes',1,18990,'TL');
  x:=public.pos_settle('TEST_0008_RECEIPT_CB','success',1899000);
  insert into _ganu_0008_results select 'receipt session callback red','mismatch/receipt_claimed',x||'/'||s.settlement_state,
   case when x='mismatch' and s.settlement_state='receipt_claimed' then 'PASS' else 'FAIL' end from public.purchase_sessions s where s.id=sid;
