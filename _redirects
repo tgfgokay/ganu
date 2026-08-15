@@ -1,0 +1,3 @@
+# SPA fallback — tüm yolları index.html'e düşür (BrowserRouter: /avukat, /panel, /musteri…)
+# Netlify ve Cloudflare Pages bu dosyayı okur; diğer host'larda yok sayılır.
+/*    /index.html    200

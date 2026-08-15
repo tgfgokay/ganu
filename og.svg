@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="bg" cx="76%" cy="10%" r="95%">
+      <stop offset="0%" stop-color="#12365a"/>
+      <stop offset="58%" stop-color="#0A2540"/>
+      <stop offset="100%" stop-color="#081d33"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- adres / koordinat plakası motifi (hero ile aynı dil) -->
+  <g transform="translate(1015,312)">
+    <g stroke="#F4EFE7" stroke-opacity="0.06" stroke-width="1">
+      <line x1="-240" y1="-170" x2="-240" y2="170"/>
+      <line x1="-160" y1="-170" x2="-160" y2="170"/>
+      <line x1="-80"  y1="-170" x2="-80"  y2="170"/>
+      <line x1="0"    y1="-170" x2="0"    y2="170"/>
+      <line x1="80"   y1="-170" x2="80"   y2="170"/>
+      <line x1="160"  y1="-170" x2="160"  y2="170"/>
+      <line x1="-240" y1="-160" x2="160" y2="-160"/>
+      <line x1="-240" y1="-80"  x2="160" y2="-80"/>
+      <line x1="-240" y1="0"    x2="160" y2="0"/>
+      <line x1="-240" y1="80"   x2="160" y2="80"/>
+      <line x1="-240" y1="160"  x2="160" y2="160"/>
+    </g>
+    <line x1="-240" y1="0" x2="160" y2="0" stroke="#F4EFE7" stroke-opacity="0.16" stroke-width="1"/>
+    <line x1="0" y1="-170" x2="0" y2="170" stroke="#F4EFE7" stroke-opacity="0.16" stroke-width="1"/>
+    <circle r="58"  fill="none" stroke="#F4EFE7" stroke-opacity="0.30" stroke-width="1.5"/>
+    <circle r="116" fill="none" stroke="#F4EFE7" stroke-opacity="0.15" stroke-width="1"/>
+    <circle r="170" fill="none" stroke="#00D4B2" stroke-opacity="0.9"  stroke-width="2.5"/>
+    <circle r="226" fill="none" stroke="#F4EFE7" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 7"/>
+    <circle r="8" fill="#00D4B2"/>
+  </g>
+
+  <!-- wordmark (ganu 4.2 — adres noktası 'a' içinde) -->
+  <g transform="translate(85.38,56.00) scale(0.14)">
+    <g fill="none" stroke="#F4EFE7" stroke-width="54" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M 60 250 A 123 123 0 1 0 306 250 A 123 123 0 1 0 60 250 Z"/>
+      <path d="M 306 127 L 306 434 A 116 116 0 0 1 98 452"/>
+      <path d="M 352 250 A 123 123 0 1 0 598 250 A 123 123 0 1 0 352 250 Z"/>
+      <path d="M 598 127 L 598 373"/>
+      <path d="M 698 373 L 698 224 A 97 97 0 0 1 892 224 L 892 373"/>
+      <path d="M 992 127 L 992 276 A 97 97 0 0 0 1186 276 L 1186 127"/>
+    </g>
+    <circle cx="475" cy="250" r="44" fill="#00D4B2"/>
+  </g>
+
+  <!-- üst-sağ etiket -->
+  <text x="1110" y="106" text-anchor="end" font-family="Plus Jakarta Sans" font-weight="600" font-size="18" letter-spacing="3" fill="#8aa2b8">SAYI 01 — İSTANBUL</text>
+
+  <!-- ince çizgi -->
+  <rect x="90" y="146" width="1020" height="2" fill="#F4EFE7" opacity="0.14"/>
+
+  <!-- başlık (slogan) -->
+  <text x="86" y="342" font-family="Fraunces" font-weight="400" font-size="96" fill="#F4EFE7" letter-spacing="-2">Adresin hazır,</text>
+  <text x="86" y="454" font-family="Fraunces" font-weight="400" font-size="96" fill="#F4EFE7" letter-spacing="-2">gerisi bizde<tspan fill="#00D4B2">.</tspan></text>
+
+  <!-- alt bilgi -->
+  <text x="90" y="536" font-family="Plus Jakarta Sans" font-weight="500" font-size="27" fill="#c9d4de">Anahtar teslim sanal ofis · Kavacık, Beykoz / İstanbul</text>
+</svg>
