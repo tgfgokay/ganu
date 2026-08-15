@@ -1,6 +1,15 @@
 -- 0007 privilege/policy statik kapıları. Edge davranışları Runbook HTTP testindedir.
+begin;
 create temp table _ganu_0007_results(name text,expected text,actual text,result text);
-update public.legal_sale_config set enabled=true,sql_tested_at=now(),http_tested_at=now() where id=true;
+do $$
+declare project_ref text:=nullif(current_setting('ganu.test_project_ref',true),''); activated boolean;
+begin
+ if coalesce(project_ref,'') !~ '^[a-z0-9]{20}$' then
+  raise exception 'set ganu.test_project_ref=<20-char staging ref> before running 0007 tests';
+ end if;
+ activated:=public.legal_activate_sale(project_ref,repeat('7',64),repeat('8',64),'none');
+ if not activated then raise exception '0007 test legal gate could not be activated from a clean disabled state'; end if;
+end $$;
 create or replace function pg_temp.purchase_create_candidate(
  p_customer uuid,p_session uuid,p_title text,p_email text,p_phone text,p_tax_no text,p_tc text,p_tax_office text,p_ref text,p_bni boolean,
  p_package text,p_amount numeric,p_list numeric,p_price_version int,p_discount_code text,p_discount_pct int,p_currency text,p_expires_at timestamptz)
@@ -74,4 +83,6 @@ begin
 end $$;
 select * from _ganu_0007_results order by name;
 select result,count(*) from _ganu_0007_results group by result order by result;
-update public.legal_sale_config set enabled=false,sql_tested_at=null,http_tested_at=null where id=true;
+update public.legal_sale_config set enabled=false,tested_project_ref=null,sql_proof_sha256=null,http_proof_sha256=null,
+ sql_tested_at=null,http_tested_at=null,activated_at=null,cross_border_status='none',updated_at=now() where id=true;
+commit;

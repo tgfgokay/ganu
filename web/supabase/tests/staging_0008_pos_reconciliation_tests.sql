@@ -1,5 +1,14 @@
+begin;
 create temp table _ganu_0008_results(name text,expected text,actual text,result text);
-update public.legal_sale_config set enabled=true,sql_tested_at=now(),http_tested_at=now() where id=true;
+do $$
+declare project_ref text:=nullif(current_setting('ganu.test_project_ref',true),''); activated boolean;
+begin
+ if coalesce(project_ref,'') !~ '^[a-z0-9]{20}$' then
+  raise exception 'set ganu.test_project_ref=<20-char staging ref> before running 0008 tests';
+ end if;
+ activated:=public.legal_activate_sale(project_ref,repeat('9',64),repeat('a',64),'none');
+ if not activated then raise exception '0008 test legal gate could not be activated from a clean disabled state'; end if;
+end $$;
 create or replace function pg_temp.purchase_create_candidate(
  p_customer uuid,p_session uuid,p_title text,p_email text,p_phone text,p_tax_no text,p_tc text,p_tax_office text,p_ref text,p_bni boolean,
  p_package text,p_amount numeric,p_list numeric,p_price_version int,p_discount_code text,p_discount_pct int,p_currency text,p_expires_at timestamptz)
@@ -63,8 +72,9 @@ begin
  cid:=gen_random_uuid();sid:=gen_random_uuid();h:=repeat('e',64);
 	 perform pg_temp.purchase_create_candidate(cid,sid,'TEST_0008_RECEIPT_CB','test-0008-rc@example.invalid','','1234567890','','','',false,'Pro',18990,18990,1,'',0,'TL',now()+interval '30 minutes');
  perform public.purchase_record_claim(sid,cid,'','');
- insert into public.pos_orders(merchant_oid,customer_id,amount,pkg,provider,status,purchase_session_id,init_state,return_token_hash,return_expires_at)
- values('TEST_0008_RECEIPT_CB',cid,18990,'Pro','paytr','bekliyor',sid,'ready',h,now()+interval '30 minutes');
+ insert into public.pos_orders(merchant_oid,customer_id,amount,pkg,provider,status,purchase_session_id,init_state,
+  return_token_hash,return_expires_at,price_version,list_amount,currency)
+ values('TEST_0008_RECEIPT_CB',cid,18990,'Pro','paytr','bekliyor',sid,'ready',h,now()+interval '30 minutes',1,18990,'TL');
  x:=public.pos_settle('TEST_0008_RECEIPT_CB','success',1899000);
  insert into _ganu_0008_results select 'receipt session callback red','mismatch/receipt_claimed',x||'/'||s.settlement_state,
   case when x='mismatch' and s.settlement_state='receipt_claimed' then 'PASS' else 'FAIL' end from public.purchase_sessions s where s.id=sid;
@@ -88,4 +98,6 @@ begin
 end $$;
 select * from _ganu_0008_results order by name;
 select result,count(*) from _ganu_0008_results group by result order by result;
-update public.legal_sale_config set enabled=false,sql_tested_at=null,http_tested_at=null where id=true;
+update public.legal_sale_config set enabled=false,tested_project_ref=null,sql_proof_sha256=null,http_proof_sha256=null,
+ sql_tested_at=null,http_tested_at=null,activated_at=null,cross_border_status='none',updated_at=now() where id=true;
+commit;
