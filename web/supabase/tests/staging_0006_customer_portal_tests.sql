@@ -2,19 +2,49 @@
 -- staging Auth kullanıcısı ile: set ganu.test_customer_uid='<uuid>';
 create temp table _ganu_0006_results(name text,expected text,actual text,result text);
 do $$
-declare b boolean; fake uuid:=gen_random_uuid(); j jsonb; test_uid text:=nullif(current_setting('ganu.test_customer_uid',true),'');
+declare
+  b boolean; fake uuid:=gen_random_uuid(); j jsonb;
+  test_uid text:=nullif(current_setting('ganu.test_customer_uid',true),'');
+  staff_uid text:=nullif(current_setting('ganu.test_staff_uid',true),'');
+  f regprocedure; role_name text;
+  legacy regprocedure[]:=array[
+    'public.portal_login(text,text)'::regprocedure,
+    'public.portal_login_code(text)'::regprocedure,
+    'public.portal_bundle(uuid,text)'::regprocedure,
+    'public.portal_create_request(uuid,text,uuid,text,text)'::regprocedure,
+    'public.portal_send_message(uuid,text,uuid,text)'::regprocedure,
+    'public.portal_create_booking(uuid,text,date,text,text,integer,text)'::regprocedure,
+    'public.portal_set_kvkk(uuid,text)'::regprocedure,
+    'public.portal_change_password(uuid,text,text)'::regprocedure,
+    'public.portal_submit_receipt(uuid,text,text,numeric,text,text)'::regprocedure];
 begin
-  foreach b in array array[
-    has_function_privilege('anon','public.portal_login(text,text)','EXECUTE'),
-    has_function_privilege('anon','public.portal_login_code(text)','EXECUTE'),
-    has_function_privilege('anon','public.portal_bundle(uuid,text)','EXECUTE'),
-    has_function_privilege('authenticated','public.portal_bundle(uuid,text)','EXECUTE')]
-  loop insert into _ganu_0006_results values('legacy portal execute kapalı','false',b::text,case when not b then 'PASS' else 'FAIL' end); end loop;
+  foreach f in array legacy loop
+    select exists(select 1 from pg_proc p cross join lateral
+      aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a
+      where p.oid=f and a.grantee=0 and a.privilege_type='EXECUTE') into b;
+    insert into _ganu_0006_results values('PUBLIC execute yok: '||f::text,'false',b::text,case when not b then 'PASS' else 'FAIL' end);
+    foreach role_name in array array['anon','authenticated'] loop
+      b:=has_function_privilege(role_name,f::oid,'EXECUTE');
+      insert into _ganu_0006_results values(role_name||' execute yok: '||f::text,'false',b::text,case when not b then 'PASS' else 'FAIL' end);
+    end loop;
+  end loop;
 
   perform set_config('request.jwt.claims',json_build_object('sub',fake,'role','authenticated')::text,true);
   begin perform public.claim_customer_by_email();
     insert into _ganu_0006_results values('auth.users dışı claim red','exception','accepted','FAIL');
   exception when others then insert into _ganu_0006_results values('auth.users dışı claim red','exception','exception','PASS'); end;
+
+  if staff_uid is not null and exists(select 1 from auth.users u join public.staff_roles r on r.user_id=u.id where u.id=staff_uid::uuid) then
+    perform set_config('request.jwt.claims',json_build_object('sub',staff_uid,'role','authenticated')::text,true);
+    begin
+      perform public.claim_customer_by_email();
+      insert into _ganu_0006_results values('staff UID customer claim red','exception','accepted','FAIL');
+    exception when others then
+      insert into _ganu_0006_results values('staff UID customer claim red','exception','exception','PASS');
+    end;
+  else
+    insert into _ganu_0006_results values('staff UID customer claim red','PASS','SKIP: ganu.test_staff_uid gerekli','SKIP');
+  end if;
 
   if test_uid is not null and exists(select 1 from auth.users where id=test_uid::uuid and email_confirmed_at is not null) then
     perform set_config('request.jwt.claims',json_build_object('sub',test_uid,'role','authenticated')::text,true);

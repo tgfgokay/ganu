@@ -6,6 +6,5 @@ drop function if exists public.portal_create_request_jwt(uuid,text,text);
 drop function if exists public.portal_bundle_jwt();
 drop function if exists public.customer_me();
 drop function if exists public.claim_customer_by_email();
-drop function if exists public.is_customer_owner(uuid);
 drop function if exists public.normalize_customer_email(text);
 -- customers.auth_uid bağları veri kaybını önlemek için korunur.

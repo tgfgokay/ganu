@@ -3,6 +3,9 @@ project_id = "ganu-web"
 [functions.pos-payment]
 verify_jwt = false
 
+[functions.purchase-flow]
+verify_jwt = false
+
 [functions.get-file]
 verify_jwt = true
 
