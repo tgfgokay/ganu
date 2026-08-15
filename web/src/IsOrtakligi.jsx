@@ -4,6 +4,7 @@ import { motion, useScroll, useSpring, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
 import { partnerApply, PARTNER_PROFESSIONS } from './panel/lib/store.js'
 import LanguageSwitch from './site/LanguageSwitch.jsx'
+import LegalLinks from './legal/LegalLinks.jsx'
 import { tr } from './site/locales/tr.js'
 import RichTitle from './site/RichTitle.jsx'
 import { partnershipPayload, showPartnerCommercialFields } from './site/partnership.js'
@@ -297,6 +298,7 @@ function Footer({ p, locale }) {
         <p className="colo-legal">
           {p.legal}
         </p>
+        <LegalLinks locale={locale}/>
         <div className="colo-bottom">
           <span>© {new Date().getFullYear()} GANU · {p.meta}</span>
           <LanguageSwitch locale={locale}/><span>{locale==='tr'?'Tüm hakları saklıdır.':'All rights reserved.'}</span>

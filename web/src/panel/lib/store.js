@@ -535,7 +535,9 @@ export async function customerApply(form) {
     const { data, error } = await supabase.functions.invoke('purchase-flow', { body: {
       action: 'create', title: row.title, email: row.email, phone: row.phone,
       tax_no: form.tax_no || '', tax_office: row.tax_office, package_id: form.package,
-      code: form.code || '', ref,
+      code: form.code || '', ref, legal_text_version: form.legal_text_version,
+      preinfo_accepted: form.preinfo_accepted===true,
+      early_performance_requested: form.early_performance_requested===true,
     } })
     if (error || !data?.customer || !data?.purchase_token) throw new Error(data?.error || error?.message || 'Satın alma başlatılamadı.')
     return { ...data.customer, purchase_token: data.purchase_token, quote: data.quote, expires_at: data.expires_at }

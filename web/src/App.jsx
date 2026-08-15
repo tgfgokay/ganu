@@ -6,6 +6,8 @@ import { PACKAGE_MONTHLY, PACKAGE_PRICES, PACKAGE_CUSTOM, onCatalog, usingSupaba
 import LanguageSwitch from './site/LanguageSwitch.jsx'
 import { tr } from './site/locales/tr.js'
 import RichTitle from './site/RichTitle.jsx'
+import LegalLinks from './legal/LegalLinks.jsx'
+import { salesEnabled } from './legal/config.js'
 
 /* ---------- motion presets ---------- */
 const rise = {
@@ -96,7 +98,7 @@ function Nav({ t, locale }) {
               <circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
             </svg>{t.chrome.customerLogin}
           </a>}
-          {locale==='tr'?<a href={withBase('/satin-al')} className="mast-cta" onClick={close}>{t.chrome.buy} →</a>:<a href="mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote" className="mast-cta" onClick={close}>{t.chrome.buy} →</a>}
+          {locale==='tr'?<a href={withBase(salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali')} className="mast-cta" onClick={close}>{salesEnabled?t.chrome.buy:'Satış hazırlıkta'} →</a>:<a href="mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote" className="mast-cta" onClick={close}>{t.chrome.buy} →</a>}
           <LanguageSwitch locale={locale}/>
         </div>
       </div>
@@ -359,7 +361,7 @@ function Pricing({ t, locale }) {
               </ul>
               {tier.unavailable
                 ? <span className="btn btn-line" aria-disabled="true">{t.pricing.unavailable}</span>
-                : locale==='tr'?<a href={withBase(`/satin-al?paket=${encodeURIComponent(tier.name)}`)} className={`btn ${tier.feat ? 'btn-solid' : 'btn-line'}`}>{tier.custom?t.pricing.quote:t.pricing.purchase} →</a>
+                : locale==='tr'?<a href={withBase(salesEnabled?`/satin-al?paket=${encodeURIComponent(tier.name)}`:'/mesafeli-satis#satis-kapali')} className={`btn ${tier.feat ? 'btn-solid' : 'btn-line'}`}>{salesEnabled?(tier.custom?t.pricing.quote:t.pricing.purchase):'Satış hazırlıkta'} →</a>
                 :<a href={`mailto:merhaba@ganu.com.tr?subject=${encodeURIComponent(`Quote: ${t.pricing.names[tier.name]}`)}`} className={`btn ${tier.feat?'btn-solid':'btn-line'}`}>{t.pricing.quote} →</a>}
             </motion.div>
           ))}
@@ -409,7 +411,7 @@ function CtaBand({ t, locale }) {
         <motion.div className="cta-band" {...reveal} variants={stagger}>
           <motion.h2 variants={rise}><RichTitle value={t.cta.title} dot /></motion.h2>
           <motion.p variants={rise}>{t.cta.text}</motion.p>
-          <motion.a variants={rise} href={locale==='tr'?withBase('/satin-al'):'mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote'} className="btn btn-solid big">{t.cta.button} →</motion.a>
+          <motion.a variants={rise} href={locale==='tr'?withBase(salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali'):'mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote'} className="btn btn-solid big">{locale==='tr'&&!salesEnabled?'Satış hazırlıkta':t.cta.button} →</motion.a>
           <motion.p variants={rise} style={{ marginTop: 12, fontSize: 14, opacity: 0.75 }}>
             {t.cta.question} <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a>
           </motion.p>
@@ -464,6 +466,7 @@ function Footer({ t, locale }) {
         <p className="colo-legal">
           {t.footer.legal}
         </p>
+        <LegalLinks locale={locale}/>
         <div className="colo-bottom">
           <span>© {new Date().getFullYear()} GANU · {t.meta}</span><LanguageSwitch locale={locale}/>
           <span>{t.chrome.rights}</span>

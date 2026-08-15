@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { publicConfig } from './scripts/url-config.mjs'
 import { blogContentPlugin } from './scripts/blog-content.mjs'
+import { readLegalIdentity } from './scripts/legal-config.mjs'
 const config=publicConfig()
 
 // GitHub Pages alt-yol dağıtımı için base env ile verilir:
@@ -10,5 +11,8 @@ const config=publicConfig()
 export default defineConfig({
   base: config.base,
   plugins: [blogContentPlugin(),react()],
-  define: { __GANU_SITE_URL__: JSON.stringify(config.origin) },
+  define: {
+    __GANU_SITE_URL__: JSON.stringify(config.origin),
+    __GANU_LEGAL_IDENTITY__: JSON.stringify(readLegalIdentity()),
+  },
 })

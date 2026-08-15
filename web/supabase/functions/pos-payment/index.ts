@@ -105,7 +105,7 @@ const enc = new TextEncoder()
 const dec = new TextDecoder()
 const unb64u = (s: string) => Uint8Array.from(atob(s.replaceAll('-','+').replaceAll('_','/')+'==='.slice((s.length+3)%4)), c => c.charCodeAt(0))
 
-type Purchase = { v:number; sid:string; cid:string; pkg:string; amt:number; pv:number; disc:string; exp:number }
+type Purchase = { v:number; sid:string; cid:string; pkg:string; amt:number; pv:number; disc:string; lv:string; exp:number }
 class HttpError extends Error { constructor(public status:number,message:string){super(message)} }
 async function verifyPurchase(db: Db, raw: string): Promise<{ purchase: Purchase; order: Order }> {
   const secret = Deno.env.get('PURCHASE_FLOW_SECRET') || ''
@@ -118,14 +118,15 @@ async function verifyPurchase(db: Db, raw: string): Promise<{ purchase: Purchase
   let p:Purchase
   try { p=JSON.parse(dec.decode(unb64u(body))) as Purchase } catch { throw new HttpError(400,'purchase token geçersiz.') }
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-  if(p.v!==1||!uuid.test(String(p.sid))||!uuid.test(String(p.cid))||typeof p.pkg!=='string'||typeof p.disc!=='string'||!Number.isFinite(Number(p.amt))||!Number.isInteger(Number(p.pv))||!Number.isFinite(Number(p.exp)))throw new HttpError(400,'purchase token geçersiz.')
+  const legalVersion=Deno.env.get('LEGAL_TEXT_VERSION')||''
+  if(legalVersion!=='2026-08-15.v1'||p.v!==2||p.lv!==legalVersion||!uuid.test(String(p.sid))||!uuid.test(String(p.cid))||typeof p.pkg!=='string'||typeof p.disc!=='string'||!Number.isFinite(Number(p.amt))||!Number.isInteger(Number(p.pv))||!Number.isFinite(Number(p.exp)))throw new HttpError(400,'purchase token geçersiz.')
   if (Date.now() >= Number(p.exp) * 1000) throw new HttpError(400,'purchase token süresi dolmuş.')
   const { data:s, error } = await db.from('purchase_sessions')
-    .select('id,customer_id,package_id,amount,price_version,discount_code,expires_at,claimed_at,use_kind,customers!inner(status)')
+    .select('id,customer_id,package_id,amount,price_version,discount_code,expires_at,claimed_at,use_kind,legal_text_version,preinfo_accepted_at,early_performance_requested_at,customers!inner(status)')
     .eq('id',p.sid).eq('customer_id',p.cid).maybeSingle()
   if(error)throw new Error('Satın alma oturumu DB sorgusu başarısız.')
   const linked=Array.isArray(s?.customers)?s.customers[0]:s?.customers
-  if (!s || linked?.status !== 'aday' || s.claimed_at || (s.use_kind&&s.use_kind!=='pos') || Date.now() >= new Date(s.expires_at).getTime()) throw new HttpError(409,'satın alma oturumu kullanılamaz.')
+  if (!s || linked?.status !== 'aday' || s.claimed_at || (s.use_kind&&s.use_kind!=='pos') || s.legal_text_version!==p.lv || !s.preinfo_accepted_at || !s.early_performance_requested_at || Date.now() >= new Date(s.expires_at).getTime()) throw new HttpError(409,'satın alma oturumu kullanılamaz.')
   if (s.package_id !== p.pkg || Number(s.amount) !== Number(p.amt) || Number(s.price_version) !== Number(p.pv) || (s.discount_code || '') !== (p.disc || '')) throw new HttpError(400,'satın alma oturumu uyuşmuyor.')
   const order = await computeOrder(db, p.pkg, p.disc || '')
   if (order.amount !== Number(p.amt) || order.price_version !== Number(p.pv) || order.code !== (p.disc || '')) throw new Error('fiyat/token uyuşmuyor; ödeme durduruldu.')
@@ -149,6 +150,13 @@ async function hmacSha256B64(key: string, msg: string): Promise<string> {
 const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
 async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', enc.encode(value))
+  return [...new Uint8Array(digest)].map((x) => x.toString(16).padStart(2, '0')).join('')
+}
+async function keyedHashHex(domain: 'rate-limit-ip', value: string): Promise<string> {
+  const secret = Deno.env.get('PURCHASE_FLOW_SECRET') || ''
+  if (secret.length < 32) throw new Error('PURCHASE_FLOW_SECRET eksik/geçersiz.')
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const digest = await crypto.subtle.sign('HMAC', key, enc.encode(`${domain}\0${value}`))
   return [...new Uint8Array(digest)].map((x) => x.toString(16).padStart(2, '0')).join('')
 }
 function newReturnToken(): string {
@@ -346,7 +354,7 @@ Deno.serve(async (req) => {
       // 32-byte base64url token; rate-limit yardımcı katmandır, auth sınırı token entropisidir.
       if (!/^[A-Za-z0-9_-]{43}$/.test(raw)) return json({ error: 'Dönüş anahtarı geçersiz' }, 404)
       const db = admin()
-      const ipHash = await sha256Hex(clientIp(req))
+      const ipHash = await keyedHashHex('rate-limit-ip', clientIp(req))
       const { data: allowed, error: limitErr } = await db.rpc('purchase_rate_limit', {
         p_ip_hash: ipHash, p_action: 'status', p_limit: 60, p_window_seconds: 3600,
       })

@@ -27,7 +27,7 @@ export default function Seo() {
     document.documentElement.lang=route.locale
     document.title=route.seo.title
     meta('description',route.seo.description)
-    meta('robots','index,follow')
+    meta('robots',route.indexable===false?'noindex,nofollow':'index,follow')
     meta('og:type',route.kind==='blog-article'?'article':'website','property');meta('og:site_name','GANU','property')
     meta('og:locale',route.locale==='tr'?'tr_TR':'en_US','property')
     meta('og:locale:alternate',route.locale==='tr'?'en_US':'tr_TR','property')
@@ -39,7 +39,9 @@ export default function Seo() {
     document.head.querySelectorAll('link[rel="canonical"],link[rel="alternate"][data-ganu-seo]').forEach((el)=>el.remove())
     link('canonical',absolutePublicUrl(route.path))
     const tr=route.locale==='tr'?route.path:route.counterpart,en=route.locale==='en'?route.path:route.counterpart
-    link('alternate',absolutePublicUrl(tr),{hreflang:'tr'});link('alternate',absolutePublicUrl(en),{hreflang:'en'});link('alternate',absolutePublicUrl(tr),{hreflang:'x-default'})
+    if(tr)link('alternate',absolutePublicUrl(tr),{hreflang:'tr'})
+    if(en)link('alternate',absolutePublicUrl(en),{hreflang:'en'})
+    if(tr)link('alternate',absolutePublicUrl(tr),{hreflang:'x-default'})
     if(route.kind==='blog-article'){
       const script=document.createElement('script');script.type='application/ld+json';script.dataset.ganuJsonld='1'
       const url=absolutePublicUrl(route.path),home=absolutePublicUrl('/'),image=absolutePublicUrl('/og.png')

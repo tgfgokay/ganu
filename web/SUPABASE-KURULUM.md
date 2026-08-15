@@ -34,6 +34,7 @@ Sırayla uygula (Supabase SQL editor ya da `supabase db push`):
 7. `supabase/migrations/0006_customer_portal_auth.sql` — doğrulanmış e-posta claim, JWT portal RPC ve legacy anon portal kapatma.
 8. `supabase/migrations/0007_purchase_flow.sql` — Edge-only aday/dekont, HMAC purchase token, rate-limit ve POS session binding.
 9. `supabase/migrations/0008_pos_reconciliation.sql` — callback/session terminal mutabakatı, opak dönüş tokenı ve minimal ödeme durumu.
+10. `supabase/migrations/0009_legal_consent_evidence.sql` — satış öncesi exact metin sürümü, immutable ön bilgilendirme/erken ifa kanıtı ve staging proof gate.
 
 RLS notları:
 - `packages`: anon yalnız `active` okur; yazma personel.
@@ -81,6 +82,7 @@ supabase secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... SITE_URL=...
 supabase secrets set PAYTR_MERCHANT_ID=... PAYTR_MERCHANT_KEY=... PAYTR_MERCHANT_SALT=... PAYTR_TEST_MODE=1
 supabase secrets set PROD_GATE_HMAC_SECRET=... # en az 32 karakter; CI secret ile aynı
 supabase secrets set PURCHASE_FLOW_SECRET=...  # >=32 rastgele; purchase-flow + pos-payment ortak
+supabase secrets set LEGAL_TEXT_VERSION=2026-08-15.v1  # purchase-flow + pos-payment exact sürüm
 supabase functions deploy purchase-flow --no-verify-jwt
 supabase functions deploy pos-payment --no-verify-jwt
 supabase functions deploy admin-gate           # JWT doğrulaması açık; --no-verify-jwt YOK

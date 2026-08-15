@@ -3,6 +3,7 @@ import { withBase } from './base'
 import { motion, useScroll, useSpring, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
 import LanguageSwitch from './site/LanguageSwitch.jsx'
+import LegalLinks from './legal/LegalLinks.jsx'
 import { tr } from './site/locales/tr.js'
 import RichTitle from './site/RichTitle.jsx'
 
@@ -228,6 +229,7 @@ function Footer({ locale, chrome }) {
         <p className="colo-legal">
           {chrome.legal}
         </p>
+        <LegalLinks locale={locale}/>
         <div className="colo-bottom">
           <span>© {new Date().getFullYear()} GANU · Sanal Ofis · İstanbul</span>
           <LanguageSwitch locale={locale}/><span>{locale==='tr'?'Tüm hakları saklıdır.':'All rights reserved.'}</span>

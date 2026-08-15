@@ -3,6 +3,10 @@ import { withBase } from './base'
 import { useSearchParams, Link } from 'react-router-dom'
 import GanuMark from './GanuMark'
 import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posPaymentStatus, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar, onCatalog, usingSupabase } from './panel/lib/store.js'
+import LegalLinks from './legal/LegalLinks.jsx'
+import { salesEnabled } from './legal/config.js'
+import { LEGAL_TEXT_VERSION } from './legal/policy.js'
+import { POS_RETURN_STORAGE_KEY } from './site/storageInventory.js'
 
 /* ============================================================
    /satin-al — 3 adımlı satın alma sayfası
@@ -51,7 +55,7 @@ function Steps({ current }) {
 
 const field = { display: 'flex', flexDirection: 'column', gap: 6 }
 const labelS = { fontSize: 13, fontWeight: 700, color: 'var(--navy, #0A2540)' }
-const POS_RETURN_KEY = 'ganu_pos_return_v1'
+const POS_RETURN_KEY = POS_RETURN_STORAGE_KEY
 const POS_RETURN_TTL_MS = 60 * 60 * 1000
 const RETURN_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/
 
@@ -83,7 +87,7 @@ export default function SatinAl() {
   const [params] = useSearchParams()
   const urlPkg = params.get('paket')
   const refCode = (params.get('ref') || '').trim().toUpperCase() // iş ortağı yönlendirme kodu
-  const [returnSeed] = useState(() => loadPaymentReturn(params.get('payment_return')))
+  const [returnSeed] = useState(() => salesEnabled ? loadPaymentReturn(params.get('payment_return')) : { token: '', expired: false })
   const paymentReturn = returnSeed.token
   const [returnState, setReturnState] = useState(paymentReturn ? 'loading' : returnSeed.expired ? 'expired' : '')
   const [pkg, setPkg] = useState(PACKAGES.includes(urlPkg) ? urlPkg : 'Başlangıç')
@@ -98,6 +102,8 @@ export default function SatinAl() {
   const [discount, setDiscount] = useState(null) // { code, pct } | null
   const [serverQuote, setServerQuote] = useState(null)
   const [codeMsg, setCodeMsg] = useState('')     // kod geri bildirimi
+  const [preinfoAccepted, setPreinfoAccepted] = useState(false)
+  const [earlyPerformanceRequested, setEarlyPerformanceRequested] = useState(false)
   const cfg = getConfig()
   const listPrice = PACKAGE_PRICES[pkg]
   const isCorp = pkg === 'Kurumsal'
@@ -148,6 +154,8 @@ export default function SatinAl() {
     if (['active', 'paid_pending_activation', 'failed', 'manual_review', 'unavailable', 'expired'].includes(returnState)) clearPaymentReturn()
   }, [returnState])
 
+  if (!salesEnabled) return <div className="legal-shell"><header className="legal-mast"><a href={withBase('/')} aria-label="Ana sayfa"><GanuMark/></a></header><main><section className="sales-closed"><p className="legal-kicker">LANSMAN ÖNCESİ GÜVENLİK KAPISI</p><h1>Çevrim içi satış henüz açık değil</h1><p>Satıcı/veri sorumlusu tescil bilgileri ve yasal metin onay tarihi tamamlanmadan başvuru, ödeme veya dekont kabul edilmez.</p><a className="btn btn-solid" href="mailto:merhaba@ganu.com.tr?subject=GANU%20bilgi%20talebi">Bilgi isteyin →</a><LegalLinks locale="tr"/></section></main></div>
+
   const set = (k) => (e) => {
     setErr('')
     setF((s) => ({ ...s, [k]: k === 'phone' ? fmtPhoneInput(e.target.value) : e.target.value }))
@@ -181,7 +189,9 @@ export default function SatinAl() {
     const vkn = f.tax_no.replace(/\D/g, '')
     if (!isCorp && vkn.length !== 10 && vkn.length !== 11) return setErr('Vergi no (10 hane) ya da TC kimlik no (11 hane) zorunlu — faturanız otomatik kesilir.')
     let row
-    try { row = await customerApply({ ...f, package: pkg, ref: refCode, code: discount?.code || '', bni: !!discount }) }
+    if (!preinfoAccepted) return setErr('Ön bilgilendirme ve mesafeli sözleşme metinlerine eriştiğinizi teyit edin.')
+    if (!earlyPerformanceRequested) return setErr('Mevcut aktivasyon akışı için 14 günlük süre dolmadan hizmete başlanması talebiniz gereklidir.')
+    try { row = await customerApply({ ...f, package: pkg, ref: refCode, code: discount?.code || '', bni: !!discount, legal_text_version: LEGAL_TEXT_VERSION, preinfo_accepted: true, early_performance_requested: true }) }
     catch (e) { return setErr(e.message || 'Satın alma başlatılamadı.') }
     if (row.quote) {
       setServerQuote(row.quote)
@@ -359,11 +369,14 @@ export default function SatinAl() {
             <span style={{ fontSize: 12.5, opacity: 0.65, marginTop: -6 }}>
               Bu bilgilerle faturanız ödemenin ardından otomatik düzenlenip e-postanıza gönderilir.
             </span>
+            <label className="legal-ack"><input type="checkbox" checked={preinfoAccepted} onChange={(e)=>setPreinfoAccepted(e.target.checked)}/><span><a href={withBase('/mesafeli-satis')} target="_blank" rel="noreferrer">Ön bilgilendirme ve mesafeli hizmet metnine</a> eriştim; ödeme öncesi inceleyebildim. Bu bir açık rıza beyanı değildir.</span></label>
+            <label className="legal-ack"><input type="checkbox" checked={earlyPerformanceRequested} onChange={(e)=>setEarlyPerformanceRequested(e.target.checked)}/><span>Hizmetin 14 günlük cayma süresi dolmadan başlatılmasını açıkça talep ediyorum. Bunun, hizmete başlanmasına ilişkin cayma hakkı istisnasını gündeme getirebileceği konusunda bilgilendirildim; bu ifade diğer yasal haklardan genel feragat değildir.</span></label>
             {err && <span style={{ color: '#b91c1c', fontSize: 14, fontWeight: 600 }}>{err}</span>}
-            <button type="submit" className="btn btn-solid big" style={{ width: '100%' }} disabled={catalogUnavailable}>
+            <button type="submit" className="btn btn-solid big" style={{ width: '100%' }} disabled={catalogUnavailable||!preinfoAccepted||!earlyPerformanceRequested}>
               {isCorp ? 'Teklif iste →' : 'Ödemeye geç →'}
             </button>
             <span style={{ fontSize: 13, opacity: 0.65, textAlign: 'center' }}>30 saniyede tamamlanır · Sözleşme + KVKK metinleri aktivasyonda paylaşılır</span>
+            <LegalLinks locale="tr" compact/>
           </form>
         )}
 

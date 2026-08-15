@@ -12,6 +12,7 @@ import Seo from './site/Seo.jsx'
 import { BlogArticle, BlogIndex } from './blog/Blog.jsx'
 import { tr } from './site/locales/tr.js'
 import { en } from './site/locales/en.js'
+import LegalPage from './legal/LegalPage.jsx'
 
 export default function SiteRoutes(){
   return <>
@@ -29,6 +30,12 @@ export default function SiteRoutes(){
       <Route path="/blog/:slug" element={<BlogArticle locale="tr"/>}/>
       <Route path="/en/blog" element={<BlogIndex locale="en"/>}/>
       <Route path="/en/blog/:slug" element={<BlogArticle locale="en"/>}/>
+      <Route path="/mesafeli-satis" element={<LegalPage type="distance" locale="tr"/>}/>
+      <Route path="/iptal-iade" element={<LegalPage type="returns" locale="tr"/>}/>
+      <Route path="/kvkk" element={<LegalPage type="privacy" locale="tr"/>}/>
+      <Route path="/cerezler" element={<LegalPage type="cookies" locale="tr"/>}/>
+      <Route path="/en/privacy" element={<LegalPage type="privacy" locale="en"/>}/>
+      <Route path="/en/cookies" element={<LegalPage type="cookies" locale="en"/>}/>
       <Route path="/satin-al" element={<SatinAl/>}/>
       <Route path="/panel/*" element={<PanelApp/>}/>
       <Route path="/musteri/*" element={<MusteriPortal/>}/>
