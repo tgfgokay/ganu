@@ -3,17 +3,22 @@ import react from '@vitejs/plugin-react'
 import { publicConfig } from './scripts/url-config.mjs'
 import { blogContentPlugin } from './scripts/blog-content.mjs'
 import { readLegalIdentity } from './scripts/legal-config.mjs'
+import path from 'node:path'
 const config=publicConfig()
+const marketing=process.env.GANU_MARKETING_ONLY==='true'
+if(marketing&&(process.env.VITE_SUPABASE_URL||process.env.VITE_SUPABASE_ANON_KEY))throw new Error('marketing-only build Supabase env kabul etmez')
 
 // GitHub Pages alt-yol dağıtımı için base env ile verilir:
 //   GANU_BASE=/ganu/ npx vite build
 // Yerel geliştirme ve diğer hostlarda kök '/' kalır.
 export default defineConfig(({ isSsrBuild })=>({
   base: config.base,
+  resolve: { alias: { './runtime/PrivateRoutes.jsx': path.resolve(marketing?'src/marketing/MarketingPrivateRoutes.jsx':'src/runtime/PrivateRoutes.jsx') } },
   plugins: [blogContentPlugin(),react()],
   define: {
     __GANU_SITE_URL__: JSON.stringify(config.origin),
     __GANU_LEGAL_IDENTITY__: JSON.stringify(readLegalIdentity()),
+    __GANU_MARKETING_ONLY__: JSON.stringify(marketing),
   },
   // SSR/prerender route-lazy chunkları korur. Yalnız browser build'inde,
   // Vite 8/Rolldown'un desteklenen codeSplitting API'siyle vendor grupları.

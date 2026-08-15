@@ -1,0 +1,89 @@
+name: marketing-pages-deploy
+run-name: Marketing-only Pages deploy (sales/private closed)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: marketing-pages-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GANU_MARKETING_ONLY: ${{ vars.GANU_MARKETING_ONLY }}
+      GANU_SITE_URL: https://ganu.com.tr
+      GANU_BASE: /
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail closed on target and mode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "tgfgokay/ganu"
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GANU_MARKETING_ONLY" = "true"
+          test -z "${VITE_SUPABASE_URL:-}"
+          test -z "${VITE_SUPABASE_ANON_KEY:-}"
+          pages="$(curl --fail-with-body --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/$GITHUB_REPOSITORY/pages)"
+          test "$(jq -r .https_enforced <<<"$pages")" = "true"
+          test "$(jq -r .cname <<<"$pages")" = "ganu.com.tr"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm audit --audit-level=low
+        working-directory: web
+      - name: Build and verify marketing-only artifact
+        working-directory: web
+        run: |
+          npm run build
+          node scripts/check-marketing-only.mjs
+          test "$(cat dist/CNAME)" = "ganu.com.tr"
+      - name: Switch Pages to Actions only after artifact gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages" \
+            -d '{"build_type":"workflow"}' >/dev/null
+          pages="$(curl --fail-with-body --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/$GITHUB_REPOSITORY/pages)"
+          test "$(jq -r .build_type <<<"$pages")" = "workflow"
+          test "$(jq -r .https_enforced <<<"$pages")" = "true"
+          test "$(jq -r .cname <<<"$pages")" = "ganu.com.tr"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy marketing-only artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify strict HTTPS public surface
+        run: |
+          set -euo pipefail
+          for path in / /en/ /blog/ /en/blog/ /satin-al/; do
+            result="$(curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --write-out '%{http_code}|%{url_effective}' --output "/tmp/page.html" "https://ganu.com.tr$path")"
+            test "$result" = "200|https://ganu.com.tr$path"
+          done
+          grep -q 'data-marketing-only="sales-closed"' /tmp/page.html

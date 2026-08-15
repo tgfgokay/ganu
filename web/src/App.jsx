@@ -8,6 +8,7 @@ import { tr } from './site/locales/tr.js'
 import RichTitle from './site/RichTitle.jsx'
 import LegalLinks from './legal/LegalLinks.jsx'
 import { salesEnabled } from './legal/config.js'
+import { marketingOnly } from './marketing/config.js'
 
 /* ---------- motion presets ---------- */
 const rise = {
@@ -98,7 +99,7 @@ function Nav({ t, locale }) {
               <circle cx="12" cy="8" r="3.4" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
             </svg>{t.chrome.customerLogin}
           </a>}
-          {locale==='tr'?<a href={withBase(salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali')} className="mast-cta" onClick={close}>{salesEnabled?t.chrome.buy:'Satış hazırlıkta'} →</a>:<a href="mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote" className="mast-cta" onClick={close}>{t.chrome.buy} →</a>}
+          {locale==='tr'?<a href={withBase(marketingOnly?'/satin-al':salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali')} className="mast-cta" onClick={close}>{marketingOnly?'Teklif al':salesEnabled?t.chrome.buy:'Satış hazırlıkta'} →</a>:<a href="mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote" className="mast-cta" onClick={close}>{t.chrome.buy} →</a>}
           <LanguageSwitch locale={locale}/>
         </div>
       </div>
@@ -268,6 +269,9 @@ function Services({ t, locale }) {
 }
 
 function Steps({ t, locale }) {
+  const steps=marketingOnly&&locale==='tr'?
+    [['pick','Paketleri incele','İhtiyacına uygun planı ve hizmet kapsamını karşılaştır.'],['docs','Teklif iste','Kurumsal e-posta üzerinden sorularını ve ihtiyacını ilet.'],['address','Belgeleri doğrula','Satış açıldığında gerekli belgeler ve sözleşme adımları ayrıca paylaşılır.'],['focus','Aktivasyonu planla','Güvenli satış ve müşteri portalı tamamlandığında aktivasyon süreci başlatılır.']]
+    :t.steps
   return (
     <section className="section dark" id={locale==='tr'?'nasil':'process'}>
       <div className="wrap">
@@ -277,7 +281,7 @@ function Steps({ t, locale }) {
         </motion.div>
         <motion.div className="flow" {...reveal} variants={stagger}>
           <motion.span className="flow-rail" variants={wipe} aria-hidden="true" />
-          {t.steps.map(([ic,title,desc],i) => (
+          {steps.map(([ic,title,desc],i) => (
             <motion.div className="flow-step" key={title} variants={rise}>
               <div className="flow-node">
                 <svg className="flow-ic" viewBox="0 0 24 24" aria-hidden="true">{stepIcons[ic]}</svg>
@@ -364,7 +368,7 @@ function Pricing({ t, locale }) {
               </ul>
               {tier.unavailable
                 ? <span className="btn btn-line" aria-disabled="true">{t.pricing.unavailable}</span>
-                : locale==='tr'?<a href={withBase(salesEnabled?`/satin-al?paket=${encodeURIComponent(tier.name)}`:'/mesafeli-satis#satis-kapali')} className={`btn ${tier.feat ? 'btn-solid' : 'btn-line'}`}>{salesEnabled?(tier.custom?t.pricing.quote:t.pricing.purchase):'Satış hazırlıkta'} →</a>
+                : locale==='tr'?<a href={withBase(marketingOnly?'/satin-al':salesEnabled?`/satin-al?paket=${encodeURIComponent(tier.name)}`:'/mesafeli-satis#satis-kapali')} className={`btn ${tier.feat ? 'btn-solid' : 'btn-line'}`}>{marketingOnly?'Teklif al':salesEnabled?(tier.custom?t.pricing.quote:t.pricing.purchase):'Satış hazırlıkta'} →</a>
                 :<a href={`mailto:merhaba@ganu.com.tr?subject=${encodeURIComponent(`Quote: ${t.pricing.names[tier.name]}`)}`} className={`btn ${tier.feat?'btn-solid':'btn-line'}`}>{t.pricing.quote} →</a>}
             </motion.div>
           ))}
@@ -413,8 +417,8 @@ function CtaBand({ t, locale }) {
       <div className="wrap">
         <motion.div className="cta-band" {...reveal} variants={stagger}>
           <motion.h2 variants={rise}><RichTitle value={t.cta.title} dot /></motion.h2>
-          <motion.p variants={rise}>{t.cta.text}</motion.p>
-          <motion.a variants={rise} href={locale==='tr'?withBase(salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali'):'mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote'} className="btn btn-solid big">{locale==='tr'&&!salesEnabled?'Satış hazırlıkta':t.cta.button} →</motion.a>
+          <motion.p variants={rise}>{marketingOnly&&locale==='tr'?'Hizmet kapsamını inceleyin; çevrim içi satış açılana kadar teklif ve sorularınız için bize e-posta gönderin.':t.cta.text}</motion.p>
+          <motion.a variants={rise} href={locale==='tr'?withBase(marketingOnly?'/satin-al':salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali'):'mailto:merhaba@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote'} className="btn btn-solid big">{locale==='tr'&&marketingOnly?'Teklif al':locale==='tr'&&!salesEnabled?'Satış hazırlıkta':t.cta.button} →</motion.a>
           <motion.p variants={rise} style={{ marginTop: 12, fontSize: 14, opacity: 0.75 }}>
             {t.cta.question} <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a>
           </motion.p>
