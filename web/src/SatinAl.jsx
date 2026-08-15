@@ -2,7 +2,7 @@ import { useState, useEffect, useReducer } from 'react'
 import { withBase } from './base'
 import { useSearchParams, Link } from 'react-router-dom'
 import GanuMark from './GanuMark'
-import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posPaymentStatus, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar, onCatalog, usingSupabase } from './panel/lib/store.js'
+import { customerApply, customers, activateAfterPayment, submitPaymentReceipt, fileToStoredUrl, getConfig, posPay, posPaymentStatus, posEnabled, PACKAGES, PACKAGE_PRICES, indirimCoz, indirimliTutar, loadCatalog, onCatalog, usingSupabase } from './panel/lib/store.js'
 import LegalLinks from './legal/LegalLinks.jsx'
 import { salesEnabled } from './legal/config.js'
 import { LEGAL_TEXT_VERSION } from './legal/policy.js'
@@ -120,7 +120,10 @@ export default function SatinAl() {
     : [['kart', '💳', 'Kredi kartı'], ['havale', '🏦', 'Havale / EFT']]
 
   const [, bumpCatalog] = useReducer((x) => x + 1, 0)
-  useEffect(() => onCatalog(bumpCatalog), []) // katalog yüklenince fiyat güncellensin
+  useEffect(() => {
+    const unsubscribe=onCatalog(bumpCatalog); void loadCatalog()
+    return unsubscribe
+  }, [])
   useEffect(() => { document.title = 'GANU · Satın Al'; window.scrollTo(0, 0) }, [])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, [step])
   useEffect(() => {

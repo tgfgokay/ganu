@@ -68,8 +68,11 @@ RLS notları:
   indirim sorgusu hata verirse **fail-closed** durur, sabit fiyat fallback'i YOKTUR.
   İstemci tutarı **yok sayılır** (istemci yalnız `package_id`+kod yollar).
 - Sipariş kaydında `price_version`, `list_amount`, `discount_code/pct`, `currency` saklanır.
-- **Kalan (cutover'da):** site/checkout/panel de `packages`'tan beslensin (şu an
-  `store.js PACKAGE_PRICES` sabit; Supabase bağlanınca tablodan okunacak biçime alınır).
+- Site ve checkout cloud modda boş/fail-closed katalogla başlar; `loadCatalog()`
+  `packages` tablosunu yükleyince `PACKAGE_PRICES` görünümünü günceller. Sorgu hatası,
+  boş/pasif katalog veya geçersiz tutarda fiyat gösterimi ve satın alma kapalı kalır.
+  Yerel sabit demo fiyatları yalnız Supabase'siz geliştirme modundadır. Panelde paket
+  seçimi aynı yüklenmiş katalog görünümünü kullanır; canlı doğrulama staging bağlantısı ister.
 
 ## 6) Bağlantı tamamlama (URL + anon key gelince)
 ```bash
@@ -87,9 +90,11 @@ supabase functions deploy purchase-flow --no-verify-jwt
 supabase functions deploy pos-payment --no-verify-jwt
 supabase functions deploy admin-gate           # JWT doğrulaması açık; --no-verify-jwt YOK
 supabase functions deploy get-file             # JWT açık; access_code dosya erişimi YOK
+supabase functions deploy send-notification    # JWT açık; panel gerçek bildirim gönderimi
+supabase functions deploy issue-einvoice       # JWT açık; panel e-belge kesimi
 # personel kullanıcısı + rolü:
 #   Auth → Users → invite;  insert into staff_roles(user_id, role) values ('<uid>','owner');
-GANU_BASE=/ganu/ npm run build   # env gömülür → usingSupabase=true
+npm run build                    # production canonical ganu.com.tr kökünde; env gömülür
 # ardından gh-pages deploy
 ```
 

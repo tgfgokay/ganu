@@ -2,12 +2,11 @@ import { useEffect, useState, useRef } from 'react'
 import { withBase } from './base'
 import { motion, useScroll, useSpring, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
-import { partnerApply, PARTNER_PROFESSIONS } from './panel/lib/store.js'
 import LanguageSwitch from './site/LanguageSwitch.jsx'
 import LegalLinks from './legal/LegalLinks.jsx'
 import { tr } from './site/locales/tr.js'
 import RichTitle from './site/RichTitle.jsx'
-import { partnershipPayload, showPartnerCommercialFields } from './site/partnership.js'
+import { PARTNER_PROFESSIONS, partnershipPayload, showPartnerCommercialFields } from './site/partnership.js'
 
 /* ---------- motion presets (App.jsx ile aynı dil) ---------- */
 const rise = {
@@ -180,6 +179,7 @@ function Apply({ formRef, profession, p, locale }) {
     if (!f.name.trim() || !f.email.trim()) { setErr(p.required); return }
     setErr(''); setBusy(true)
     try {
+      const { partnerApply } = await import('./panel/lib/store.js')
       await partnerApply(partnershipPayload(f, locale))
       setSent(true)
     } catch {

@@ -8,8 +8,10 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && vite build --ssr src/entry-server.jsx --outDir dist-ssr && node scripts/prerender.mjs && node scripts/check-public-i18n.mjs && node scripts/check-prerender.mjs && node scripts/check-legal.mjs",
-    "preview": "vite preview"
+    "build": "vite build && node scripts/check-bundle-size.mjs && vite build --ssr src/entry-server.jsx --outDir dist-ssr && node scripts/prerender.mjs && node scripts/check-public-i18n.mjs && node scripts/check-prerender.mjs && node scripts/check-legal.mjs",
+    "preview": "vite preview",
+    "test:readiness": "bash scripts/test-staging-readiness.sh",
+    "test:production-build": "bash scripts/test-production-build.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

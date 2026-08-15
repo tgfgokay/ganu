@@ -2,7 +2,7 @@ import { useState, useEffect, useReducer } from 'react'
 import { withBase } from './base'
 import { motion, useScroll, useSpring, useTransform, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
-import { PACKAGE_MONTHLY, PACKAGE_PRICES, PACKAGE_CUSTOM, onCatalog, usingSupabase } from './panel/lib/store.js'
+import { PACKAGE_MONTHLY, PACKAGE_PRICES, PACKAGE_CUSTOM, loadCatalog, onCatalog, usingSupabase } from './catalog.js'
 import LanguageSwitch from './site/LanguageSwitch.jsx'
 import { tr } from './site/locales/tr.js'
 import RichTitle from './site/RichTitle.jsx'
@@ -318,7 +318,10 @@ function Trust({ t }) {
 function Pricing({ t, locale }) {
   const [yearly, setYearly] = useState(false)
   const [, bumpCatalog] = useReducer((x) => x + 1, 0)
-  useEffect(() => onCatalog(bumpCatalog), []) // katalog yüklenince fiyatları güncelle
+  useEffect(() => {
+    const unsubscribe=onCatalog(bumpCatalog); void loadCatalog()
+    return unsubscribe
+  }, [])
   const tiers = buildTiers(t)
   return (
     <section className="section" id={locale==='tr'?'paketler':'plans'}>
