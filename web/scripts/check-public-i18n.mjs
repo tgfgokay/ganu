@@ -36,12 +36,13 @@ function noDuplicateKeys(keys,label){
 
 const routes=fs.readFileSync(new URL('../src/site/routes.js',import.meta.url),'utf8')
 const main=fs.readFileSync(new URL('../src/main.jsx',import.meta.url),'utf8')
+const appRoutes=fs.readFileSync(new URL('../src/SiteRoutes.jsx',import.meta.url),'utf8')
 const expected=['/','/avukat','/mali-musavir','/is-ortakligi','/en','/en/lawyers','/en/accountants','/en/partnership']
-for(const path of expected){if(!routes.includes(`path:'${path}'`)||!main.includes(`path="${path}"`))throw new Error(`route eksik: ${path}`)}
+for(const path of expected){if(!routes.includes(`path:'${path}'`)||!appRoutes.includes(`path="${path}"`))throw new Error(`route eksik: ${path}`)}
 const titles=[...routes.matchAll(/title:'([^']+)'/g)].map((m)=>m[1])
 if(titles.length!==8||new Set(titles).size!==8)throw new Error('SEO title sayısı/benzersizliği başarısız')
 for(const route of PUBLIC_ROUTES){const other=publicRoute(route.counterpart);if(!other||other.counterpart!==route.path||other.locale===route.locale)throw new Error(`counterpart bozuk: ${route.path}`)}
-if(/\/en\/satin-al/.test(main+routes))throw new Error('İngilizce checkout route yasak')
+if(/\/en\/satin-al/.test(main+appRoutes+routes))throw new Error('İngilizce checkout route yasak')
 const sw=fs.readFileSync(new URL('../src/site/LanguageSwitch.jsx',import.meta.url),'utf8')
 if(/location\.search|searchParams/.test(sw))throw new Error('language switch query taşıyor')
 if(!routes.includes("hizmetler:'services'")||!routes.includes("basvuru:'apply'"))throw new Error('section hash eşlemesi eksik')
@@ -55,7 +56,7 @@ noDuplicateKeys(directKeys(trSource,'export const tr'),'tr top-level')
 noDuplicateKeys(directKeys(trSource,'\n home:{'),'tr.home')
 if(en.home.pricing.perMonth!=='TRY / month'||tr.home.pricing.perMonth!=='₺ / ay')throw new Error('locale fiyat birimi bozuk')
 if(!en.segments.lawyers?.hero?.lead||!en.segments.accountants?.hero?.lead||!en.partnership?.hero?.lead)throw new Error('EN route içeriği bağlı değil')
-if(!main.includes('data={en.segments.lawyers}')||!main.includes('data={en.segments.accountants}')||!main.includes('content={en} locale="en"'))throw new Error('EN route/component import bağlantısı eksik')
+if(!appRoutes.includes('data={en.segments.lawyers}')||!appRoutes.includes('data={en.segments.accountants}')||!appRoutes.includes('content={en} locale="en"'))throw new Error('EN route/component import bağlantısı eksik')
 const minimized=partnershipPayload({tax_no:'SECRET',iban:'TR00',name:'Firm'},'en')
 if(showPartnerCommercialFields('en')||minimized.tax_no||minimized.iban)throw new Error('EN partnership veri minimizasyonu bozuk')
 const publicComponents=['App.jsx','SegmentPage.jsx','IsOrtakligi.jsx'].map((name)=>fs.readFileSync(new URL(`../src/${name}`,import.meta.url),'utf8')).join('\n')

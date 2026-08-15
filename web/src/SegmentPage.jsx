@@ -203,6 +203,7 @@ function Footer({ locale, chrome }) {
               {locale==='tr'&&<li><a href={withBase('/ortak')}>{chrome.partnerLogin}</a></li>}
               <li><a href={withBase(locale==='tr'?'/avukat':'/en/lawyers')}>{chrome.lawyers}</a></li>
               <li><a href={withBase(locale==='tr'?'/mali-musavir':'/en/accountants')}>{chrome.accountants}</a></li>
+              <li><a href={withBase(locale==='tr'?'/blog':'/en/blog')}>Blog</a></li>
               <li><a href={withBase(locale==='tr'?'/':'/en')}>{locale==='tr'?'Ana sayfa':'Home'}</a></li>
             </ul>
           </div>

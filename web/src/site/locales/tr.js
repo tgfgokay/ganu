@@ -2,7 +2,7 @@ import { trSegments } from './trSegments.js'
 
 export const tr = {
  locale:'tr',
- chrome:{ home:'Ana sayfa', services:'Hizmetler', process:'Süreç', plans:'Paketler', partnership:'İş Ortaklığı', customerLogin:'Giriş', buy:'Satın al', contact:'İletişim', why:'Neden GANU', viewPlans:'Paketleri gör', openMenu:'Menüyü aç', closeMenu:'Menüyü kapat', skip:'İçeriğe geç', rights:'Tüm hakları saklıdır.' },
+ chrome:{ home:'Ana sayfa', services:'Hizmetler', process:'Süreç', plans:'Paketler', partnership:'İş Ortaklığı', blog:'Blog', customerLogin:'Giriş', buy:'Satın al', contact:'İletişim', why:'Neden GANU', viewPlans:'Paketleri gör', openMenu:'Menüyü aç', closeMenu:'Menüyü kapat', skip:'İçeriğe geç', rights:'Tüm hakları saklıdır.' },
  home:{
   meta:'Sanal Ofis · İstanbul', hero:{eyebrow:'Sayı 01 — İstanbul',eyebrow2:'Anahtar teslim idari sekreterya',lines:['Adresin','hazır,','gerisi bizde'],lead:'Şirketine prestijli bir İstanbul iş adresi; posta yönetiminden telefon karşılamaya, toplantı odasından tüm idari sürece kadar her şey tek elden yürütülür.',primary:'Paketleri gör',secondary:'Bizimle görüş',stats:[['1 gün','adres aktivasyonu'],['Tek elden','posta & takip'],['Beykoz','Kavacık / İstanbul']]},
   marquee:['Yasal İş Adresi','Posta & Kargo','Telefon Karşılama','Toplantı Odası','Mali Müşavir'],

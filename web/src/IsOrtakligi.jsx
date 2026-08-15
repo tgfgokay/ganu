@@ -281,7 +281,7 @@ function Footer({ p, locale }) {
           <div>
             <h4>{locale==='tr'?'Kurumsal':'Company'}</h4>
             <ul>
-              <li><a href={withBase(locale==='tr'?'/#nasil':'/en#process')}>{locale==='tr'?'Süreç':'Process'}</a></li><li><a href={withBase(locale==='tr'?'/#paketler':'/en#plans')}>{locale==='tr'?'Paketler':'Services'}</a></li><li><a href={withBase(locale==='tr'?'/':'/en')}>{locale==='tr'?'Ana sayfa':'Home'}</a></li>
+              <li><a href={withBase(locale==='tr'?'/#nasil':'/en#process')}>{locale==='tr'?'Süreç':'Process'}</a></li><li><a href={withBase(locale==='tr'?'/#paketler':'/en#plans')}>{locale==='tr'?'Paketler':'Services'}</a></li><li><a href={withBase(locale==='tr'?'/blog':'/en/blog')}>Blog</a></li><li><a href={withBase(locale==='tr'?'/':'/en')}>{locale==='tr'?'Ana sayfa':'Home'}</a></li>
             </ul>
           </div>
           <div>

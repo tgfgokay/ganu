@@ -1,6 +1,6 @@
 export const en = {
  locale:'en',
- chrome:{ home:'Home',services:'Services',process:'Process',plans:'Plans',partnership:'Partnership',customerLogin:'Client login',buy:'Request a quote',contact:'Contact',why:'Why GANU',viewPlans:'View plans',openMenu:'Open menu',closeMenu:'Close menu',skip:'Skip to content',rights:'All rights reserved.' },
+ chrome:{ home:'Home',services:'Services',process:'Process',plans:'Plans',partnership:'Partnership',blog:'Blog',customerLogin:'Client login',buy:'Request a quote',contact:'Contact',why:'Why GANU',viewPlans:'View plans',openMenu:'Open menu',closeMenu:'Close menu',skip:'Skip to content',rights:'All rights reserved.' },
  home:{
   meta:'Virtual Office · Istanbul',hero:{eyebrow:'Istanbul · Türkiye',eyebrow2:'Registered address and office support',lines:['Your Istanbul','office,','ready to work'],lead:'Establish a credible business presence in Istanbul with a real registered address, managed mail, call answering and meeting-room support from one team.',primary:'Explore services',secondary:'Discuss your needs',stats:[['Real office','in Kavacık'],['One team','mail & admin'],['English','onboarding support']]},
   marquee:['Registered Office','Mail Handling','Call Answering','Meeting Rooms','Founder Support'],

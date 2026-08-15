@@ -89,6 +89,7 @@ function Nav({ t, locale }) {
           <a href={`#${locale==='tr'?'hizmetler':'services'}`} onClick={close}>{t.chrome.services}</a>
           <a href={`#${locale==='tr'?'nasil':'process'}`} onClick={close}>{t.chrome.process}</a>
           <a href={`#${locale==='tr'?'paketler':'plans'}`} onClick={close}>{t.chrome.plans}</a>
+          <a href={withBase(locale==='tr'?'/blog':'/en/blog')} onClick={close}>{t.chrome.blog}</a>
           <a href={withBase(locale==='tr'?'/is-ortakligi':'/en/partnership')} onClick={close}>{t.chrome.partnership}</a>
           {locale==='tr'&&<a href={withBase("/musteri")} className="mast-login" onClick={close} aria-label="Müşteri girişi">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ verticalAlign: '-2px', marginRight: 5 }}>
@@ -439,6 +440,7 @@ function Footer({ t, locale }) {
               <li><a href={withBase(locale==='tr'?'/is-ortakligi':'/en/partnership')}>{locale==='tr'?'Ortak ol · komisyon':'Referral programme'}</a></li>
               <li><a href={withBase(locale==='tr'?'/avukat':'/en/lawyers')}>{locale==='tr'?'Avukatlar için':'For law firms'}</a></li>
               <li><a href={withBase(locale==='tr'?'/mali-musavir':'/en/accountants')}>{locale==='tr'?'Mali müşavirler için':'For accountants & advisers'}</a></li>
+              <li><a href={withBase(locale==='tr'?'/blog':'/en/blog')}>{t.chrome.blog}</a></li>
             </ul>
           </div>
           <div>
