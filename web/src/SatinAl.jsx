@@ -451,6 +451,11 @@ export default function SatinAl() {
         /* checkout ikili alanlar — dar ekranda (≤480px) tek kolona iner */
         .sa-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         @media (max-width: 480px) { .sa-2col { grid-template-columns: 1fr; } }
+        /* Metin içi e-posta bağlantıları satır yüksekliği kadardı (20px);
+           mobilde dokunulabilir alana çıkar. */
+        @media (max-width: 820px) {
+          main a[href^="mailto:"] { display: inline-block; padding: 11px 0; }
+        }
 
         /* ---- Ödeme adımı ---- */
         .pay-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
