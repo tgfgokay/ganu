@@ -312,6 +312,8 @@ HTTP zorunlu kapıları (yanıtlardaki token/kimlikleri log veya rapora koyma):
 
 - `purchase-flow create`: geçerli paket → 200, aday + server quote + kısa ömürlü token;
   bilinmeyen/pasif/katalog hatası → 4xx/5xx ve customer/session sayısı değişmez.
+- `Kurumsal`/`is_custom=true` → **422** + `code=custom_quote_required`; customer,
+  purchase session, POS order ve rate-limit rezervasyonu oluşmaz; token/PII dönmez.
 - İstemci `amount`, `discount_pct`, `customer_id` eklese dahi server quote değişmez.
 - `ref` yalnız `[A-Z0-9_-]`, en fazla 32 karakter denetim notu olarak korunur;
   anonim partner lookup/bağlama yapılmaz. `bni` yalnız doğrulanmış `BNINISANTASI`

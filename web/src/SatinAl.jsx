@@ -189,6 +189,13 @@ export default function SatinAl() {
     if (!email && !phone) return setErr('E-posta ya da telefondan en az birini yazın.')
     if (phone && !validPhone(phone)) return setErr('Telefon eksik/hatalı — 05xx xxx xx xx biçiminde 11 hane yazın.')
     if (email && !validEmail(email)) return setErr('E-posta hatalı görünüyor — ör. ad@firma.com')
+    if (isCorp) {
+      const subject = encodeURIComponent('GANU Kurumsal paket teklif talebi')
+      const body = encodeURIComponent(`Şirket / ad: ${f.title.trim()}\nE-posta: ${email}\nTelefon: ${phone}\n\nKurumsal paket için yazılı teklif rica ederim.`)
+      setResult({ mode: 'teklif', mailto: `mailto:merhaba@ganu.com.tr?subject=${subject}&body=${body}` })
+      setStep(3)
+      return
+    }
     const vkn = f.tax_no.replace(/\D/g, '')
     if (!isCorp && vkn.length !== 10 && vkn.length !== 11) return setErr('Vergi no (10 hane) ya da TC kimlik no (11 hane) zorunlu — faturanız otomatik kesilir.')
     let row
@@ -202,8 +209,7 @@ export default function SatinAl() {
       else if (discount) { setDiscount(null); setCodeMsg('Kod geçersiz veya pasif; indirim uygulanmadı.') }
     }
     setCust(row)
-    if (isCorp) { setResult({ mode: 'teklif' }); setStep(3) }
-    else setStep(2)
+    setStep(2)
   }
 
   /* Kart ödemesi (SİMÜLASYON) başarılı → kurulum otomatik tamamlanır */
@@ -446,8 +452,9 @@ export default function SatinAl() {
             {result.mode === 'teklif' && (
               <>
                 <div style={{ fontSize: 44, marginBottom: 6 }}>🤝</div>
-                <h2 style={{ fontSize: 24, marginBottom: 10 }}>Teklif talebiniz alındı</h2>
-                <p>Kurumsal paket ihtiyaca göre fiyatlanır — size özel teklifi hazırlayıp bugün arıyoruz.</p>
+                <h2 style={{ fontSize: 24, marginBottom: 10 }}>Kurumsal paket için yazılı teklif</h2>
+                <p style={{ marginBottom: 16 }}>Bu paket çevrim içi satın alınmaz ve ödeme/dekont adımı açılmaz. İhtiyacınızı e-postayla iletin; kapsam ve fiyat yazılı olarak teyit edilsin.</p>
+                <a className="btn btn-solid" href={result.mailto}>E-posta ile teklif iste →</a>
               </>
             )}
           </div>
