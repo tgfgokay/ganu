@@ -637,6 +637,18 @@ body {
 @media (max-width: 820px) { .colo-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 480px) { .colo-grid { grid-template-columns: 1fr; } }
 
+/* Dokunmatik hedefler: satır yüksekliği kadar bağlantı (18px) parmakla
+   ıskalanıyordu; mobilde her bağlantı en az 44px'lik alan kaplar. */
+@media (max-width: 820px) {
+  .colophon ul { gap: 0; }
+  .colophon ul a { display: block; padding: 13px 0; }
+  .cta-band p a { display: inline-block; padding: 12px 0; }
+  /* Logo bağlantısı da 27px'lik SVG kadardı; başlık yüksekliğini 1px
+     büyütmeden dokunulabilir alana çıkar. */
+  .wordmark { padding-block: 8px; }
+  .nav-toggle { min-width: 44px; min-height: 44px; }
+}
+
 /* ============================================================
    İş Ortaklığı sayfası — “Sen kimsin?” seçimi + başvuru formu
    ============================================================ */
