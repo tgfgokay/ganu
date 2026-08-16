@@ -43,6 +43,7 @@ function buildTiers(t) {
     { name: 'Pro', feat: true },
     { name: 'Kurumsal', feat: false },
   ].map(({ name, feat }) => {
+    if(marketingOnly)return {name,m:t.pricing.quoteWord,y:t.pricing.quoteWord,per:'',custom:true,feat,items:t.pricing.items[name]||[]}
     if (usingSupabase && PACKAGE_PRICES[name] == null && !PACKAGE_CUSTOM.has(name)) {
       return { name, m: t.pricing.loadError, y: t.pricing.loadError, per: '', unavailable: true, items: t.pricing.items[name] || [] }
     }
@@ -327,15 +328,17 @@ function Pricing({ t, locale }) {
     return unsubscribe
   }, [])
   const tiers = buildTiers(t)
+  const marketingKicker=locale==='tr'?'Hizmet Paketleri':'Service plans'
+  const marketingTitle=locale==='tr'?'İhtiyacına göre<br /><em>yazılı teklif</em>':'A written quote<br /><em>for your needs</em>'
   return (
     <section className="section pricing-sec" id={locale==='tr'?'paketler':'plans'}>
       <div className="wrap">
         <div className="pricing-head">
           <motion.div className="shead" {...reveal} variants={stagger}>
-            <motion.span className="kicker" variants={rise}>{t.pricing.kicker}</motion.span>
-            <motion.h2 variants={rise}><RichTitle value={t.pricing.title} dot /></motion.h2>
+            <motion.span className="kicker" variants={rise}>{marketingOnly?marketingKicker:t.pricing.kicker}</motion.span>
+            <motion.h2 variants={rise}><RichTitle value={marketingOnly?marketingTitle:t.pricing.title} dot /></motion.h2>
           </motion.div>
-          <motion.div className="billing" {...reveal} variants={rise}>
+          {!marketingOnly&&<motion.div className="billing" {...reveal} variants={rise}>
             <button type="button" role="switch" aria-checked={yearly}
               aria-label={t.pricing.toggle}
               className={`billing-toggle${yearly ? ' on' : ''}`} onClick={() => setYearly((v) => !v)}>
@@ -344,7 +347,7 @@ function Pricing({ t, locale }) {
               <span className={`opt${yearly ? ' active' : ''}`}>{t.pricing.yearly}</span>
             </button>
             <span className="billing-note">{locale==='tr'?<>Yıllık öde, <b>2 ay bedava</b></>:t.pricing.note}</span>
-          </motion.div>
+          </motion.div>}
         </div>
 
         <motion.div className="tiers" {...reveal} variants={stagger}>

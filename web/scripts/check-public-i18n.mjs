@@ -59,7 +59,7 @@ if(!en.segments.lawyers?.hero?.lead||!en.segments.accountants?.hero?.lead||!en.p
 if(!appRoutes.includes('data={en.segments.lawyers}')||!appRoutes.includes('data={en.segments.accountants}')||!appRoutes.includes('content={en} locale="en"'))throw new Error('EN route/component import bağlantısı eksik')
 const minimized=partnershipPayload({tax_no:'SECRET',iban:'TR00',name:'Firm'},'en')
 if(showPartnerCommercialFields('en')||minimized.tax_no||minimized.iban)throw new Error('EN partnership veri minimizasyonu bozuk')
-const publicComponents=['App.jsx','SegmentPage.jsx','IsOrtakligi.jsx'].map((name)=>fs.readFileSync(new URL(`../src/${name}`,import.meta.url),'utf8')).join('\n')
+const publicComponents=['App.jsx','SegmentPage.jsx','IsOrtakligi.jsx','partnership/PartnerApply.jsx'].map((name)=>fs.readFileSync(new URL(`../src/${name}`,import.meta.url),'utf8')).join('\n')
 if(/dangerouslySetInnerHTML/.test(publicComponents))throw new Error('public componentte tehlikeli HTML renderı var')
 if(!publicComponents.includes('showPartnerCommercialFields(locale)'))throw new Error('EN hassas alan UI kapısı eksik')
 console.log('public i18n static checks PASS')
