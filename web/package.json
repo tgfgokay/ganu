@@ -12,7 +12,7 @@
     "preview": "vite preview",
     "test:readiness": "bash scripts/test-staging-readiness.sh",
     "test:production-build": "bash scripts/test-production-build.sh",
-    "test:marketing-build": "GANU_MARKETING_ONLY=true GANU_SITE_URL=https://ganu.com.tr GANU_BASE=/ npm run build && node scripts/check-marketing-only.mjs"
+    "test:marketing-build": "export GANU_MARKETING_ONLY=true GANU_SITE_URL=https://ganu.com.tr GANU_BASE=/; npm run build && node scripts/check-marketing-only.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

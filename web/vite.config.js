@@ -13,7 +13,10 @@ if(marketing&&(process.env.VITE_SUPABASE_URL||process.env.VITE_SUPABASE_ANON_KEY
 // Yerel geliştirme ve diğer hostlarda kök '/' kalır.
 export default defineConfig(({ isSsrBuild })=>({
   base: config.base,
-  resolve: { alias: { './runtime/PrivateRoutes.jsx': path.resolve(marketing?'src/marketing/MarketingPrivateRoutes.jsx':'src/runtime/PrivateRoutes.jsx') } },
+  resolve: { alias: {
+    './runtime/PrivateRoutes.jsx': path.resolve(marketing?'src/marketing/MarketingPrivateRoutes.jsx':'src/runtime/PrivateRoutes.jsx'),
+    './partnership/PartnerApply.jsx': path.resolve(marketing?'src/marketing/MarketingPartnerApply.jsx':'src/partnership/PartnerApply.jsx'),
+  } },
   plugins: [blogContentPlugin(),react()],
   define: {
     __GANU_SITE_URL__: JSON.stringify(config.origin),
