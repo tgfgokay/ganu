@@ -14,7 +14,7 @@ Bu komut `READY` vermeden migration/deploy testine geçilmez; `READY` sonucu da 
 migration veya testlerin geçtiği anlamına gelmez.
 
 ## 1) Migration sırası (SQL editor ya da aşağıdaki fail-fast `psql` sırası)
-1. `supabase-schema.sql`            — ana şema (tablolar, RLS, portal RPC, pos_orders, security_events)
+1. `supabase/migrations/0000_base_schema.sql` — ana şema; `supabase-schema.sql` ile byte-exact canonical kopya
 2. `supabase/migrations/0001_pricing_catalog.sql`  — packages, discount_codes, pos_orders fiyat alanları, **pos_settle**
 3. `supabase/migrations/0002_private_storage.sql`  — secure-docs bucket + RLS + owns_secure_object
 4. `supabase/migrations/0003_auth_hardening.sql`   — bcrypt _pw_match, set_portal_password (yetkili), staff_roles, legacy reset
@@ -27,7 +27,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 
 ```bash
 set -euo pipefail
-psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase-schema.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0000_base_schema.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0001_pricing_catalog.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0002_private_storage.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0003_auth_hardening.sql
@@ -38,8 +38,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0007_purchase_flow.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0008_pos_reconciliation.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0009_legal_consent_evidence.sql
 ```
-`supabase-schema.sql` migration klasöründe olmadığı için boş bir projede yalnız
-`supabase db push` çalıştırmak ana şemayı kurmaz; yukarıdaki sıra veya SQL Editor şarttır.
+`supabase db push` artık boş hedefte 0000→0009 sırasını eksiksiz görür. `0000`,
+canonical `supabase-schema.sql` dosyasının byte-exact kopyasıdır; `scripts/staging-readiness.sh`
+iki dosyanın ayrışmasını fail-closed engeller. Şema değişikliğinde ikisi aynı committe güncellenmelidir.
 
 Storage bucket: 0002 `insert into storage.buckets` ile açar; Dashboard → Storage'da
 `secure-docs` **public=false** olduğunu teyit et.
@@ -179,23 +180,26 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
-psql "$DB_URL" -f supabase/migrations/0009_legal_consent_evidence.down.sql
-psql "$DB_URL" -f supabase/migrations/0008_pos_reconciliation.down.sql
-psql "$DB_URL" -f supabase/migrations/0007_purchase_flow.down.sql
-psql "$DB_URL" -f supabase/migrations/0006_customer_portal_auth.down.sql
-psql "$DB_URL" -f supabase/migrations/0005_rbac_auth_storage.down.sql
-psql "$DB_URL" -f supabase/migrations/0004_prod_gate.down.sql
-psql "$DB_URL" -f supabase/migrations/0003_auth_hardening.down.sql
-psql "$DB_URL" -f supabase/migrations/0002_private_storage.down.sql
-psql "$DB_URL" -f supabase/migrations/0001_pricing_catalog.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0009_legal_consent_evidence.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0008_pos_reconciliation.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0007_purchase_flow.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0006_customer_portal_auth.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0005_rbac_auth_storage.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0004_prod_gate.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0003_auth_hardening.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0002_private_storage.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0001_pricing_catalog.down.sql
 # (ya da her dosyanın içeriğini Supabase SQL editor'e sırayla yapıştır)
 ```
 Down dosyaları:
-- `supabase/migrations/0005_rbac_auth_storage.down.sql` — RBAC policy/helper; eski geniş erişimi geri açmaz
-- `supabase/migrations/0004_prod_gate.down.sql` — prod_gate_proof ve gate-probe müşteri
-- `supabase/migrations/0001_pricing_catalog.down.sql` — pos_settle, kolonlar, discount_codes, packages
-- `supabase/migrations/0002_private_storage.down.sql` — owns_secure_object, policy, secure-docs bucket (nesneleri boşaltır)
-- `supabase/migrations/0003_auth_hardening.down.sql` — set_portal_password, staff_roles, must_reset_password
+- `supabase/rollbacks/0005_rbac_auth_storage.down.sql` — RBAC policy/helper; eski geniş erişimi geri açmaz
+- `supabase/rollbacks/0004_prod_gate.down.sql` — prod_gate_proof ve gate-probe müşteri
+- `supabase/rollbacks/0001_pricing_catalog.down.sql` — pos_settle, kolonlar, discount_codes, packages
+- `supabase/rollbacks/0002_private_storage.down.sql` — owns_secure_object, policy, secure-docs bucket (nesneleri boşaltır)
+- `supabase/rollbacks/0003_auth_hardening.down.sql` — set_portal_password, staff_roles, must_reset_password
+
+`0000` için otomatik down yoktur: ana şemayı topluca düşürmek veri kaybı riski taşır.
+Yalnız boş/izole ortamda proje resetiyle geri alınır; veri içeren hedefte PITR/yedek gerekir.
 
 **Tek yönlü / dikkat:**
 - 0003 down: legacy `portal_password` değerleri `''` yapıldı; **geri gelmez** (staging'de
