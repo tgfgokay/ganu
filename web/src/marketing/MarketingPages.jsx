@@ -14,7 +14,7 @@ export function MarketingSales(){
       <h1>Çevrim içi satış ve ödeme hazırlanıyor.</h1>
       <p>Bu sayfa GANU sitesinin gezinme ve tasarım testleri için yayındadır. Şu anda çevrim içi başvuru, belge yükleme, ödeme ve kişisel veri toplama yapılmaz.</p>
       <p>Hizmet ve kurumsal teklif soruları için yalnızca kurumsal e-posta kanalını kullanabilirsiniz.</p>
-      <a style={button} href="mailto:merhaba@ganu.com.tr?subject=GANU%20hizmet%20teklifi">E-posta ile teklif isteyin</a>
+      <a style={button} href="mailto:info@ganu.com.tr?subject=GANU%20hizmet%20teklifi">E-posta ile teklif isteyin</a>
       <p><a href={withBase('/')}>Ana sayfaya dön</a></p>
       <LegalLinks locale="tr"/>
     </section>

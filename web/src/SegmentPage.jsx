@@ -181,7 +181,7 @@ function CtaBand({ cta, locale }) {
         <motion.div className="cta-band" {...reveal} variants={stagger}>
           <motion.h2 variants={rise}><RichTitle value={cta.title} /></motion.h2>
           <motion.p variants={rise}>{cta.text}</motion.p>
-          <motion.a variants={rise} href="mailto:merhaba@ganu.com.tr" className="btn btn-solid big">merhaba@ganu.com.tr →</motion.a>
+          <motion.a variants={rise} href="mailto:info@ganu.com.tr" className="btn btn-solid big">info@ganu.com.tr →</motion.a>
         </motion.div>
       </div>
     </section>
@@ -221,7 +221,7 @@ function Footer({ locale, chrome }) {
             <ul>
               <li>Kavacık Mah. Okul Cad.</li>
               <li>No:29 · Beykoz / İstanbul</li>
-              <li><a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a></li>
+              <li><a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></li>
               <li><a href="https://ganu.com.tr">ganu.com.tr</a></li>
             </ul>
           </div>

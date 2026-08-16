@@ -15,7 +15,7 @@ for(const marker of ['custom_quote_required','Bu paket çevrim içi satın alın
 const corp=checkout.indexOf('if (isCorp) {')
 const apply=checkout.indexOf('await customerApply',corp)
 if(!(corp>=0&&apply>corp))throw new Error('Kurumsal frontend guard customerApply öncesi değil')
-for(const marker of ["mode: 'teklif'",'ödeme/dekont adımı açılmaz','mailto:merhaba@ganu.com.tr'])if(!checkout.includes(marker))throw new Error(`Kurumsal frontend marker eksik: ${marker}`)
+for(const marker of ["mode: 'teklif'",'ödeme/dekont adımı açılmaz','mailto:info@ganu.com.tr'])if(!checkout.includes(marker))throw new Error(`Kurumsal frontend marker eksik: ${marker}`)
 if(!runbook.includes('422')||!runbook.includes('custom_quote_required'))throw new Error('Kurumsal HTTP kontratı runbookta yok')
 
 console.log('purchase guard static checks PASS')

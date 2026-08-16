@@ -157,7 +157,7 @@ export default function SatinAl() {
     if (['active', 'paid_pending_activation', 'failed', 'manual_review', 'unavailable', 'expired'].includes(returnState)) clearPaymentReturn()
   }, [returnState])
 
-  if (!salesEnabled) return <div className="legal-shell"><header className="legal-mast"><a href={withBase('/')} aria-label="Ana sayfa"><GanuMark/></a></header><main><section className="sales-closed"><p className="legal-kicker">LANSMAN ÖNCESİ GÜVENLİK KAPISI</p><h1>Çevrim içi satış henüz açık değil</h1><p>Satıcı/veri sorumlusu tescil bilgileri ve yasal metin onay tarihi tamamlanmadan başvuru, ödeme veya dekont kabul edilmez.</p><a className="btn btn-solid" href="mailto:merhaba@ganu.com.tr?subject=GANU%20bilgi%20talebi">Bilgi isteyin →</a><LegalLinks locale="tr"/></section></main></div>
+  if (!salesEnabled) return <div className="legal-shell"><header className="legal-mast"><a href={withBase('/')} aria-label="Ana sayfa"><GanuMark/></a></header><main><section className="sales-closed"><p className="legal-kicker">LANSMAN ÖNCESİ GÜVENLİK KAPISI</p><h1>Çevrim içi satış henüz açık değil</h1><p>Satıcı/veri sorumlusu tescil bilgileri ve yasal metin onay tarihi tamamlanmadan başvuru, ödeme veya dekont kabul edilmez.</p><a className="btn btn-solid" href="mailto:info@ganu.com.tr?subject=GANU%20bilgi%20talebi">Bilgi isteyin →</a><LegalLinks locale="tr"/></section></main></div>
 
   const set = (k) => (e) => {
     setErr('')
@@ -192,7 +192,7 @@ export default function SatinAl() {
     if (isCorp) {
       const subject = encodeURIComponent('GANU Kurumsal paket teklif talebi')
       const body = encodeURIComponent(`Şirket / ad: ${f.title.trim()}\nE-posta: ${email}\nTelefon: ${phone}\n\nKurumsal paket için yazılı teklif rica ederim.`)
-      setResult({ mode: 'teklif', mailto: `mailto:merhaba@ganu.com.tr?subject=${subject}&body=${body}` })
+      setResult({ mode: 'teklif', mailto: `mailto:info@ganu.com.tr?subject=${subject}&body=${body}` })
       setStep(3)
       return
     }
@@ -446,7 +446,7 @@ export default function SatinAl() {
                     : 'Ödemenizi yaptıktan sonra dekontu iletmeniz onayı hızlandırır. Ödeme görülünce '}
                   sözleşmeniz ve portal giriş bilgileriniz e-posta/telefonunuza iletilir.
                 </p>
-                <p style={{ marginTop: 10, opacity: 0.7 }}>Dekont iletmek / acil durum için: <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a></p>
+                <p style={{ marginTop: 10, opacity: 0.7 }}>Dekont iletmek / acil durum için: <a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></p>
               </>
             )}
             {result.mode === 'teklif' && (
@@ -784,7 +784,7 @@ function TransferPay({ cfg, applicant, customerId, pkg, amount, onClaim }) {
           </p>
         </div>
       ) : (
-        <p>Havale bilgileri için bize ulaşın: <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a></p>
+        <p>Havale bilgileri için bize ulaşın: <a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></p>
       )}
 
       {/* dekont yükleme */}

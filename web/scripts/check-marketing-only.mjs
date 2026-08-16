@@ -21,6 +21,10 @@ for(const route of ['/satin-al','/panel','/musteri','/ortak']){
 const sales=html('/satin-al')
 if(!sales.toLocaleLowerCase('tr').includes('çevrim içi başvuru, belge yükleme, ödeme ve kişisel veri toplama yapılmaz'))throw new Error('satış kapalı beyanı eksik')
 const publicSurface=indexed.map(html).join('\n')
+const sourceFiles=fs.readdirSync(path.resolve('src'),{recursive:true}).filter((name)=>/\.(?:js|jsx|ts|tsx)$/.test(name))
+const publicContactSource=sourceFiles.map((name)=>fs.readFileSync(path.join('src',name),'utf8')).join('\n')
+if(/merhaba(?:@|%40)ganu\.com\.tr/i.test(publicContactSource)||/merhaba(?:@|%40)ganu\.com\.tr/i.test(publicSurface))throw new Error('doğrulanmamış eski public e-posta adresi bulundu')
+if(!publicContactSource.includes('info@ganu.com.tr')||!publicSurface.includes('info@ganu.com.tr'))throw new Error('doğrulanmış info@ganu.com.tr public iletişim adresi eksik')
 for(const marker of ['online öde','30 saniyede satın al','Ödeme Yap','Dekont Yükle'])if(publicSurface.includes(marker))throw new Error(`public marketing checkout çağrısı: ${marker}`)
 for(const route of ['/is-ortakligi','/en/partnership']){
   const page=html(route)
