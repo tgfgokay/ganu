@@ -25,7 +25,7 @@
 
 ## 2) Migration + RLS
 Sırayla uygula (Supabase SQL editor ya da `supabase db push`):
-1. `supabase-schema.sql` — ana şema (13 tablo, RLS, portal RPC'leri, pos_orders, security_events).
+1. `supabase/migrations/0000_base_schema.sql` — ana şema; canonical `supabase-schema.sql` ile byte-exact tutulur.
 2. `supabase/migrations/0001_pricing_catalog.sql` — **packages** + **discount_codes** (gizli) + pos_orders fiyat alanları.
 3. `supabase/migrations/0002_private_storage.sql` — **secure-docs** private bucket + RLS + `owns_secure_object`.
 4. `supabase/migrations/0003_auth_hardening.sql` — bcrypt `_pw_match` (düz metin/sha256 RED), `set_portal_password`, `staff_roles` (RBAC).
@@ -35,6 +35,10 @@ Sırayla uygula (Supabase SQL editor ya da `supabase db push`):
 8. `supabase/migrations/0007_purchase_flow.sql` — Edge-only aday/dekont, HMAC purchase token, rate-limit ve POS session binding.
 9. `supabase/migrations/0008_pos_reconciliation.sql` — callback/session terminal mutabakatı, opak dönüş tokenı ve minimal ödeme durumu.
 10. `supabase/migrations/0009_legal_consent_evidence.sql` — satış öncesi exact metin sürümü, immutable ön bilgilendirme/erken ifa kanıtı ve staging proof gate.
+
+`supabase/migrations/` yalnız 0000–0009 ileri migration dosyalarını içerir. Ters SQL'ler
+CLI tarafından yanlışlıkla ileri migration sayılmaması için `supabase/rollbacks/` altındadır.
+Readiness testi 0000 ile canonical şemanın checksum/byte eşitliğini zorunlu kılar.
 
 RLS notları:
 - `packages`: anon yalnız `active` okur; yazma personel.

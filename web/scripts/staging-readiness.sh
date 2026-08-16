@@ -30,17 +30,39 @@ else
 fi
 
 migrations=(
-  0001_pricing_catalog 0002_private_storage 0003_auth_hardening
+  0000_base_schema 0001_pricing_catalog 0002_private_storage 0003_auth_hardening
   0004_prod_gate 0005_rbac_auth_storage 0006_customer_portal_auth
   0007_purchase_flow 0008_pos_reconciliation 0009_legal_consent_evidence
 )
 for n in "${migrations[@]}"; do
-  if [ -f "$ROOT/supabase/migrations/${n}.sql" ] && [ -f "$ROOT/supabase/migrations/${n}.down.sql" ]; then
-    pass "migration ${n} up/down var"
+  if [ -f "$ROOT/supabase/migrations/${n}.sql" ]; then
+    pass "UP migration ${n} var"
   else
-    block "migration ${n} up/down eksik"
+    block "UP migration ${n} eksik"
   fi
 done
+migration_count="$(find "$ROOT/supabase/migrations" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
+down_in_migrations="$(find "$ROOT/supabase/migrations" -maxdepth 1 -type f -name '*.down.sql' | wc -l | tr -d ' ')"
+if [ "$migration_count" = 10 ] && [ "$down_in_migrations" = 0 ]; then
+  pass 'migrations dizini yalnız 0000-0009 UP SQL içeriyor'
+else
+  block 'migrations dizini exact UP-only 0000-0009 değil'
+fi
+if cmp -s "$ROOT/supabase-schema.sql" "$ROOT/supabase/migrations/0000_base_schema.sql"; then
+  pass '0000 base schema canonical dosyayla byte-exact'
+else
+  block '0000 base schema canonical supabase-schema.sql ile farklı'
+fi
+rollbacks=(
+  0001_pricing_catalog 0002_private_storage 0003_auth_hardening
+  0004_prod_gate 0005_rbac_auth_storage 0006_customer_portal_auth
+  0007_purchase_flow 0008_pos_reconciliation 0009_legal_consent_evidence
+)
+for n in "${rollbacks[@]}"; do
+  if [ -f "$ROOT/supabase/rollbacks/${n}.down.sql" ]; then pass "rollback ${n} var"; else block "rollback ${n} eksik"; fi
+done
+rollback_count="$(find "$ROOT/supabase/rollbacks" -maxdepth 1 -type f -name '*.down.sql' | wc -l | tr -d ' ')"
+if [ "$rollback_count" = 9 ]; then pass 'rollbacks dizini exact 0001-0009'; else block 'rollbacks dizini exact 9 down SQL değil'; fi
 
 functions=(pos-payment purchase-flow admin-gate get-file send-notification issue-einvoice)
 for fn in "${functions[@]}"; do
