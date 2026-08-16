@@ -139,7 +139,7 @@ function PortalHome({ p, onLogout }) {
               <span className="ic" aria-hidden="true">💸</span>
               <span className="msg">
                 Ay sonunda ya da üç ayda bir, biriken hakedişin için <b>serbest meslek makbuzunu / faturanı</b> kes ve{' '}
-                <a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a> adresine gönder. Tutarı kayıtlı IBAN’ına öderiz.
+                <a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a> adresine gönder. Tutarı kayıtlı IBAN’ına öderiz.
                 Rakamlar ödenmiş faturalar üzerinden, panelde şeffaf hesaplanır.
               </span>
             </div>

@@ -7,7 +7,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // Gizli anahtarlar ASLA istemciye konmaz — Supabase secrets'ta durur:
 //
 //   supabase secrets set NETGSM_USER=... NETGSM_PASS=... NETGSM_HEADER=...
-//   supabase secrets set RESEND_API_KEY=... MAIL_FROM="GANU <bilgi@ganu.com.tr>"
+//   supabase secrets set RESEND_API_KEY=... MAIL_FROM="GANU <info@ganu.com.tr>"
 //   supabase secrets set WHATSAPP_TOKEN=... WHATSAPP_FROM=...
 //
 // Dağıtım:

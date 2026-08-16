@@ -72,7 +72,7 @@ function KvkkGate({ cust, onAccept, onLogout }) {
           kaydedilmesi, size bildirilmesi ve talebiniz hâlinde taranıp iletilmesi için gönderi
           bilgilerinizin işlenmesine rıza vermiş olursunuz. Rızanızı dilediğiniz an geri alabilirsiniz.</p>
           <p style={{ marginTop: 8 }}>Ayrıntılı metin: sözleşme ekinde yer alan <b>KVKK Aydınlatma Metni</b>
-          {' '}ve <b>Tebligat/Posta Tarama Açık Rıza Formu</b>. Sorularınız için: merhaba@ganu.com.tr</p>
+          {' '}ve <b>Tebligat/Posta Tarama Açık Rıza Formu</b>. Sorularınız için: info@ganu.com.tr</p>
         </div>
         <button className="pl-btn pl-btn-solid" onClick={accept} disabled={busy} style={{ width: '100%' }}>
           {busy ? 'Kaydediliyor…' : 'Okudum, onaylıyorum →'}
@@ -122,7 +122,7 @@ function PortalLogin({ onOk }) {
           {busy ? 'Gönderiliyor…' : usingSupabase ? 'Giriş bağlantısı gönder →' : 'Giriş yap →'}</button>
         <span className="pl-login-hint">
           {usingSupabase ? 'Bağlantı yalnız doğrulanmış e-posta adresinize gönderilir. ' : <>İlk şifreniz, satın alma sonrası verilen <b>erişim kodunuzdur</b>. </>}
-          Sorun için: <a href="mailto:merhaba@ganu.com.tr" className="pl-link">merhaba@ganu.com.tr</a>
+          Sorun için: <a href="mailto:info@ganu.com.tr" className="pl-link">info@ganu.com.tr</a>
         </span>
       </form>
     </div>
@@ -185,7 +185,7 @@ function PortalHome({ cust, onLogout }) {
         {ct.length === 0 && (
           <div className="pl-alert"><span className="ic">👋</span><span className="msg">
             <b>Hoş geldiniz!</b> Sözleşmeniz hazırlanıyor — ekibimiz belgeleriniz ve sözleşme imzası için
-            sizinle iletişime geçecek. Sorularınız için <a href="mailto:merhaba@ganu.com.tr" className="pl-link">merhaba@ganu.com.tr</a>.
+            sizinle iletişime geçecek. Sorularınız için <a href="mailto:info@ganu.com.tr" className="pl-link">info@ganu.com.tr</a>.
           </span></div>
         )}
 
@@ -397,7 +397,7 @@ function OdemeModal({ inv, cust, onClose }) {
               </div>
             </>
           ) : (
-            <div className="t2">Havale bilgisi için bize ulaşın: <a href="mailto:merhaba@ganu.com.tr" className="pl-link">merhaba@ganu.com.tr</a></div>
+            <div className="t2">Havale bilgisi için bize ulaşın: <a href="mailto:info@ganu.com.tr" className="pl-link">info@ganu.com.tr</a></div>
           )}
         </div>
       </div>

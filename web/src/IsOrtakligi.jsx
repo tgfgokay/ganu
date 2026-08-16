@@ -189,7 +189,7 @@ function Footer({ p, locale }) {
             <ul>
               <li>Kavacık Mah. Okul Cad.</li>
               <li>No:29 · Beykoz / İstanbul</li>
-              <li><a href="mailto:merhaba@ganu.com.tr">merhaba@ganu.com.tr</a></li>
+              <li><a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></li>
               <li><a href="https://ganu.com.tr">ganu.com.tr</a></li>
             </ul>
           </div>
