@@ -6,7 +6,9 @@ import { readLegalIdentity } from './scripts/legal-config.mjs'
 import path from 'node:path'
 const config=publicConfig()
 const marketing=process.env.GANU_MARKETING_ONLY==='true'
-if(marketing&&(process.env.VITE_SUPABASE_URL||process.env.VITE_SUPABASE_ANON_KEY))throw new Error('marketing-only build Supabase env kabul etmez')
+const staffPanel=marketing&&process.env.GANU_STAFF_PANEL==='true'
+if(marketing&&!staffPanel&&(process.env.VITE_SUPABASE_URL||process.env.VITE_SUPABASE_ANON_KEY))throw new Error('marketing-only build Supabase env kabul etmez')
+if(staffPanel&&(!process.env.VITE_SUPABASE_URL||!process.env.VITE_SUPABASE_ANON_KEY))throw new Error('staff-panel build Supabase URL ve anon key gerektirir')
 
 // GitHub Pages alt-yol dağıtımı için base env ile verilir:
 //   GANU_BASE=/ganu/ npx vite build
@@ -14,14 +16,16 @@ if(marketing&&(process.env.VITE_SUPABASE_URL||process.env.VITE_SUPABASE_ANON_KEY
 export default defineConfig(({ isSsrBuild })=>({
   base: config.base,
   resolve: { alias: {
-    './runtime/PrivateRoutes.jsx': path.resolve(marketing?'src/marketing/MarketingPrivateRoutes.jsx':'src/runtime/PrivateRoutes.jsx'),
+    './runtime/PrivateRoutes.jsx': path.resolve(staffPanel?'src/marketing/MarketingStaffRoutes.jsx':marketing?'src/marketing/MarketingPrivateRoutes.jsx':'src/runtime/PrivateRoutes.jsx'),
     './partnership/PartnerApply.jsx': path.resolve(marketing?'src/marketing/MarketingPartnerApply.jsx':'src/partnership/PartnerApply.jsx'),
+    ...(staffPanel?{'../lib/store.js':path.resolve('src/panel/lib/operations-store.js')}:{})
   } },
   plugins: [blogContentPlugin(),react()],
   define: {
     __GANU_SITE_URL__: JSON.stringify(config.origin),
     __GANU_LEGAL_IDENTITY__: JSON.stringify(readLegalIdentity()),
     __GANU_MARKETING_ONLY__: JSON.stringify(marketing),
+    __GANU_STAFF_PANEL__: JSON.stringify(staffPanel),
   },
   // SSR/prerender route-lazy chunkları korur. Yalnız browser build'inde,
   // Vite 8/Rolldown'un desteklenen codeSplitting API'siyle vendor grupları.
