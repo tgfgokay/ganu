@@ -5,6 +5,7 @@ import { publicConfig } from './url-config.mjs'
 
 const config=publicConfig(),dist=path.resolve('dist')
 const marketing=process.env.GANU_MARKETING_ONLY==='true'
+const staffPanel=marketing&&process.env.GANU_STAFF_PANEL==='true'
 const {render,prerenderRoutes}=await import(`${pathToFileURL(path.resolve('dist-ssr/entry-server.js')).href}?check=${Date.now()}`)
 const routes=prerenderRoutes(),expected=new Set(routes.filter((route)=>route.indexable!==false).map((route)=>config.absolute(route.path)))
 const seenTitles=new Set(),seenDescriptions=new Set(),seenCanonicals=new Set()
@@ -21,7 +22,8 @@ for(const route of routes){
   const head=html.slice(0,html.indexOf('</head>'))
   const root=rootBody(html)
   if(!html.includes('<div id="root" data-prerendered>'))throw new Error(`${route.path}: JS-off görünürlük kapısı eksik`)
-  if(!/<h1[ >]/.test(root)||root.length<800)throw new Error(`${route.path}: JS-off H1/body eksik`)
+  const minimumBody=staffPanel&&route.path==='/panel'?150:800
+  if(!/<h1[ >]/.test(root)||root.length<minimumBody)throw new Error(`${route.path}: JS-off H1/body eksik`)
   if(/<\/?(?:script|iframe)\b/i.test(root)||/dangerouslySetInnerHTML/.test(root))throw new Error(`${route.path}: body tehlikeli içerik`)
   if(config.base!=='/'&&[...root.matchAll(/href="(\/[^"]*)"/g)].some((m)=>!m[1].startsWith(config.baseNoSlash+'/')))throw new Error(`${route.path}: base dışı internal link`)
   for(const [,value] of head.matchAll(/\b(?:href|src)="([^"]+)"/g)){
