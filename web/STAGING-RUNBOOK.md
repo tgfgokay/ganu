@@ -420,3 +420,23 @@ domain-level referral ölçümünü korur. İlk navigation URL'si sağlayıcı, 
 ve browser history/access loglarında yine görülebilir. Staging HTTP response header'ı
 daha gevşek bir policy ile meta politikasını ezmemeli; proxy/CDN access-log
 redaction/retention ayrıca doğrulanmalıdır.
+
+## 11) Personel paneli beta (staging backend)
+
+Canlı pazarlama artifact'ında personel paneli ancak aşağıdaki üç GitHub ayarı birlikte
+varsa build edilir. Eksik değer deploy'u durdurur:
+
+- Repository variable `GANU_STAFF_PANEL_ENABLED=true`
+- Repository variable `GANU_STAFF_SUPABASE_URL=https://<staging-ref>.supabase.co`
+- Repository secret `GANU_STAFF_SUPABASE_ANON_KEY=<publishable/anon key>`
+
+URL ve publishable key istemciye giden public konfigürasyondur; key yine de workflow
+loglarında kazara görünmemesi için secret olarak tutulur. `service_role`, DB parolası veya
+provider anahtarı bu build'e verilmez. Beta açıkken `/panel` gerçek Supabase Auth JWT ve
+`staff_roles` RBAC ister; local/demo fallback yoktur. Arayüz staging backend kullandığını
+açıkça belirtir. Ödeme, PayTR, e-Belge, e-posta, SMS ve WhatsApp dış mutasyonları kapalıdır.
+
+Auth → URL Configuration allow-list exact `https://ganu.com.tr/panel` içermelidir;
+wildcard kullanılmaz. Magic-link `shouldCreateUser:false` ile yalnız önceden açılmış
+staff hesabına gönderilir. Production deploy'dan önce anonim ve customer JWT red, staff
+JWT allow, logout/session ve mobil görünüm gözlenmiş PASS olmalıdır.

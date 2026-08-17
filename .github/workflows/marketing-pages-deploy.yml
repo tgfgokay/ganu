@@ -1,5 +1,5 @@
 name: marketing-pages-deploy
-run-name: Marketing-only Pages deploy (sales/private closed)
+run-name: Marketing Pages deploy (sales closed, staff beta opt-in)
 
 on:
   workflow_dispatch: {}
@@ -18,8 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GANU_MARKETING_ONLY: ${{ vars.GANU_MARKETING_ONLY }}
+      GANU_STAFF_PANEL: ${{ vars.GANU_STAFF_PANEL_ENABLED }}
       GANU_SITE_URL: https://ganu.com.tr
       GANU_BASE: /
+      VITE_SUPABASE_URL: ${{ vars.GANU_STAFF_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.GANU_STAFF_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v7
       - name: Fail closed on target and mode
@@ -31,8 +34,10 @@ jobs:
           test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
           test "$GITHUB_REF" = "refs/heads/main"
           test "$GANU_MARKETING_ONLY" = "true"
-          test -z "${VITE_SUPABASE_URL:-}"
-          test -z "${VITE_SUPABASE_ANON_KEY:-}"
+          test "$GANU_STAFF_PANEL" = "true"
+          test -n "${VITE_SUPABASE_URL:-}"
+          test -n "${VITE_SUPABASE_ANON_KEY:-}"
+          test "$VITE_SUPABASE_URL" = "https://fhtcrvzwbqcfzceqolyz.supabase.co"
           pages="$(curl --fail-with-body --silent --show-error -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/$GITHUB_REPOSITORY/pages)"
           test "$(jq -r .https_enforced <<<"$pages")" = "true"
           test "$(jq -r .cname <<<"$pages")" = "ganu.com.tr"
@@ -45,11 +50,11 @@ jobs:
         working-directory: web
       - run: npm audit --audit-level=low
         working-directory: web
-      - name: Build and verify marketing-only artifact
+      - name: Build and verify sales-closed staff beta artifact
         working-directory: web
         run: |
           npm run build
-          node scripts/check-marketing-only.mjs
+          node scripts/check-staff-panel.mjs
           test "$(cat dist/CNAME)" = "ganu.com.tr"
       - name: Verify Pages Actions source after artifact gates
         env:
@@ -72,7 +77,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy marketing-only artifact
+      - name: Deploy sales-closed staff beta artifact
         id: deployment
         uses: actions/deploy-pages@v4
       - name: Verify strict HTTPS public surface

@@ -32,12 +32,6 @@ export async function sendMagicLink(email){
 
 export async function logout(){if(usingSupabase)await supabase.auth.signOut()}
 
-export async function resetPassword(email){
-  if(!usingSupabase)return {ok:false,error:'Personel girişi yapılandırılmadı.'}
-  const {error}=await supabase.auth.resetPasswordForEmail(String(email||'').trim(),{redirectTo:`${window.location.origin}${withBase('/panel')}`})
-  return error?{ok:false,error:'Sıfırlama bağlantısı gönderilemedi.'}:{ok:true}
-}
-
 export function onAuthChange(cb){
   if(!usingSupabase)return ()=>{}
   const {data}=supabase.auth.onAuthStateChange((_event,session)=>{
