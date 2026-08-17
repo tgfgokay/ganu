@@ -5,13 +5,14 @@ import zlib from 'node:zlib'
 const assets=path.resolve('dist/assets')
 const files=fs.readdirSync(assets).filter((name)=>name.endsWith('.js'))
 const marketing=process.env.GANU_MARKETING_ONLY==='true'
+const staffPanel=marketing&&process.env.GANU_STAFF_PANEL==='true'
 const limit=500*1024
 const oversized=files.map((name)=>({name,size:fs.statSync(path.join(assets,name)).size})).filter(({size})=>size>limit)
 if(oversized.length)throw new Error(`500 KiB üstü browser chunk: ${oversized.map(({name,size})=>`${name}=${size}`).join(', ')}`)
-for(const prefix of marketing?['react-vendor-','motion-vendor-']:['react-vendor-','motion-vendor-','PanelApp-','SatinAl-','MusteriPortal-','OrtakPortal-']){
+for(const prefix of staffPanel?['react-vendor-','motion-vendor-','OperationsPanelApp-','supabase-vendor-']:marketing?['react-vendor-','motion-vendor-']:['react-vendor-','motion-vendor-','PanelApp-','SatinAl-','MusteriPortal-','OrtakPortal-']){
   if(!files.some((name)=>name.startsWith(prefix)))throw new Error(`beklenen güvenli chunk yok: ${prefix}`)
 }
-if(marketing&&files.some((name)=>/^(?:PanelApp|SatinAl|MusteriPortal|OrtakPortal|panel|supabase-vendor)-/.test(name)))throw new Error('marketing build private/Supabase chunk içeriyor')
+if(marketing&&!staffPanel&&files.some((name)=>/^(?:PanelApp|SatinAl|MusteriPortal|OrtakPortal|panel|supabase-vendor)-/.test(name)))throw new Error('marketing build private/Supabase chunk içeriyor')
 if(process.env.VITE_SUPABASE_URL&&!files.some((name)=>name.startsWith('supabase-vendor-')))throw new Error('Supabase env açıkken deferred supabase-vendor chunk yok')
 
 const html=fs.readFileSync(path.resolve('dist/index.html'),'utf8')
@@ -25,7 +26,7 @@ while(queue.length){
     if(!initial.has(match[1])){initial.add(match[1]);queue.push(match[1])}
   }
 }
-const privatePattern=/^(?:PanelApp|SatinAl|MusteriPortal|OrtakPortal|panel|supabase-vendor)-/
+const privatePattern=/^(?:PanelApp|OperationsPanelApp|SatinAl|MusteriPortal|OrtakPortal|panel|supabase|supabase-vendor)-/
 if([...initial].some((name)=>privatePattern.test(name)))throw new Error(`public initial graph private chunk içeriyor: ${[...initial].join(', ')}`)
 const initialStyles=[...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)].map((m)=>assetName(m[1]))
 if(initialStyles.some((name)=>/^panel-/.test(name)))throw new Error('public entry panel CSS preload ediyor')
