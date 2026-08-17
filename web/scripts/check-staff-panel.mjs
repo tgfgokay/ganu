@@ -10,6 +10,10 @@ for(const bad of ['ganu2026','DEFAULT_PASS','localStorage.setItem','demo başar�
 if(!text.includes('info@ganu.com.tr'))throw new Error('doğrulanmış personel e-postası eksik')
 for(const route of ['satin-al','musteri','ortak']){const page=fs.readFileSync(path.join(dist,route,'index.html'),'utf8');if(!page.includes('noindex,nofollow')||!page.includes('data-marketing-only='))throw new Error(`${route}: staff beta artifact içinde kapalı değil`)}
 if(source.includes('resetPasswordForEmail'))throw new Error('tamamlanmamış parola reset yüzeyi staff beta içine girdi')
+const panel=fs.readFileSync(path.join(dist,'panel','index.html'),'utf8')
+if(panel.includes('data-msg=')||panel.includes('did not finish this Suspense boundary'))throw new Error('/panel SSR tamamlanmamış Suspense sınırı içeriyor; hydration deterministik değil')
+if(!panel.includes('aria-label="Personel paneli yükleniyor"')||!panel.includes('<h1>Personel Girişi</h1>'))throw new Error('/panel SSR ile ilk client render ortak deterministic shell üretmiyor')
+if(!source.includes('if(!mounted)return loading'))throw new Error('client panel lazy import hydration sonrasına ertelenmiyor')
 const index=fs.readFileSync(path.join(dist,'index.html'),'utf8')
 if(/OperationsPanelApp|supabase-vendor|operations-store/.test(index))throw new Error('personel/Supabase chunk public initial HTML içine preload edildi')
 console.log('staff panel static gate: PASS')
