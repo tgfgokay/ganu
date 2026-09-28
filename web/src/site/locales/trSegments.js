@@ -15,7 +15,7 @@ const lawyers = {
       { k: 'Beykoz', v: 'Kavacık / İstanbul' },
     ],
   },
-  marquee: ['Tebligat & UETS', 'Yoklamaya Hazır', 'Evrak Paneli', 'Baro Uyumu', 'Posta & Tebligat', 'Telefon Karşılama'],
+  marquee: ['Tebligat & UETS', 'Yoklamaya Hazır', 'Evrak Paneli', 'Baro Uyumu', 'Posta & Tebligat', 'e-İmza'],
   value: {
     kicker: 'Neden GANU — Hukuk büroları',
     title: 'Bir hukuk bürosunun<br />ihtiyacı olan <em>her şey</em><span class="dot">.</span>',
@@ -24,7 +24,7 @@ const lawyers = {
       { n: '02', t: 'Yoklama & re’sen terk desteği', d: 'Vergi dairesi adres yoklamasına (VUK 127) hazır fiziki adres; yoklama kayıtları panelde tutulur, re’sen terk riskini önemli ölçüde azaltır.' },
       { n: '03', t: 'Baro & levha uyumu', d: 'Büro adresi olarak kullanılabilen prestijli İstanbul adresi; levha ve resmi yazışmalarda güvenle gösterilir.' },
       { n: '04', t: 'Posta & kargo yönetimi', d: 'Gelen tebligat, evrak ve kargolar teslim alınır, aynı gün bildirilir; dilerseniz büronuza yönlendirilir.' },
-      { n: '05', t: 'Telefon karşılama', d: 'Kurumsal numara ve profesyonel çağrı karşılama ile büronuza her zaman ulaşılsın; mesajlarınız panele işlenir.' },
+      { n: '05', t: 'e-İmza temini', d: 'Nitelikli elektronik imza (e-imza) başvuru ve kurulumunda size eşlik ederiz; sözleşme ve resmi işlemlerinizi elektronik imzayla hızlıca tamamlayın.' },
       { n: '06', t: 'Tek panelde takip', d: 'Gelen evrak, tebligat, kargo ve faturalar tek ekranda; dilerseniz müvekkilleriniz için ayrı erişim portalı.' },
     ],
   },
