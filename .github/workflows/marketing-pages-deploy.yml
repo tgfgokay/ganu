@@ -23,6 +23,23 @@ jobs:
       GANU_BASE: /
       VITE_SUPABASE_URL: ${{ vars.GANU_STAFF_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.GANU_STAFF_SUPABASE_ANON_KEY }}
+      # Hukuki metinlerin satıcı/veri sorumlusu kimliği — kamuya açık sicil bilgisi (web/src/site/company.js ile aynı).
+      # Metinler 29.09.2026'da şirket tarafından onaylandı; yurt dışı aktarım: panel verisi Supabase (Singapur),
+      # KVKK m.9 uygun güvence (standart sözleşme + Kurul bildirimi).
+      GANU_LEGAL_TRADE_NAME: GANU OFİS HİZMETLERİ LİMİTED ŞİRKETİ
+      GANU_LEGAL_ADDRESS: Kavacık Mah. Okul Cad. No:29 Kat:4 D.8 (Teras Katı) Beykoz / İstanbul
+      GANU_LEGAL_TAX_OFFICE: Beykoz
+      GANU_LEGAL_TAX_NUMBER: '3892020110'
+      GANU_LEGAL_MERSIS_NUMBER: '0389202011000001'
+      GANU_LEGAL_REGISTRY_OFFICE: İstanbul Ticaret Sicili Müdürlüğü
+      GANU_LEGAL_REGISTRY_NUMBER: '1155060'
+      GANU_LEGAL_EMAIL: info@ganu.com.tr
+      GANU_LEGAL_PHONE: 0537 974 62 90
+      GANU_LEGAL_APPROVED_AT: '2026-09-29'
+      GANU_LEGAL_TEXT_VERSION: 2026-08-15.v1
+      GANU_LEGAL_RETENTION_VERSION: 2026-08-15.v1
+      GANU_LEGAL_CROSS_BORDER_STATUS: appropriate-safeguards
+      GANU_LEGAL_CONSENT_FLOW_VERSION: '0009'
     steps:
       - uses: actions/checkout@v7
       - name: Fail closed on target and mode
