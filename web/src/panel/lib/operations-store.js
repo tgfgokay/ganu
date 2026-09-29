@@ -42,7 +42,9 @@ export async function revenueByMonth(months=6){const rows=await invoices.list(),
 export async function partnerSummary(){const list=await partners.list(),payments=await commissionPayments.list();return list.map((partner)=>({...partner,paid_commission:payments.filter((p)=>p.partner_id===partner.id).reduce((n,p)=>n+(Number(p.amount)||0),0)}))}
 export async function recordCommissionPayment(row){return commissionPayments.create(row)}
 export const PROVIDER_STATUS=Object.freeze({paytr:'Kurulum bekliyor',efatura:'Kurulum bekliyor',email:'Kurulum bekliyor',sms:'Kurulum bekliyor',whatsapp:'Kurulum bekliyor'})
-export async function issueEInvoice(){return {ok:false,reason:'e-Belge entegrasyonu kurulmadı; işlem yapılmadı.'}}
+// Sunucu (issue-einvoice) EINVOICE_ENABLED ve Paraşüt secret'ları yoksa 503 döner; panel dış servise doğrudan yazmaz.
+export async function issueEInvoice(invoiceId){requireCloud();const {data,error}=await supabase.functions.invoke('issue-einvoice',{body:{invoice_id:invoiceId}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'başarısız',message:'e-Belge servisine ulaşılamadı.'}}
+export const PAYMENT_METHODS=['havale','kart','nakit','diğer']
 export function getConfig(){return {real_send:false,efatura_enabled:false,pos_enabled:false,providers:PROVIDER_STATUS}}
 export function setConfig(){throw new Error('Dış servis ayarları bu panelden açılamaz.')}
 export const EFATURA_PROVIDERS=[]

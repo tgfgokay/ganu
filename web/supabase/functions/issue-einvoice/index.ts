@@ -1,31 +1,18 @@
-// ============================================================
+// GANU · Paraşüt e-Fatura / e-Arşiv kesimi (Deno Edge Function)
+// ------------------------------------------------------------
+// İstek: POST { invoice_id } — yalnız personel JWT. Tutar, müşteri ve adres istemciden alınmaz;
+// fatura satırı sunucuda einvoice_claim ile tek sahiplikle alınır ve veritabanından okunur.
+// Akış ve kaldığı yerden devam kuralları: ./parasut.ts
+//
+// Fail-closed: EINVOICE_ENABLED=true ve tüm Paraşüt secret'ları yoksa hiçbir dış çağrı yapılmaz.
+//   supabase secrets set EINVOICE_ENABLED=true SITE_URL=https://ganu.com.tr
+//   supabase secrets set PARASUT_CLIENT_ID=... PARASUT_CLIENT_SECRET=... PARASUT_COMPANY_ID=...
+//   supabase secrets set PARASUT_EMAIL=... PARASUT_PASSWORD=...        (2FA'sız ayrı API kullanıcısı)
+//   supabase secrets set PARASUT_PRODUCT_ID=... PARASUT_ACCOUNT_ID=... (ürün + tahsilat hesabı; önerilir)
+// Dağıtım: supabase functions deploy issue-einvoice
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-// GANU Panel · e-Fatura / e-Arşiv kesme Edge Function (Deno)
-// ------------------------------------------------------------
-// Türkiye'de e-belge, GİB onaylı bir ENTEGRATÖR üzerinden kesilir.
-// Bu fonksiyon istemciden gelen fatura + müşteri bilgisini alır,
-// seçilen entegratörün API'sine iletir ve belge UUID/numarasını döner.
-//
-// PARAŞÜT AKIŞI (api.parasut.com/v4):
-//   1) OAuth token (password grant)
-//   2) Müşteri kaydını bul ya da oluştur (contacts, VKN/TC ile arama)
-//   3) Satış faturası oluştur (sales_invoices) — tutar KDV DAHİL kabul edilir
-//   4) e-Fatura mükellefi mi kontrol et (e_invoice_inboxes)
-//      → mükellefse e_invoices, değilse e_archives ile resmîleştir
-//   5) Trackable job'ı bekle, belge no + PDF linkini dön
-//
-// Gizli anahtarlar ASLA istemciye konmaz — Supabase secrets:
-//   supabase secrets set PARASUT_CLIENT_ID=... PARASUT_CLIENT_SECRET=...
-//   supabase secrets set PARASUT_COMPANY_ID=... PARASUT_EMAIL=... PARASUT_PASSWORD=...
-//
-// Dağıtım:  supabase functions deploy issue-einvoice
-//
-// İstek gövdesi (JSON):
-//   { provider, mode: "e-arsiv"|"e-fatura"|"auto",
-//     invoice: { amount, issue_date, note },
-//     customer: { title, contact, tax_no, tax_office, tc, email } }
-// ============================================================
+import { processInvoice, type CustomerRow, type Env, type InvoiceRow } from './parasut.ts'
 
 const SITE = Deno.env.get('SITE_URL') || ''
 let ALLOW_ORIGIN = ''
@@ -43,192 +30,23 @@ async function isStaffRequest(req: Request): Promise<boolean> {
   const anon = Deno.env.get('SUPABASE_ANON_KEY') || ''
   const authorization = req.headers.get('Authorization') || ''
   if (!url || !anon || !authorization.toLowerCase().startsWith('bearer ')) return false
-  const client = createClient(url, anon, {
-    global: { headers: { Authorization: authorization } }, auth: { persistSession: false },
-  })
+  const client = createClient(url, anon, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false } })
   const { data, error } = await client.rpc('is_staff')
   return !error && data === true
 }
 
-type Invoice = { amount: number; issue_date?: string; note?: string }
-type Customer = { title?: string; contact?: string; tax_no?: string; tax_office?: string; tc?: string; email?: string }
-
-const P_BASE = 'https://api.parasut.com/v4'
-const VAT_RATE = 20 // sanal ofis hizmeti — genel oran %20 (KDV dahil tutardan geri hesaplanır)
-
-// ---- Paraşüt yardımcıları ----
-async function parasutFetch(token: string, path: string, init: RequestInit = {}) {
-  const res = await fetch(`${P_BASE}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(init.headers || {}),
-    },
-  })
-  const body = res.status === 204 ? null : await res.json().catch(() => null)
-  if (!res.ok) {
-    const msg = body?.errors?.map((e: { title?: string; detail?: string }) => e.detail || e.title).join('; ') || res.statusText
-    throw new Error(`Paraşüt ${path} → ${res.status}: ${msg}`)
+function parasutEnv(): Env | null {
+  const get = (k: string) => (Deno.env.get(k) || '').trim()
+  const env: Env = {
+    clientId: get('PARASUT_CLIENT_ID'), clientSecret: get('PARASUT_CLIENT_SECRET'), companyId: get('PARASUT_COMPANY_ID'),
+    username: get('PARASUT_EMAIL'), password: get('PARASUT_PASSWORD'),
+    productId: get('PARASUT_PRODUCT_ID') || undefined, accountId: get('PARASUT_ACCOUNT_ID') || undefined, siteUrl: ALLOW_ORIGIN,
   }
-  return body
+  if (get('EINVOICE_ENABLED') !== 'true' || !env.clientId || !env.clientSecret || !env.companyId || !env.username || !env.password) return null
+  return env
 }
 
-/* Trackable job: e-belge kesimi asenkron döner; sonucu kısa aralıklarla yokla. */
-async function waitJob(token: string, companyId: string, jobId: string, tries = 15) {
-  for (let i = 0; i < tries; i++) {
-    const r = await parasutFetch(token, `/${companyId}/trackable_jobs/${jobId}`)
-    const status = r?.data?.attributes?.status
-    if (status === 'done') return r
-    if (status === 'error') {
-      const errs = (r?.data?.attributes?.errors || []).join('; ')
-      throw new Error('Paraşüt e-belge işi hata verdi: ' + (errs || 'bilinmeyen'))
-    }
-    await new Promise((res) => setTimeout(res, 1000))
-  }
-  throw new Error('Paraşüt e-belge işi zaman aşımına uğradı (belge Paraşüt panelinde oluşmuş olabilir).')
-}
-
-async function issueParasut(mode: string, invoice: Invoice, customer: Customer) {
-  const clientId = Deno.env.get('PARASUT_CLIENT_ID')
-  const clientSecret = Deno.env.get('PARASUT_CLIENT_SECRET')
-  const companyId = Deno.env.get('PARASUT_COMPANY_ID')
-  const email = Deno.env.get('PARASUT_EMAIL')
-  const password = Deno.env.get('PARASUT_PASSWORD')
-  if (!clientId || !clientSecret || !companyId || !email || !password) {
-    throw new Error('Paraşüt secrets eksik (CLIENT_ID/SECRET, COMPANY_ID, EMAIL, PASSWORD).')
-  }
-
-  // 1) OAuth token
-  const tokenRes = await fetch('https://api.parasut.com/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'password', client_id: clientId, client_secret: clientSecret,
-      username: email, password, redirect_uri: 'urn:ietf:wg:oauth:2.0:oob',
-    }),
-  })
-  const tok = await tokenRes.json()
-  if (!tokenRes.ok) throw new Error('Paraşüt token hata: ' + JSON.stringify(tok))
-  const token: string = tok.access_token
-
-  const taxId = (customer.tax_no || customer.tc || '').trim()
-
-  // 2) Müşteriyi bul ya da oluştur
-  const found = await parasutFetch(token,
-    `/${companyId}/contacts?filter[tax_number]=${encodeURIComponent(taxId)}&page[size]=1`)
-  let contactId: string
-  if (found?.data?.length) {
-    contactId = found.data[0].id
-  } else {
-    const created = await parasutFetch(token, `/${companyId}/contacts`, {
-      method: 'POST',
-      body: JSON.stringify({
-        data: {
-          type: 'contacts',
-          attributes: {
-            name: customer.title || customer.contact || 'Müşteri',
-            email: customer.email || undefined,
-            contact_type: customer.tax_no ? 'company' : 'person',
-            tax_number: customer.tax_no || customer.tc,
-            tax_office: customer.tax_office || undefined,
-            account_type: 'customer',
-          },
-        },
-      }),
-    })
-    contactId = created.data.id
-  }
-
-  // 3) Satış faturası — tutar KDV dahil; net birim fiyatı geri hesapla
-  const gross = Number(invoice.amount) || 0
-  const net = Math.round((gross / (1 + VAT_RATE / 100)) * 100) / 100
-  const issueDate = invoice.issue_date || new Date().toISOString().slice(0, 10)
-  const inv = await parasutFetch(token, `/${companyId}/sales_invoices`, {
-    method: 'POST',
-    body: JSON.stringify({
-      data: {
-        type: 'sales_invoices',
-        attributes: {
-          item_type: 'invoice',
-          issue_date: issueDate,
-          due_date: issueDate,
-          currency: 'TRL',
-          description: invoice.note || 'Sanal ofis hizmet bedeli',
-        },
-        relationships: {
-          contact: { data: { id: contactId, type: 'contacts' } },
-          details: {
-            data: [{
-              type: 'sales_invoice_details',
-              attributes: {
-                quantity: 1,
-                unit_price: net,
-                vat_rate: VAT_RATE,
-                description: invoice.note || 'Sanal ofis hizmet bedeli',
-              },
-            }],
-          },
-        },
-      },
-    }),
-  })
-  const invoiceId = inv.data.id
-
-  // 4) e-Fatura mükellefi mi? (mode 'auto' ya da 'e-fatura' iken kontrol et)
-  let useEInvoice = false
-  let inboxAddr = ''
-  if (mode !== 'e-arsiv' && customer.tax_no) {
-    const inbox = await parasutFetch(token,
-      `/${companyId}/e_invoice_inboxes?filter[vkn]=${encodeURIComponent(customer.tax_no)}`)
-    if (inbox?.data?.length) { useEInvoice = true; inboxAddr = inbox.data[0].attributes?.e_invoice_address || '' }
-  }
-
-  // 5) Resmîleştir (asenkron iş → bekle)
-  const endpoint = useEInvoice ? 'e_invoices' : 'e_archives'
-  const attrs = useEInvoice
-    ? { to: inboxAddr, scenario: 'basic' }
-    : { internet_sale: { url: '', payment_type: 'ODEMEVADESI', payment_platform: '', payment_date: issueDate } }
-  const job = await parasutFetch(token, `/${companyId}/${endpoint}`, {
-    method: 'POST',
-    body: JSON.stringify({
-      data: {
-        type: endpoint.slice(0, -1) === 'e_invoice' ? 'e_invoices' : 'e_archives',
-        attributes: attrs,
-        relationships: { sales_invoice: { data: { id: invoiceId, type: 'sales_invoices' } } },
-      },
-    }),
-  })
-  const done = await waitJob(token, companyId, job.data.id)
-  const docId = done?.data?.relationships?.trackable?.data?.id || ''
-
-  // Belge detayı + PDF
-  let uuid = '', number = '', pdfUrl = ''
-  if (docId) {
-    const doc = await parasutFetch(token, `/${companyId}/${endpoint}/${docId}`)
-    uuid = doc?.data?.attributes?.uuid || ''
-    number = doc?.data?.attributes?.invoice_number || doc?.data?.attributes?.reference_number || ''
-    try {
-      const pdf = await parasutFetch(token, `/${companyId}/${endpoint}/${docId}/pdf`)
-      pdfUrl = pdf?.data?.attributes?.url || ''
-    } catch { /* PDF hazır değilse boş bırak */ }
-  }
-
-  return {
-    provider: 'parasut',
-    mode: useEInvoice ? 'e-fatura' : 'e-arsiv',
-    uuid, number,
-    status: 'kesildi',
-    pdf_url: pdfUrl,
-    parasut_invoice_id: invoiceId,
-  }
-}
-
-// ---- Diğer entegratörler için yer tutucu ----
-async function issueGeneric(provider: string, _mode: string, _invoice: Invoice, _customer: Customer) {
-  // İzibiz / Uyumsoft / Foriba / Logo / Mükellef — her biri kendi API'siyle
-  throw new Error(`'${provider}' entegratörü henüz bağlanmadı. Hesap açılınca bu fonksiyona eklenecek.`)
-}
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 Deno.serve(async (req) => {
   if (!ALLOW_ORIGIN) return json({ error: 'SITE_URL yapılandırılmadı' }, 500)
@@ -237,18 +55,45 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'POST kullanın' }, 405)
   if (!(await isStaffRequest(req))) return json({ error: 'Personel yetkisi gerekli' }, 403)
+  const env = parasutEnv()
+  if (!env) return json({ state: 'kapalı', message: 'e-Belge kurulumu tamamlanmadı (Paraşüt anahtarları bekleniyor); işlem yapılmadı.' }, 503)
 
-  try {
-    const { provider, mode = 'e-arsiv', invoice, customer } = await req.json()
-    if (!provider || !invoice) return json({ error: 'provider ve invoice zorunlu' }, 400)
-    if (!customer?.tax_no && !customer?.tc) return json({ error: 'Müşteri vergi no/TC zorunlu' }, 400)
+  const { invoice_id } = await req.json().catch(() => ({}))
+  if (!UUID.test(String(invoice_id || ''))) return json({ error: 'invoice_id geçersiz' }, 400)
+  const url = Deno.env.get('SUPABASE_URL') || '', key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  if (!url || !key) return json({ error: 'SUPABASE_SERVICE_ROLE_KEY eksik' }, 500)
+  const db = createClient(url, key, { auth: { persistSession: false } })
 
-    let result
-    if (provider === 'parasut') result = await issueParasut(mode, invoice, customer)
-    else result = await issueGeneric(provider, mode, invoice, customer)
-
-    return json(result)
-  } catch (e) {
-    return json({ status: 'başarısız', error: String((e as Error).message || e) }, 500)
+  const claimed = await db.rpc('einvoice_claim', { p_invoice: invoice_id })
+  if (claimed.error) return json({ error: 'Fatura alınamadı' }, 500)
+  const inv = (claimed.data || [])[0] as InvoiceRow | undefined
+  if (!inv) {
+    const { data } = await db.from('invoices').select('einvoice_status,einvoice_no,einvoice_pdf').eq('id', invoice_id).maybeSingle()
+    return json({ state: data?.einvoice_status || 'yok', einvoice_no: data?.einvoice_no, pdf: data?.einvoice_pdf,
+      message: data ? 'Fatura zaten kesilmiş, elle işaretlenmiş ya da şu an işleniyor.' : 'Fatura bulunamadı.' }, 409)
   }
+  const { data: customer, error } = await db.from('customers').select('*').eq('id', inv.customer_id).single()
+  if (error || !customer) {
+    await db.from('invoices').update({ einvoice_status: 'başarısız', einvoice_error: 'Müşteri bulunamadı.' }).eq('id', inv.id)
+    return json({ state: 'başarısız', message: 'Müşteri bulunamadı.' }, 422)
+  }
+
+  const store = {
+    async patchInvoice(id: string, patch: Record<string, unknown>) {
+      const { error } = await db.from('invoices').update(patch).eq('id', id); if (error) throw new Error(`Fatura kaydı güncellenemedi: ${error.message}`)
+    },
+    async setContact(customerId: string, contactId: string) {
+      const { error } = await db.from('customers').update({ parasut_contact_id: contactId }).eq('id', customerId); if (error) throw new Error(`Cari kaydı güncellenemedi: ${error.message}`)
+    },
+    async savePdf(customerId: string, invoiceId: string, bytes: Uint8Array) {
+      const path = `customers/${customerId}/efatura-${invoiceId}.pdf`
+      const { error } = await db.storage.from('secure-docs').upload(path, bytes, { contentType: 'application/pdf', upsert: true })
+      if (error) throw new Error(`PDF depolanamadı: ${error.message}`)
+      return `secure:${path}`
+    },
+  }
+  const result = await processInvoice(inv, customer as CustomerRow, {
+    fetch, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), store, env,
+  })
+  return json(result, result.state === 'başarısız' ? 502 : 200)
 })

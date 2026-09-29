@@ -40,6 +40,9 @@ jobs:
       - name: Readiness negative fixture
         run: npm run test:readiness
 
+      - name: Paraşüt e-Belge flow (fake API)
+        run: npm run test:einvoice
+
       - name: Build canonical root
         run: npm run build
 
