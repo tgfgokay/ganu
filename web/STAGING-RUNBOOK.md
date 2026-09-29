@@ -25,6 +25,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 9. `supabase/migrations/0008_pos_reconciliation.sql` — callback terminal state + opak browser return/status
 10. `supabase/migrations/0009_legal_consent_evidence.sql` — exact legal metin sürümü + immutable ön bilgilendirme/erken ifa kanıtı + satış proof gate
 11. `supabase/migrations/0010_panel_operations.sql` — müşteri adres/il/ilçe, sözleşme faturalama dönemi, fatura↔sözleşme bağı
+12. `supabase/migrations/0011_einvoice_parasut.sql` — Paraşüt e-Belge iş durumu, tek sahiplik `einvoice_claim` (service-role)
 
 ```bash
 set -euo pipefail
@@ -39,8 +40,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0007_purchase_flow.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0008_pos_reconciliation.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0009_legal_consent_evidence.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0010_panel_operations.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0011_einvoice_parasut.sql
 ```
-`supabase db push` artık boş hedefte 0000→0010 sırasını eksiksiz görür. `0000`,
+`supabase db push` artık boş hedefte 0000→0011 sırasını eksiksiz görür. `0000`,
 canonical `supabase-schema.sql` dosyasının byte-exact kopyasıdır; `scripts/staging-readiness.sh`
 iki dosyanın ayrışmasını fail-closed engeller. Şema değişikliğinde ikisi aynı committe güncellenmelidir.
 
@@ -182,6 +184,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/rollbacks/0011_einvoice_parasut.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0010_panel_operations.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0009_legal_consent_evidence.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0008_pos_reconciliation.down.sql
@@ -437,9 +440,27 @@ URL ve publishable key istemciye giden public konfigürasyondur; key yine de wor
 loglarında kazara görünmemesi için secret olarak tutulur. `service_role`, DB parolası veya
 provider anahtarı bu build'e verilmez. Beta açıkken `/panel` gerçek Supabase Auth JWT ve
 `staff_roles` RBAC ister; local/demo fallback yoktur. Arayüz staging backend kullandığını
-açıkça belirtir. Ödeme, PayTR, e-Belge, e-posta, SMS ve WhatsApp dış mutasyonları kapalıdır.
+açıkça belirtir. Ödeme, PayTR, e-posta, SMS ve WhatsApp dış mutasyonları kapalıdır. e-Belge
+yalnız `issue-einvoice` üzerinden ve sunucuda `EINVOICE_ENABLED=true` + tüm `PARASUT_*` secret'ları
+varken çalışır; aksi halde fonksiyon 503 döner ve Paraşüt'e istek gitmez (bkz. §12).
 
 Auth → URL Configuration allow-list exact `https://ganu.com.tr/panel` içermelidir;
 wildcard kullanılmaz. Magic-link `shouldCreateUser:false` ile yalnız önceden açılmış
 staff hesabına gönderilir. Production deploy'dan önce anonim ve customer JWT red, staff
 JWT allow, logout/session ve mobil görünüm gözlenmiş PASS olmalıdır.
+
+## 12) Paraşüt e-Belge (0011 + issue-einvoice)
+
+Ön koşullar (kullanıcı): Paraşüt aboneliği, GANU Ltd. mali mühür + Paraşüt'te e-Fatura/e-Arşiv aktivasyonu,
+destek@parasut.com'dan client_id/secret, 2FA'sız ayrı API kullanıcısı (Satışlar + Kasa/Banka yetkisi).
+
+1. `0011_einvoice_parasut.sql` uygula; `supabase/tests/staging_0011_einvoice_parasut_tests.sql` tüm satırlarda PASS.
+2. Paraşüt'te bir kez: `GET /v4/me?include=companies` → company_id; "Sanal Ofis Hizmeti" ürünü → product_id;
+   tahsilatın düşeceği banka/kasa hesabı → account_id.
+3. Secret'lar: `EINVOICE_ENABLED=true SITE_URL=https://ganu.com.tr PARASUT_CLIENT_ID PARASUT_CLIENT_SECRET
+   PARASUT_COMPANY_ID PARASUT_EMAIL PARASUT_PASSWORD PARASUT_PRODUCT_ID PARASUT_ACCOUNT_ID`, ardından
+   `supabase functions deploy issue-einvoice`.
+4. İlk canlı deneme tek ve küçük tutarlı gerçek faturayla yapılır: panel → Faturalar → "e-Belge kes".
+   Fonksiyon satış faturasının `gross_total` değerini KDV dahil tutarla karşılaştırır; tutmazsa taslağı siler ve
+   resmîleştirmez. e-Arşiv iptali yalnız Paraşüt'ün `cancellable_until` süresi içinde mümkündür.
+5. Yerel doğrulama: `npm run test:einvoice` (sahte Paraşüt sunucusu, ağ yok).

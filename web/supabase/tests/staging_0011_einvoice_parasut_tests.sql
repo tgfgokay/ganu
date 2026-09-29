@@ -1,0 +1,27 @@
+create temp table _ganu_0011_results(name text,expected text,actual text,result text);
+do $$ declare b boolean;n int;cid uuid;iid uuid;mid uuid;
+begin
+ b:=has_function_privilege('service_role','public.einvoice_claim(uuid)','EXECUTE');
+ insert into _ganu_0011_results values('claim yalnız service-role','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ b:=has_function_privilege('authenticated','public.einvoice_claim(uuid)','EXECUTE') or has_function_privilege('anon','public.einvoice_claim(uuid)','EXECUTE');
+ insert into _ganu_0011_results values('claim anon/auth kapalı','false',b::text,case when not b then 'PASS' else 'FAIL' end);
+ insert into public.customers(title,status) values('TEST_0011','aday') returning id into cid;
+ insert into public.invoices(customer_id,amount) values(cid,1199) returning id into iid;
+ select count(*) into n from public.einvoice_claim(iid);
+ insert into _ganu_0011_results values('ilk claim alır','1',n::text,case when n=1 then 'PASS' else 'FAIL' end);
+ select count(*) into n from public.einvoice_claim(iid);
+ insert into _ganu_0011_results values('işleniyor iken ikinci claim alamaz','0',n::text,case when n=0 then 'PASS' else 'FAIL' end);
+ update public.invoices set einvoice_requested_at=now()-interval '4 minutes' where id=iid;
+ select count(*) into n from public.einvoice_claim(iid);
+ insert into _ganu_0011_results values('takılan iş 3 dk sonra devralınır','1',n::text,case when n=1 then 'PASS' else 'FAIL' end);
+ update public.invoices set einvoice_status='kesildi',einvoice_pdf='secure:x',parasut_invoice_id='T0011' where id=iid;
+ select count(*) into n from public.einvoice_claim(iid);
+ insert into _ganu_0011_results values('PDF''li kesilmiş fatura tekrar alınmaz','0',n::text,case when n=0 then 'PASS' else 'FAIL' end);
+ insert into public.invoices(customer_id,amount,einvoice_status,einvoice_no) values(cid,1199,'kesildi','ELLE001') returning id into mid;
+ select count(*) into n from public.einvoice_claim(mid);
+ insert into _ganu_0011_results values('elle kesildi işaretli fatura alınmaz','0',n::text,case when n=0 then 'PASS' else 'FAIL' end);
+ b:=false;begin update public.invoices set einvoice_status='bilinmiyor' where id=mid;exception when check_violation then b:=true;end;
+ insert into _ganu_0011_results values('geçersiz e-belge durumu red','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ delete from public.customers where id=cid;
+end $$;
+select * from _ganu_0011_results order by name;

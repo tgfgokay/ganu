@@ -28,8 +28,10 @@ done
 : > "$fixture/supabase/migrations/0009_legal_consent_evidence.sql"
 : > "$fixture/supabase/migrations/0010_panel_operations.sql"
 : > "$fixture/supabase/rollbacks/0010_panel_operations.down.sql"
+: > "$fixture/supabase/migrations/0011_einvoice_parasut.sql"
+: > "$fixture/supabase/rollbacks/0011_einvoice_parasut.down.sql"
 for fn in pos-payment admin-gate get-file send-notification issue-einvoice; do mkdir -p "$fixture/supabase/functions/$fn"; : > "$fixture/supabase/functions/$fn/index.ts"; done
-for t in staging_section2_tests.sql staging_0005_rbac_tests.sql staging_0006_customer_portal_tests.sql staging_0007_purchase_flow_tests.sql staging_0008_pos_reconciliation_tests.sql staging_0010_panel_operations_tests.sql; do
+for t in staging_section2_tests.sql staging_0005_rbac_tests.sql staging_0006_customer_portal_tests.sql staging_0007_purchase_flow_tests.sql staging_0008_pos_reconciliation_tests.sql staging_0010_panel_operations_tests.sql staging_0011_einvoice_parasut_tests.sql; do
   : > "$fixture/supabase/tests/$t"
 done
 : > "$fixture/STAGING-RUNBOOK.md"; : > "$fixture/supabase/prod_readiness_gate.sql"; : > "$fixture/scripts/prod-gate.sh"
