@@ -7,6 +7,7 @@ import LanguageSwitch from './site/LanguageSwitch.jsx'
 import { tr } from './site/locales/tr.js'
 import RichTitle from './site/RichTitle.jsx'
 import LegalLinks from './legal/LegalLinks.jsx'
+import { COMPANY } from './site/company.js'
 import { salesEnabled } from './legal/config.js'
 import { marketingOnly } from './marketing/config.js'
 
@@ -470,6 +471,7 @@ function Footer({ t, locale }) {
               <li>Kavacık Mah. Okul Cad.</li>
               <li>No:29 · Beykoz / İstanbul</li>
               <li><a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></li>
+              <li><a href={COMPANY.phoneHref}>{COMPANY.phone}</a></li>
               <li><a href="https://ganu.com.tr">ganu.com.tr</a></li>
             </ul>
           </div>
@@ -477,6 +479,7 @@ function Footer({ t, locale }) {
         <p className="colo-legal">
           {t.footer.legal}
         </p>
+        <p className="colo-legal">{COMPANY.tradeName} · VKN {COMPANY.taxNumber} ({COMPANY.taxOffice} V.D.) · MERSİS {COMPANY.mersis} · {COMPANY.address}</p>
         <LegalLinks locale={locale}/>
         <div className="colo-bottom">
           <span>© {new Date().getFullYear()} GANU · {t.meta}</span><LanguageSwitch locale={locale}/>

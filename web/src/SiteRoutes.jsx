@@ -9,6 +9,7 @@ import { BlogArticle, BlogIndex } from './blog/Blog.jsx'
 import { tr } from './site/locales/tr.js'
 import { en } from './site/locales/en.js'
 import LegalPage from './legal/LegalPage.jsx'
+import CompanyPage from './site/CompanyPage.jsx'
 import { privateRoutes } from './runtime/PrivateRoutes.jsx'
 
 export default function SiteRoutes(){
@@ -33,6 +34,8 @@ export default function SiteRoutes(){
       <Route path="/cerezler" element={<LegalPage type="cookies" locale="tr"/>}/>
       <Route path="/en/privacy" element={<LegalPage type="privacy" locale="en"/>}/>
       <Route path="/en/cookies" element={<LegalPage type="cookies" locale="en"/>}/>
+      <Route path="/hakkimizda" element={<CompanyPage type="about"/>}/>
+      <Route path="/iletisim" element={<CompanyPage type="contact"/>}/>
       {privateRoutes()}
     </Routes>
   </>

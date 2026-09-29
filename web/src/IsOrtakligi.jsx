@@ -4,6 +4,7 @@ import { motion, useScroll, useSpring, MotionConfig } from 'framer-motion'
 import GanuMark from './GanuMark'
 import LanguageSwitch from './site/LanguageSwitch.jsx'
 import LegalLinks from './legal/LegalLinks.jsx'
+import { COMPANY } from './site/company.js'
 import { tr } from './site/locales/tr.js'
 import RichTitle from './site/RichTitle.jsx'
 import { PARTNER_PROFESSIONS } from './site/partnership.js'
@@ -190,6 +191,7 @@ function Footer({ p, locale }) {
               <li>Kavacık Mah. Okul Cad.</li>
               <li>No:29 · Beykoz / İstanbul</li>
               <li><a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a></li>
+              <li><a href={COMPANY.phoneHref}>{COMPANY.phone}</a></li>
               <li><a href="https://ganu.com.tr">ganu.com.tr</a></li>
             </ul>
           </div>
@@ -197,6 +199,7 @@ function Footer({ p, locale }) {
         <p className="colo-legal">
           {p.legal}
         </p>
+        <p className="colo-legal">{COMPANY.tradeName} · VKN {COMPANY.taxNumber} ({COMPANY.taxOffice} V.D.) · MERSİS {COMPANY.mersis} · {COMPANY.address}</p>
         <LegalLinks locale={locale}/>
         <div className="colo-bottom">
           <span>© {new Date().getFullYear()} GANU · {p.meta}</span>
