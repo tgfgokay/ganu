@@ -17,7 +17,10 @@ export function paymentMessage(invoice, customer) {
   return [
     `Merhaba${customer?.contact ? ` ${customer.contact}` : ''},`,
     `GANU sanal ofis hizmet bedeli${note}: ${tl(invoice?.amount)} TL (KDV dahil)${due}.`,
-    `Ödemeyi ${PAYMENT_ACCOUNT.bank}, ${PAYMENT_ACCOUNT.holder} adına ${PAYMENT_ACCOUNT.iban} IBAN'a${who ? `, açıklamaya "${who}" yazarak` : ''} yapabilirsiniz.`,
+    ...(invoice?.payment_link ? [`Kartla ödemek için: ${invoice.payment_link}`] : []),
+    invoice?.payment_link
+      ? `Havale/EFT ile ödemek isterseniz: ${PAYMENT_ACCOUNT.bank}, ${PAYMENT_ACCOUNT.holder}, ${PAYMENT_ACCOUNT.iban}${who ? ` (açıklama: "${who}")` : ''}.`
+      : `Ödemeyi ${PAYMENT_ACCOUNT.bank}, ${PAYMENT_ACCOUNT.holder} adına ${PAYMENT_ACCOUNT.iban} IBAN'a${who ? `, açıklamaya "${who}" yazarak` : ''} yapabilirsiniz.`,
     'Teşekkür ederiz.',
   ].join('\n')
 }
