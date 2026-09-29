@@ -1,14 +1,18 @@
 import { useEffect, useState, useMemo } from 'react'
-import { contracts, customers, withCustomerNames, daysLeft, PACKAGES } from '../lib/store.js'
+import { useSearchParams } from 'react-router-dom'
+import { contracts, customers, withCustomerNames, daysLeft, PACKAGES, PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../lib/store.js'
 import { Modal, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
 
 const oneYearLater = (start) => {
   const d = new Date(start + 'T00:00:00'); d.setFullYear(d.getFullYear() + 1); d.setDate(d.getDate() - 1)
   return d.toISOString().slice(0, 10)
 }
-const emptyForm = () => {
+const CONTRACT_STATUS = ['aktif', 'askıda', 'sona erdi']
+// Katalog fiyatı KDV dahildir; mevcut müşterilerde anlaşılan tutar elle girilir.
+const catalogPrice = (pkg, period) => (period === 'aylık' ? PACKAGE_MONTHLY : PACKAGE_PRICES)[pkg] ?? ''
+const emptyForm = (customerId = '') => {
   const start = new Date().toISOString().slice(0, 10)
-  return { customer_id: '', package: 'Başlangıç', start_date: start, end_date: oneYearLater(start), price: 499, status: 'aktif', auto_renew: false }
+  return { customer_id: customerId, package: 'Başlangıç', billing_period: 'yıllık', start_date: start, end_date: oneYearLater(start), price: catalogPrice('Başlangıç', 'yıllık'), status: 'aktif', auto_renew: false }
 }
 
 export default function Sozlesmeler() {
@@ -16,13 +20,18 @@ export default function Sozlesmeler() {
   const [custs, setCusts] = useState([])
   const [modal, setModal] = useState(null)
   const [onlySoon, setOnlySoon] = useState(false)
+  const [params, setParams] = useSearchParams()
 
   const load = async () => {
-    const [ct, cs] = await Promise.all([contracts.list(), customers.list()])
+    const [ct, cs] = await Promise.all([contracts.list(), customers.list(), loadCatalog()])
     setRows((await withCustomerNames(ct)).map((r) => ({ ...r, _days: daysLeft(r.end_date) })).sort((a, b) => a._days - b._days))
     setCusts(cs)
   }
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    const id = params.get('musteri')
+    if (id && custs.some((c) => c.id === id)) { setModal({ mode: 'new', data: emptyForm(id) }); setParams({}, { replace: true }) }
+  }, [custs])
 
   const filtered = useMemo(() => onlySoon ? rows.filter((r) => r._days <= 30) : rows, [rows, onlySoon])
   const soonCount = rows.filter((r) => r._days <= 30).length
@@ -80,7 +89,7 @@ export default function Sozlesmeler() {
                 <td>{r.package}</td>
                 <td className="pl-num">{fmtDate(r.start_date)}</td>
                 <td className="pl-num">{fmtDate(r.end_date)}</td>
-                <td className="pl-num">{fmtTL(r.price)}<span className="sub"> /yıl</span></td>
+                <td className="pl-num">{fmtTL(r.price)}<span className="sub"> /{r.billing_period === 'aylık' ? 'ay' : 'yıl'}</span></td>
                 <td><DaysBadge endDate={r.end_date} /></td>
                 <td>
                   <div className="pl-actions">
@@ -103,6 +112,11 @@ export default function Sozlesmeler() {
 function SozForm({ modal, custs, onClose, onSave }) {
   const [f, setF] = useState(modal.data)
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
+  const setPricing = (k, v) => setF((s) => {
+    const next = { ...s, [k]: v }
+    if (modal.mode === 'new') next.price = catalogPrice(next.package, next.billing_period)
+    return next
+  })
   const setStart = (v) => setF((s) => ({ ...s, start_date: v, end_date: oneYearLater(v) }))
   const submit = (e) => { e.preventDefault(); if (!f.customer_id) return; onSave(f) }
   return (
@@ -122,13 +136,28 @@ function SozForm({ modal, custs, onClose, onSave }) {
         <div className="two">
           <div className="pl-field">
             <label>Paket</label>
-            <select value={f.package} onChange={(e) => set('package', e.target.value)}>
+            <select value={f.package} onChange={(e) => setPricing('package', e.target.value)}>
               {PACKAGES.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div className="pl-field">
-            <label>Yıllık ücret (₺)</label>
-            <input type="number" min="0" value={f.price} onChange={(e) => set('price', e.target.value)} />
+            <label>Faturalama</label>
+            <select value={f.billing_period || 'yıllık'} onChange={(e) => setPricing('billing_period', e.target.value)}>
+              <option value="yıllık">Yıllık</option>
+              <option value="aylık">Aylık</option>
+            </select>
+          </div>
+        </div>
+        <div className="two">
+          <div className="pl-field">
+            <label>{f.billing_period === 'aylık' ? 'Aylık' : 'Yıllık'} ücret (₺, KDV dahil)</label>
+            <input type="number" min="0" step="0.01" value={f.price} onChange={(e) => set('price', e.target.value)} required />
+          </div>
+          <div className="pl-field">
+            <label>Durum</label>
+            <select value={f.status || 'aktif'} onChange={(e) => set('status', e.target.value)}>
+              {CONTRACT_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
         </div>
         <div className="two">
