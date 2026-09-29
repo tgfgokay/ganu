@@ -1,4 +1,5 @@
 import { supabase, usingSupabase } from './supabase.js'
+export { PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../../catalog.js'
 
 function requireCloud(){if(!usingSupabase)throw new Error('Personel paneli Supabase bağlantısı olmadan çalışmaz.')}
 function collection(table){return {

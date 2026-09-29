@@ -24,6 +24,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 8. `supabase/migrations/0007_purchase_flow.sql` — güvenli anonim aday/dekont + HMAC token + rate-limit/POS binding
 9. `supabase/migrations/0008_pos_reconciliation.sql` — callback terminal state + opak browser return/status
 10. `supabase/migrations/0009_legal_consent_evidence.sql` — exact legal metin sürümü + immutable ön bilgilendirme/erken ifa kanıtı + satış proof gate
+11. `supabase/migrations/0010_panel_operations.sql` — müşteri adres/il/ilçe, sözleşme faturalama dönemi, fatura↔sözleşme bağı
 
 ```bash
 set -euo pipefail
@@ -37,8 +38,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0006_customer_portal_au
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0007_purchase_flow.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0008_pos_reconciliation.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0009_legal_consent_evidence.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0010_panel_operations.sql
 ```
-`supabase db push` artık boş hedefte 0000→0009 sırasını eksiksiz görür. `0000`,
+`supabase db push` artık boş hedefte 0000→0010 sırasını eksiksiz görür. `0000`,
 canonical `supabase-schema.sql` dosyasının byte-exact kopyasıdır; `scripts/staging-readiness.sh`
 iki dosyanın ayrışmasını fail-closed engeller. Şema değişikliğinde ikisi aynı committe güncellenmelidir.
 
@@ -180,6 +182,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/rollbacks/0010_panel_operations.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0009_legal_consent_evidence.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0008_pos_reconciliation.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0007_purchase_flow.down.sql
