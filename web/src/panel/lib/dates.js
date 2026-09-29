@@ -1,0 +1,8 @@
+// Takvim günleri tarayıcının yerel saatine göre (İstanbul) hesaplanır. toISOString() UTC'ye
+// çevirdiği için yerel gece yarısı bir önceki güne kayar; tarih alanlarında kullanılmaz.
+const pad=(n)=>String(n).padStart(2,'0')
+export const localISO=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+const parse=(iso)=>new Date(`${iso}T00:00:00`)
+export const addDaysISO=(iso,n)=>{const d=parse(iso);d.setDate(d.getDate()+n);return localISO(d)}
+// Bir yıllık dönemin son günü: 29.09.2026 → 28.09.2027
+export const oneYearLaterISO=(iso)=>{const d=parse(iso);d.setFullYear(d.getFullYear()+1);d.setDate(d.getDate()-1);return localISO(d)}

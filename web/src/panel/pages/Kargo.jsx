@@ -2,10 +2,11 @@ import { useEffect, useState, useMemo } from 'react'
 import { mail, customers, withCustomerNames, notifyEvent, fileToStoredUrl, trackingUrl, MAIL_TYPES, MAIL_STATUS, CARRIERS } from '../lib/store.js'
 import { SecureImage } from '../components/SecureAsset.jsx'
 import { Modal, StatusBadge, TypeBadge, fmtDate } from './_ui.jsx'
+import { localISO } from '../lib/dates.js'
 
 const emptyForm = () => ({
   customer_id: '', type: 'kargo', sender: '',
-  received_date: new Date().toISOString().slice(0, 10),
+  received_date: localISO(),
   status: 'geldi', shelf: '', photo_url: '',
   forward_carrier: '', forward_tracking: '', delivered_to: '', delivered_at: '', notes: '',
   notify: true, // yeni girişte müşteriye otomatik bildirim
@@ -59,7 +60,7 @@ export default function Kargo() {
     const patch = { status }
     // teslim/yönlendirme geçişinde tarih otomatik dolsun
     if ((status === 'teslim' || status === 'yönlendirildi') && !r.delivered_at) {
-      patch.delivered_at = new Date().toISOString().slice(0, 10)
+      patch.delivered_at = localISO()
     }
     await mail.update(r.id, patch)
     // müşteriye bildirim kaydı düş (kargo geldi / tebligat / teslim edildi)

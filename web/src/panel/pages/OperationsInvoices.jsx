@@ -2,12 +2,12 @@ import { useEffect,useMemo,useState } from 'react'
 import { Link } from 'react-router-dom'
 import { invoices,customers,contracts,invStatus } from '../lib/operations-store.js'
 import { Modal,fmtDate,fmtTL } from './_ui.jsx'
+import { addDaysISO,localISO } from '../lib/dates.js'
 
-const today=()=>new Date().toISOString().slice(0,10)
-const plusDays=(iso,n)=>{const d=new Date(`${iso}T00:00:00`);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
+const today=()=>localISO()
 const INV_CLS={bekliyor:'b-warn','ödendi':'b-aktif',gecikti:'b-danger'}
 export const InvoiceBadge=({row})=>{const s=invStatus(row);return <span className={`pl-badge ${INV_CLS[s]||'b-mektup'}`}>{s}</span>}
-export const emptyInvoice=(customerId='')=>{const issue=today();return {customer_id:customerId,contract_id:'',amount:'',issue_date:issue,due_date:plusDays(issue,5),status:'bekliyor',paid_date:'',einvoice_no:'',note:''}}
+export const emptyInvoice=(customerId='')=>{const issue=today();return {customer_id:customerId,contract_id:'',amount:'',issue_date:issue,due_date:addDaysISO(issue,5),status:'bekliyor',paid_date:'',einvoice_no:'',note:''}}
 
 // Tutarlar KDV dahildir. e-Belge otomatik kesimi kurulana kadar Paraşüt'te kesilen fatura numarası elle girilir.
 export function invoicePayload(f){const paid=f.status==='ödendi';const no=f.einvoice_no.trim();return {customer_id:f.customer_id,contract_id:f.contract_id||null,amount:Number(f.amount)||0,issue_date:f.issue_date,due_date:f.due_date||null,status:paid?'ödendi':'bekliyor',paid_date:paid?(f.paid_date||today()):null,einvoice_no:no||null,einvoice_status:no?(f.einvoice_status||'kesildi'):null,note:f.note.trim()}}

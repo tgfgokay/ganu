@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import { inspections, customers, withCustomerNames, INSPECTION_RESULT } from '../lib/store.js'
 import { Modal, fmtDate } from './_ui.jsx'
+import { localISO } from '../lib/dates.js'
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => localISO()
 const emptyForm = () => ({ customer_id: '', date: today(), result: 'bekleniyor', officer: '', attendee: '', note: '' })
 
 const RESULT_BADGE = {
