@@ -2,6 +2,7 @@ import { useEffect,useMemo,useState } from 'react'
 import { Link } from 'react-router-dom'
 import { invoices,customers,contracts,invStatus,issueEInvoice,PAYMENT_METHODS } from '../lib/operations-store.js'
 import { SecureLink } from '../components/SecureAsset.jsx'
+import { PAYMENT_ACCOUNT,paymentMessage } from '../lib/company.js'
 import { Modal,fmtDate,fmtTL } from './_ui.jsx'
 import { addDaysISO,localISO } from '../lib/dates.js'
 
@@ -13,6 +14,9 @@ export const emptyInvoice=(customerId='')=>{const issue=today();return {customer
 // Tutarlar KDV dahildir. Paraşüt'te resmîleşmiş faturanın tutarı, tarihi ve belge alanları panelden değişmez.
 export function invoicePayload(f){const paid=f.status==='ödendi';const base={contract_id:f.contract_id||null,due_date:f.due_date||null,status:paid?'ödendi':'bekliyor',paid_date:paid?(f.paid_date||today()):null,payment_method:f.payment_method||null,note:f.note.trim()};if(f.parasut_invoice_id)return base;const no=f.einvoice_no.trim();return {...base,customer_id:f.customer_id,amount:Number(f.amount)||0,issue_date:f.issue_date,einvoice_no:no||null,einvoice_status:no?(f.einvoice_status||'kesildi'):null}}
 export const markPaid=(row)=>invoices.update(row.id,{status:'ödendi',paid_date:today()})
+
+export function CopyButton({text,label}){const [done,setDone]=useState(false);const copy=async()=>{try{await navigator.clipboard.writeText(text);setDone(true);setTimeout(()=>setDone(false),1800)}catch{prompt('Kopyalayın:',text)}};return <button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" onClick={copy}>{done?'✓ Kopyalandı':label}</button>}
+export const PaymentMessageButton=({row,customer})=><CopyButton text={paymentMessage(row,customer)} label="Ödeme mesajı"/>
 
 // Paraşüt'te resmî e-Belge keser (geri alınamaz). Kesilmiş ama PDF'i gelmemiş faturada yalnız PDF'i alır.
 export function EDocCell({row,onDone}){
@@ -61,10 +65,11 @@ export default function OperationsInvoices(){
     <div className="pl-head"><div><h1>Faturalar & Gelir</h1><p>Tutarlar KDV dahil. "e-Belge kes" Paraşüt'te resmî fatura keser (kurulum tamamlanınca çalışır); Paraşüt arayüzünde elle kestiğin faturanın numarasını da kayda girebilirsin.</p></div><button className="pl-btn pl-btn-teal" disabled={!custs.length} onClick={()=>setModal({mode:'new',data:emptyInvoice()})}>+ Fatura kaydı</button></div>
     {error&&<div className="pl-alert" role="alert"><span className="msg">{error}</span></div>}
     <div className="pl-stats"><div className="pl-stat"><div className="lab">Tahsil edilen</div><div className="val teal">{fmtTL(sum(paid))}</div></div><div className="pl-stat"><div className="lab">Bekleyen</div><div className="val">{fmtTL(sum(open))}</div></div><div className="pl-stat"><div className="lab">Geciken</div><div className={`val${late.length?' warn':''}`}>{late.length}</div></div></div>
+    <div className="pl-card" style={{marginBottom:20}}><div className="pl-card-b"><div className="pl-row"><div className="grow"><div className="t1">Ödeme hesabı · {PAYMENT_ACCOUNT.bank}</div><div className="t2">{PAYMENT_ACCOUNT.holder} · <code>{PAYMENT_ACCOUNT.iban}</code></div></div><CopyButton text={PAYMENT_ACCOUNT.iban.replace(/\s/g,'')} label="IBAN kopyala"/></div></div></div>
     <div className="pl-tablewrap"><div className="pl-toolbar"><input type="search" value={q} onChange={(e)=>setQ(e.target.value)} placeholder="Müşteri ara…"/><select value={filter} onChange={(e)=>setFilter(e.target.value)}>{['tümü','bekliyor','gecikti','ödendi'].map((s)=><option key={s}>{s}</option>)}</select><span className="spacer"/><span style={{fontSize:13,color:'#64748b'}}>{shown.length} kayıt</span></div>
       <table className="pl-table"><thead><tr><th>Müşteri</th><th>Tutar</th><th>Fatura tarihi</th><th>Son ödeme</th><th>Durum</th><th>e-Belge</th><th>İşlem</th></tr></thead><tbody>
         {shown.length===0&&<tr><td colSpan={7}><div className="pl-empty">Kayıt yok.</div></td></tr>}
-        {shown.map((r)=><tr key={r.id}><td>{byId[r.customer_id]?<Link to={`/panel/musteriler/${r.customer_id}`} className="strong">{byId[r.customer_id].title}</Link>:'—'}{r.note&&<div className="sub">{r.note}</div>}</td><td className="pl-num">{fmtTL(r.amount)}</td><td className="pl-num">{fmtDate(r.issue_date)}</td><td className="pl-num">{fmtDate(r.due_date)}</td><td><InvoiceBadge row={r}/>{r.paid_date&&<div className="sub">{fmtDate(r.paid_date)}</div>}</td><td><EDocCell row={r} onDone={load}/></td><td><div className="pl-actions">{invStatus(r)!=='ödendi'&&<button className="pl-btn pl-btn-teal pl-btn-sm" onClick={async()=>{await markPaid(r);load()}}>Ödendi</button>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({mode:'edit',data:{...r}})}>Düzenle</button>{!r.parasut_invoice_id&&<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(r)}>Sil</button>}</div></td></tr>)}
+        {shown.map((r)=><tr key={r.id}><td>{byId[r.customer_id]?<Link to={`/panel/musteriler/${r.customer_id}`} className="strong">{byId[r.customer_id].title}</Link>:'—'}{r.note&&<div className="sub">{r.note}</div>}</td><td className="pl-num">{fmtTL(r.amount)}</td><td className="pl-num">{fmtDate(r.issue_date)}</td><td className="pl-num">{fmtDate(r.due_date)}</td><td><InvoiceBadge row={r}/>{r.paid_date&&<div className="sub">{fmtDate(r.paid_date)}</div>}</td><td><EDocCell row={r} onDone={load}/></td><td><div className="pl-actions">{invStatus(r)!=='ödendi'&&<><PaymentMessageButton row={r} customer={byId[r.customer_id]}/><button className="pl-btn pl-btn-teal pl-btn-sm" onClick={async()=>{await markPaid(r);load()}}>Ödendi</button></>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({mode:'edit',data:{...r}})}>Düzenle</button>{!r.parasut_invoice_id&&<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(r)}>Sil</button>}</div></td></tr>)}
       </tbody></table></div>
     {modal&&<InvoiceForm title={modal.mode==='new'?'Yeni fatura kaydı':'Fatura kaydını düzenle'} initial={modal.data} custs={custs} cts={cts} onClose={()=>setModal(null)} onSave={save}/>}
   </div>
