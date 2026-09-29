@@ -1,4 +1,5 @@
 import { supabase, usingSupabase } from './supabase.js'
+import { localISO } from './dates.js'
 export { PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../../catalog.js'
 
 function requireCloud(){if(!usingSupabase)throw new Error('Personel paneli Supabase bağlantısı olmadan çalışmaz.')}
@@ -36,7 +37,7 @@ export const INVOICE_STATUS=['bekliyor','ödendi','gecikti']
 export const EXPENSE_CATEGORIES=['kira','personel','kargo','ofis','vergi','diğer']
 export const PARTNER_STATUS=['başvuru','aktif','pasif']
 export const PARTNER_PROFESSIONS=['Avukat','Mali Müşavir','Danışman','Diğer']
-export function invStatus(row){if(row?.status==='ödendi')return 'ödendi';if(row?.due_date&&row.due_date<new Date().toISOString().slice(0,10))return 'gecikti';return row?.status||'bekliyor'}
+export function invStatus(row){if(row?.status==='ödendi')return 'ödendi';if(row?.due_date&&row.due_date<localISO())return 'gecikti';return row?.status||'bekliyor'}
 export async function revenueByMonth(months=6){const rows=await invoices.list(),out=[];for(let i=months-1;i>=0;i--){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);const key=d.toISOString().slice(0,7);out.push({key,label:d.toLocaleDateString('tr-TR',{month:'short'}),total:rows.filter((r)=>r.status==='ödendi'&&String(r.paid_date||r.issue_date||'').startsWith(key)).reduce((n,r)=>n+(Number(r.amount)||0),0)})}return out}
 export async function partnerSummary(){const list=await partners.list(),payments=await commissionPayments.list();return list.map((partner)=>({...partner,paid_commission:payments.filter((p)=>p.partner_id===partner.id).reduce((n,p)=>n+(Number(p.amount)||0),0)}))}
 export async function recordCommissionPayment(row){return commissionPayments.create(row)}

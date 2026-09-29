@@ -2,16 +2,14 @@ import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { contracts, customers, withCustomerNames, daysLeft, PACKAGES, PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../lib/store.js'
 import { Modal, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
+import { localISO, oneYearLaterISO } from '../lib/dates.js'
 
-const oneYearLater = (start) => {
-  const d = new Date(start + 'T00:00:00'); d.setFullYear(d.getFullYear() + 1); d.setDate(d.getDate() - 1)
-  return d.toISOString().slice(0, 10)
-}
+const oneYearLater = oneYearLaterISO
 const CONTRACT_STATUS = ['aktif', 'askıda', 'sona erdi']
 // Katalog fiyatı KDV dahildir; mevcut müşterilerde anlaşılan tutar elle girilir.
 const catalogPrice = (pkg, period) => (period === 'aylık' ? PACKAGE_MONTHLY : PACKAGE_PRICES)[pkg] ?? ''
 const emptyForm = (customerId = '') => {
-  const start = new Date().toISOString().slice(0, 10)
+  const start = localISO()
   return { customer_id: customerId, package: 'Başlangıç', billing_period: 'yıllık', start_date: start, end_date: oneYearLater(start), price: catalogPrice('Başlangıç', 'yıllık'), status: 'aktif', auto_renew: false }
 }
 

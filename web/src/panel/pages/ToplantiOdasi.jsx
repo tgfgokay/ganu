@@ -4,8 +4,9 @@ import {
   BOOKING_STATUS, timeSlots, bookingConflict,
 } from '../lib/store.js'
 import { Modal, fmtDate } from './_ui.jsx'
+import { addDaysISO, localISO } from '../lib/dates.js'
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => localISO()
 const SLOTS = timeSlots()
 const emptyForm = () => ({ customer_id: '', date: today(), start: '10:00', end: '11:00', attendees: 2, note: '', status: 'onaylandı' })
 
@@ -37,7 +38,7 @@ export default function ToplantiOdasi() {
 
   const stats = useMemo(() => {
     const t = today()
-    const weekEnd = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10) })()
+    const weekEnd = addDaysISO(localISO(), 7)
     return {
       today: rows.filter((r) => r.date === t && r.status === 'onaylandı').length,
       pending: rows.filter((r) => r.status === 'talep').length,
