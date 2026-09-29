@@ -1,0 +1,49 @@
+name: supabase-keepalive
+run-name: Supabase staging keep-alive
+
+# ganu-staging Free planda: hareketsiz kalınca Supabase projeyi duraklatıyor,
+# alan adı düşüyor ve ganu.com.tr/panel girişi tamamen çöküyor (2026-09-29).
+# Günde bir kez herkese açık fiyat kataloğuna gerçek bir veritabanı sorgusu atar.
+# Başarısız koşu = proje yine duraklamış olabilir → GitHub bildirim e-postası gelir.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - .github/workflows/supabase-keepalive.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: ${{ vars.GANU_STAFF_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.GANU_STAFF_SUPABASE_ANON_KEY }}
+    steps:
+      - name: Fail closed on target
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "tgfgokay/ganu"
+          test "$SUPABASE_URL" = "https://fhtcrvzwbqcfzceqolyz.supabase.co"
+          test -n "${SUPABASE_ANON_KEY:-}"
+
+      - name: Query public pricing catalog
+        run: |
+          set -euo pipefail
+          body=$(curl -fsS --retry 3 --retry-all-errors --retry-delay 20 --max-time 30 \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/packages?select=id&limit=1")
+          case "$body" in
+            \[*\]) echo "keep-alive OK: packages sorgusu yanıt verdi" ;;
+            *) echo "::error::Beklenmeyen yanıt: ${body:0:200}"; exit 1 ;;
+          esac
