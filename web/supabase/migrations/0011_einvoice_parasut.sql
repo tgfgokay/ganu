@@ -25,9 +25,7 @@ create unique index if not exists invoices_parasut_invoice_id_unique
 -- Tek sahiplik: aynı faturayı iki istek aynı anda işleyemez. Takılan iş 3 dk sonra devralınır.
 -- Elle "kesildi" işaretlenen (Paraşüt arayüzünde kesilmiş) fatura parasut_invoice_id olmadığı için alınmaz.
 create or replace function public.einvoice_claim(p_invoice uuid) returns setof public.invoices
-language plpgsql security definer set search_path=public,pg_catalog as $$
-begin
- return query
+language sql security definer set search_path=public,pg_catalog as $$
  update public.invoices set
   einvoice_status=case when einvoice_status='kesildi' then 'kesildi' else 'işleniyor' end,
   einvoice_requested_at=now(),einvoice_attempts=einvoice_attempts+1,einvoice_error=null
@@ -37,6 +35,6 @@ begin
   or (einvoice_status='kesildi' and einvoice_pdf is null and parasut_invoice_id is not null
       and (einvoice_requested_at is null or einvoice_requested_at<now()-interval '3 minutes')))
  returning *;
-end $$;
+$$;
 revoke all on function public.einvoice_claim(uuid) from public,anon,authenticated;
 grant execute on function public.einvoice_claim(uuid) to service_role;
