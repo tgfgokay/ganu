@@ -1,0 +1,66 @@
+name: supabase-functions-deploy
+run-name: Supabase Edge Functions deploy (${{ inputs.functions }})
+
+# ganu-staging Edge Function'larını main'den yükler. verify_jwt ayarı web/supabase/config.toml'dan okunur
+# (paytr-link: false). Secret'lar (PARASUT_*, PAYTR_*, EINVOICE_*) Supabase panelinden ayrıca girilir;
+# eksik secret'la yüklenen fonksiyonlar fail-closed çalışır (503, dış çağrı yok).
+# Gerekli repository secret: SUPABASE_ACCESS_TOKEN (supabase.com → Account → Access Tokens).
+
+on:
+  workflow_dispatch:
+    inputs:
+      functions:
+        description: Yüklenecek fonksiyonlar (boşlukla ayrılmış)
+        required: true
+        default: issue-einvoice paytr-link
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-functions-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: fhtcrvzwbqcfzceqolyz
+      FUNCTIONS: ${{ inputs.functions }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fail closed on target and inputs
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "tgfgokay/ganu"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo "::error::SUPABASE_ACCESS_TOKEN secret tanımlı değil"; exit 1; }
+          allowed=" admin-gate get-file issue-einvoice paytr-link pos-payment purchase-flow send-notification "
+          for fn in $FUNCTIONS; do
+            [[ "$allowed" == *" $fn "* ]] || { echo "::error::izinli olmayan fonksiyon: $fn"; exit 1; }
+            test -f "supabase/functions/$fn/index.ts"
+          done
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check selected functions
+        run: for fn in $FUNCTIONS; do deno check "supabase/functions/$fn/index.ts"; done
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          for fn in $FUNCTIONS; do
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
+          done
