@@ -83,3 +83,34 @@ export function decideCallback(inv: LinkInvoice | null, post: Record<string, str
   if (!/^[A-Za-z0-9]{1,64}$/.test(String(post.merchant_oid || ''))) return { action: 'review', reason: 'geçersiz merchant_oid' }
   return { action: 'mark_paid', merchantOid: post.merchant_oid, paid: Number(post.total_amount) / 100 }
 }
+
+// Bildirimin veritabanı adımları (index.ts gerçek Supabase istemcisini verir; testler sahtesini).
+export type CallbackDb = {
+  readInvoice(id: string): Promise<{ data: LinkInvoice | null; error: unknown }>
+  noteReview(id: string, note: string): Promise<{ error: unknown }>
+  markPaid(id: string, merchantOid: string, paid: number): Promise<{ data: unknown; error: unknown }>
+}
+export type CallbackOutcome = { status: number; body: string; paidInvoiceId?: string }
+
+// PayTR yalnız düz metin "OK" görünce yeniden göndermeyi bırakır. Bu yüzden veritabanı hatası asla "OK" ile
+// kapatılmaz (ör. Supabase projesi duraklatılmışken okuma hatası "fatura yok" sayılırsa ödeme kaybolurdu):
+// 500 döner, PayTR tekrar dener. İnceleme/yok sayma kararları yazıldıktan sonra "OK" döner.
+export async function processCallback(post: Record<string, string>, env: LinkEnv, db: CallbackDb): Promise<CallbackOutcome> {
+  if (!(await verifyCallback(post, env))) return { status: 400, body: 'PAYTR notification failed: bad hash' }
+  const id = invoiceIdFromCallback(post.callback_id)
+  let inv: LinkInvoice | null = null
+  if (id) {
+    const read = await db.readInvoice(id)
+    if (read.error) return { status: 500, body: 'retry' }
+    inv = read.data
+  }
+  const decision = decideCallback(inv, post, env)
+  if (decision.action === 'review' && inv) {
+    const noted = await db.noteReview(inv.id, `PayTR ${post.merchant_oid || '?'}: ${decision.reason}`.slice(0, 500))
+    if (noted.error) return { status: 500, body: 'retry' }
+  }
+  if (decision.action !== 'mark_paid' || !inv) return { status: 200, body: 'OK' }
+  const marked = await db.markPaid(inv.id, decision.merchantOid, decision.paid)
+  if (marked.error) return { status: 500, body: 'retry' }
+  return { status: 200, body: 'OK', paidInvoiceId: marked.data === 'ödendi' ? inv.id : undefined }
+}
