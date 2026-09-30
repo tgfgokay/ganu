@@ -2,13 +2,16 @@
 // Fatura einvoice_claim ile tek sahiplikle alınır; tutar, müşteri ve adres veritabanından okunur.
 import { processInvoice, type CustomerRow, type Env, type InvoiceRow, type Result } from '../issue-einvoice/parasut.ts'
 
-// Fail-closed: EINVOICE_ENABLED=true ve tüm Paraşüt secret'ları yoksa null (hiçbir dış çağrı yapılmaz).
+// GANU'nun Paraşüt kayıtları (gizli değil; 30.09.2026'da Paraşüt arayüzünden alındı). Secret verilirse o geçerlidir.
+export const GANU_PARASUT = Object.freeze({ companyId: '852734', productId: '1077554069', accountId: '1000681581' })
+
+// Fail-closed: EINVOICE_ENABLED=true ve OAuth secret'ları (client + kullanıcı) yoksa null (hiçbir dış çağrı yapılmaz).
 export function parasutEnv(siteUrl: string): Env | null {
   const get = (k: string) => (Deno.env.get(k) || '').trim()
   const env: Env = {
-    clientId: get('PARASUT_CLIENT_ID'), clientSecret: get('PARASUT_CLIENT_SECRET'), companyId: get('PARASUT_COMPANY_ID'),
+    clientId: get('PARASUT_CLIENT_ID'), clientSecret: get('PARASUT_CLIENT_SECRET'), companyId: get('PARASUT_COMPANY_ID') || GANU_PARASUT.companyId,
     username: get('PARASUT_EMAIL'), password: get('PARASUT_PASSWORD'),
-    productId: get('PARASUT_PRODUCT_ID') || undefined, accountId: get('PARASUT_ACCOUNT_ID') || undefined, siteUrl,
+    productId: get('PARASUT_PRODUCT_ID') || GANU_PARASUT.productId, accountId: get('PARASUT_ACCOUNT_ID') || GANU_PARASUT.accountId, siteUrl,
   }
   if (get('EINVOICE_ENABLED') !== 'true' || !env.clientId || !env.clientSecret || !env.companyId || !env.username || !env.password) return null
   return env
