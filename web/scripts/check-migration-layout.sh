@@ -8,7 +8,7 @@ expected_up=(
   0006_customer_portal_auth.sql 0007_purchase_flow.sql
   0008_pos_reconciliation.sql 0009_legal_consent_evidence.sql
   0010_panel_operations.sql 0011_einvoice_parasut.sql
-  0012_paytr_link.sql
+  0012_paytr_link.sql 0013_audit_log.sql
 )
 expected_down=(
   0001_pricing_catalog.down.sql 0002_private_storage.down.sql
@@ -17,6 +17,7 @@ expected_down=(
   0007_purchase_flow.down.sql 0008_pos_reconciliation.down.sql
   0009_legal_consent_evidence.down.sql 0010_panel_operations.down.sql
   0011_einvoice_parasut.down.sql 0012_paytr_link.down.sql
+  0013_audit_log.down.sql
 )
 
 actual_up="$(find "$ROOT/supabase/migrations" -maxdepth 1 -type f -name '*.sql' -exec basename {} \; | sort)"
@@ -24,9 +25,9 @@ actual_down="$(find "$ROOT/supabase/rollbacks" -maxdepth 1 -type f -name '*.down
 expected_up_text="$(printf '%s\n' "${expected_up[@]}")"
 expected_down_text="$(printf '%s\n' "${expected_down[@]}")"
 
-if [ "$actual_up" != "$expected_up_text" ]; then printf '%s\n' 'migration layout FAIL: UP listesi exact 0000-0012 değil' >&2; exit 1; fi
-if [ "$actual_down" != "$expected_down_text" ]; then printf '%s\n' 'migration layout FAIL: rollback listesi exact 0001-0012 değil' >&2; exit 1; fi
+if [ "$actual_up" != "$expected_up_text" ]; then printf '%s\n' 'migration layout FAIL: UP listesi exact 0000-0013 değil' >&2; exit 1; fi
+if [ "$actual_down" != "$expected_down_text" ]; then printf '%s\n' 'migration layout FAIL: rollback listesi exact 0001-0013 değil' >&2; exit 1; fi
 if find "$ROOT/supabase/migrations" -maxdepth 1 -type f -name '*.down.sql' | grep -q .; then printf '%s\n' 'migration layout FAIL: migrations içinde down SQL var' >&2; exit 1; fi
 if ! cmp -s "$ROOT/supabase-schema.sql" "$ROOT/supabase/migrations/0000_base_schema.sql"; then printf '%s\n' 'migration layout FAIL: 0000 canonical şemadan farklı' >&2; exit 1; fi
 
-printf '%s\n' 'migration layout PASS (UP 0000-0012; rollback 0001-0012; canonical base byte-exact)'
+printf '%s\n' 'migration layout PASS (UP 0000-0013; rollback 0001-0013; canonical base byte-exact)'
