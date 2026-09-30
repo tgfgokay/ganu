@@ -1,7 +1,7 @@
 // PayTR Linkle Ödeme: imza, istek alanları ve bildirim kararı (ağ yok). Beklenen imzalar Node crypto ile bağımsız hesaplanır.
 import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
-import { buildCreateRequest, callbackIdFor, decideCallback, expiryFor, hmacB64, invoiceIdFromCallback, linkName, toKurus, verifyCallback } from '../supabase/functions/paytr-link/paytr.ts'
+import { buildCreateRequest, callbackIdFor, decideCallback, expiryFor, hmacB64, invoiceIdFromCallback, linkName, processCallback, toKurus, verifyCallback } from '../supabase/functions/paytr-link/paytr.ts'
 
 const env = { merchantId: '123456', merchantKey: 'KEYkeyKEYkey1234', merchantSalt: 'SALTsaltSALT5678', callbackUrl: 'https://abc.supabase.co/functions/v1/paytr-link', maxInstallment: '1', debug: false, acceptTest: false }
 const nodeHmac = (key, msg) => createHmac('sha256', key).update(msg).digest('base64')
@@ -73,4 +73,33 @@ await run('son kullanma tarihi İstanbul gününe göre', async () => {
   assert.equal(expiryFor(new Date('2026-09-30T22:30:00Z'), 0), '2026-10-01 23:59:59')
 })
 
+function fakeDb({ readError = null, row = inv, reviewError = null, markError = null, markResult = 'ödendi' } = {}) {
+  const log = []
+  return { log,
+    async readInvoice(id) { log.push(`read ${id}`); return readError ? { data: null, error: readError } : { data: row && row.id === id ? row : null, error: null } },
+    async noteReview(id, note) { log.push(`review ${note}`); return { error: reviewError } },
+    async markPaid(id, oid, paid) { log.push(`mark ${oid} ${paid}`); return markError ? { data: null, error: markError } : { data: markResult, error: null } } }
+}
+await run('bildirim işleme: doğru bildirim ödendi yapar, OK döner', async () => {
+  const db = fakeDb(), out = await processCallback(post(), env, db)
+  assert.deepEqual(out, { status: 200, body: 'OK', paidInvoiceId: inv.id }); assert.deepEqual(db.log, [`read ${inv.id}`, 'mark LNK98765AB 18990'])
+})
+await run('bildirim işleme: veritabanı okunamazsa OK DEĞİL 500 (PayTR tekrar dener, ödeme kaybolmaz)', async () => {
+  const db = fakeDb({ readError: { message: 'project paused' } }), out = await processCallback(post(), env, db)
+  assert.deepEqual(out, { status: 500, body: 'retry' }); assert.deepEqual(db.log, [`read ${inv.id}`])
+})
+await run('bildirim işleme: fatura gerçekten yoksa OK (tekrar gönderim gereksiz)', async () => {
+  const out = await processCallback(post(), env, fakeDb({ row: null }))
+  assert.deepEqual(out, { status: 200, body: 'OK' })
+})
+await run('bildirim işleme: ödendi yazılamazsa ya da inceleme notu yazılamazsa 500', async () => {
+  assert.deepEqual(await processCallback(post(), env, fakeDb({ markError: { message: 'x' } })), { status: 500, body: 'retry' })
+  const mismatch = post({ payment_amount: '100', total_amount: '100' })
+  assert.deepEqual(await processCallback(mismatch, env, fakeDb({ reviewError: { message: 'x' } })), { status: 500, body: 'retry' })
+  const noted = fakeDb(); assert.deepEqual(await processCallback(mismatch, env, noted), { status: 200, body: 'OK' }); assert.match(noted.log[1], /^review PayTR LNK98765AB: tutar uyuşmuyor/)
+})
+await run('bildirim işleme: tekrar gelen bildirim (tekrar) e-Belge tetiklemez; bozuk imza veritabanına dokunmaz', async () => {
+  assert.deepEqual(await processCallback(post(), env, fakeDb({ markResult: 'tekrar' })), { status: 200, body: 'OK', paidInvoiceId: undefined })
+  const db = fakeDb(); assert.equal((await processCallback(post({ hash: 'AAAA' }), env, db)).status, 400); assert.deepEqual(db.log, [])
+})
 console.log('paytr link tests PASS')

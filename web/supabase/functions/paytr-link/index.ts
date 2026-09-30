@@ -11,7 +11,7 @@
 // Dağıtım: supabase functions deploy paytr-link --no-verify-jwt
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { buildCreateRequest, decideCallback, invoiceIdFromCallback, PAYTR_LINK_CREATE, verifyCallback, type LinkEnv } from './paytr.ts'
+import { buildCreateRequest, PAYTR_LINK_CREATE, processCallback, type LinkEnv } from './paytr.ts'
 import { parasutEnv, runEInvoice } from '../_shared/einvoice-run.ts'
 
 const SITE = Deno.env.get('SITE_URL') || ''
@@ -58,27 +58,29 @@ async function handleCallback(req: Request, env: LinkEnv): Promise<Response> {
   if (!form) return text('bad request', 400)
   const post: Record<string, string> = {}
   for (const [k, v] of form.entries()) post[k] = String(v)
-  if (!(await verifyCallback(post, env))) return text('PAYTR notification failed: bad hash', 400)
-  const db = serviceDb()
-  const id = invoiceIdFromCallback(post.callback_id)
-  const inv = id ? (await db.from('invoices').select('id,amount,status,note,due_date').eq('id', id).maybeSingle()).data : null
-  const decision = decideCallback(inv, post, env)
-  if (decision.action === 'review' && inv) {
-    await db.from('invoices').update({ payment_review: `PayTR ${post.merchant_oid || '?'}: ${decision.reason}`.slice(0, 500) }).eq('id', inv.id)
-  }
-  // İnceleme/ret durumlarında da "OK" dönülür: PayTR tekrar göndermesin, kayıt personelin önüne düşsün.
-  if (decision.action !== 'mark_paid' || !inv) return text('OK')
-  const marked = await db.rpc('paytr_mark_paid', { p_invoice: inv.id, p_oid: decision.merchantOid, p_paid: decision.paid, p_date: istanbulToday() })
-  if (marked.error) return text('retry', 500)
-  if (marked.data === 'ödendi' && Deno.env.get('EINVOICE_AUTO') === 'true') {
+  // İstemci yalnız imza doğrulandıktan sonra, ilk veritabanı adımında kurulur.
+  let client: ReturnType<typeof serviceDb> | null = null
+  const db = () => (client ??= serviceDb())
+  const out = await processCallback(post, env, {
+    readInvoice: async (id) => {
+      const r = await db().from('invoices').select('id,amount,status,note,due_date').eq('id', id).maybeSingle()
+      return { data: r.data, error: r.error }
+    },
+    noteReview: async (id, note) => ({ error: (await db().from('invoices').update({ payment_review: note }).eq('id', id)).error }),
+    markPaid: async (id, oid, paid) => {
+      const r = await db().rpc('paytr_mark_paid', { p_invoice: id, p_oid: oid, p_paid: paid, p_date: istanbulToday() })
+      return { data: r.data, error: r.error }
+    },
+  })
+  if (out.paidInvoiceId && Deno.env.get('EINVOICE_AUTO') === 'true') {
     const penv = parasutEnv(ALLOW_ORIGIN)
     if (penv) {
-      const task = runEInvoice(db, inv.id, penv).catch(() => undefined)
+      const task = runEInvoice(db(), out.paidInvoiceId, penv).catch(() => undefined)
       // Yanıtı bekletmeden arka planda sürdür; yoksa personel "e-Belge kes" ile tamamlar.
       ;(globalThis as unknown as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(task)
     }
   }
-  return text('OK')
+  return text(out.body, out.status)
 }
 
 async function handleCreate(req: Request, env: LinkEnv): Promise<Response> {
