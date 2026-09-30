@@ -6,6 +6,14 @@ export const PAYMENT_ACCOUNT = Object.freeze({
   iban: 'TR49 0006 4000 0011 0461 2155 03',
 })
 
+// Sanal ofis müşterilerinin fatura adresi çoğunlukla GANU'nun adresidir (vergi levhalarındaki biçim, 30.09.2026).
+export const GANU_INVOICE_ADDRESS = Object.freeze({
+  address: 'Kavacık Mah. Okul Cad. No:29 İç Kapı No:8',
+  city: 'İstanbul',
+  district: 'Beykoz',
+  taxOffice: 'Beykoz',
+})
+
 const tl = (n) => new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0)
 const day = (iso) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('tr-TR') : '')
 
