@@ -138,7 +138,8 @@ const marker = (inv: InvoiceRow) => `GANU ${inv.id.slice(0, 8)}`
 // kullanılır. Birden fazla ya da tutarı tutmayan aday varsa otomatik seçilmez, personel Paraşüt'te kontrol eder.
 export async function findSalesInvoice(p: Client, inv: InvoiceRow, contactId: string): Promise<string> {
   const list = await p.call('GET', `/sales_invoices?filter[contact_id]=${contactId}&filter[issue_date]=${inv.issue_date}&page[size]=25`)
-  const hits = (list.json?.data || []).filter((d) => String(d?.attributes?.description || '').includes(marker(inv)))
+  const rows: { id: string; attributes?: { description?: string; gross_total?: string | number } }[] = list.json?.data || []
+  const hits = rows.filter((d) => String(d?.attributes?.description || '').includes(marker(inv)))
   if (!hits.length) return ''
   const gross = round2(Number(inv.amount)), total = Number(hits[0].attributes?.gross_total)
   if (hits.length > 1 || !Number.isFinite(total) || Math.abs(total - gross) > 0.02) {
