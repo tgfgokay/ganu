@@ -130,9 +130,26 @@ async function findOrCreateContact(p: Client, c: CustomerRow): Promise<string> {
   return String(created.json?.data?.id)
 }
 
+// Paraşüt faturasının açıklamasındaki GANU işareti; kurtarma araması bununla eşleşir.
+const marker = (inv: InvoiceRow) => `GANU ${inv.id.slice(0, 8)}`
+
+// Zaman aşımından kurtarma: POST /sales_invoices yanıtı kaybolup Paraşüt faturayı yine de açtıysa ikinci satış
+// faturası açılmaz. Aynı cari + fatura tarihi + açıklamadaki GANU işareti aranır; tek ve tutarı tutan aday yeniden
+// kullanılır. Birden fazla ya da tutarı tutmayan aday varsa otomatik seçilmez, personel Paraşüt'te kontrol eder.
+export async function findSalesInvoice(p: Client, inv: InvoiceRow, contactId: string): Promise<string> {
+  const list = await p.call('GET', `/sales_invoices?filter[contact_id]=${contactId}&filter[issue_date]=${inv.issue_date}&page[size]=25`)
+  const hits = (list.json?.data || []).filter((d) => String(d?.attributes?.description || '').includes(marker(inv)))
+  if (!hits.length) return ''
+  const gross = round2(Number(inv.amount)), total = Number(hits[0].attributes?.gross_total)
+  if (hits.length > 1 || !Number.isFinite(total) || Math.abs(total - gross) > 0.02) {
+    throw new Error(`Paraşüt'te bu kayda ait ${hits.length} satış faturası adayı var (${hits.map((h) => h.id).join(', ')}); otomatik seçilmedi, Paraşüt'te kontrol edin.`)
+  }
+  return String(hits[0].id)
+}
+
 async function createSalesInvoice(p: Client, inv: InvoiceRow, contactId: string, env: Env): Promise<string> {
   const gross = round2(Number(inv.amount)), net = round2(gross / (1 + VAT_RATE / 100))
-  const text = `${String(inv.note || '').trim() || 'Sanal ofis hizmet bedeli'} · GANU ${inv.id.slice(0, 8)}`
+  const text = `${String(inv.note || '').trim() || 'Sanal ofis hizmet bedeli'} · ${marker(inv)}`
   const detail: Record<string, unknown> = { type: 'sales_invoice_details', attributes: { quantity: 1, unit_price: net, vat_rate: VAT_RATE, description: text } }
   if (env.productId) detail.relationships = { product: { data: { id: env.productId, type: 'products' } } }
   const created = await p.call('POST', '/sales_invoices', { data: { type: 'sales_invoices',
@@ -217,11 +234,19 @@ export async function processInvoice(inv: InvoiceRow, customer: CustomerRow, dep
     let contactId = customer.parasut_contact_id || ''
     if (!contactId) { contactId = await findOrCreateContact(p, customer); await store.setContact(customer.id, contactId) }
     let invoiceId = inv.parasut_invoice_id || ''
-    if (!invoiceId) { invoiceId = await createSalesInvoice(p, inv, contactId, env); await store.patchInvoice(inv.id, { parasut_invoice_id: invoiceId }) }
+    if (!invoiceId) {
+      invoiceId = (await findSalesInvoice(p, inv, contactId)) || (await createSalesInvoice(p, inv, contactId, env))
+      await store.patchInvoice(inv.id, { parasut_invoice_id: invoiceId })
+    }
     if (inv.status === 'ödendi' && !inv.parasut_payment_at && env.accountId) {
-      await p.call('POST', `/sales_invoices/${invoiceId}/payments`, { data: { type: 'payments', attributes: {
-        account_id: Number(env.accountId), date: inv.paid_date || inv.issue_date, amount: round2(Number(inv.amount)),
-        description: `GANU tahsilat ${inv.payment_method || ''}`.trim() } } })
+      // Tahsilat isteğinin yanıtı kaybolduysa ikinci tahsilat girilmez: Paraşüt'te ödenmemiş tutar kalmadıysa yalnız kayıt güncellenir.
+      const current = await p.call('GET', `/sales_invoices/${invoiceId}`)
+      const remaining = Number(current.json?.data?.attributes?.remaining)
+      if (!(Number.isFinite(remaining) && remaining <= 0.01)) {
+        await p.call('POST', `/sales_invoices/${invoiceId}/payments`, { data: { type: 'payments', attributes: {
+          account_id: Number(env.accountId), date: inv.paid_date || inv.issue_date, amount: round2(Number(inv.amount)),
+          description: `GANU tahsilat ${inv.payment_method || ''}`.trim() } } })
+      }
       await store.patchInvoice(inv.id, { parasut_payment_at: new Date().toISOString() })
     }
     let doc = await activeDoc(p, invoiceId)
