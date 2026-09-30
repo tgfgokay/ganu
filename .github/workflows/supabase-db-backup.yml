@@ -1,0 +1,77 @@
+name: supabase-db-backup
+run-name: Supabase veritabanı gece yedeği
+
+# ganu-staging Free planda otomatik yedek/PITR yok. Her gece public şemanın (müşteri, posta, yoklama,
+# sözleşme, fatura, belge kayıtları) tam yedeği alınır, AES-256 ile şifrelenip 30 gün saklanır.
+# Repo herkese açık: artifact'i başkaları da indirebilir, bu yüzden dosya YALNIZ şifreli yüklenir;
+# BACKUP_PASSPHRASE uzun ve rastgele olmalı ve repoda/sohbette tutulmamalıdır.
+# Gerekli repository secret'ları:
+#   SUPABASE_DB_URL    Supabase → Project Settings → Database → Connection string → "Session pooler" URI
+#                      (GitHub runner'ları IPv6 doğrudan bağlantıya ulaşamaz; pooler IPv4'tür)
+#   BACKUP_PASSPHRASE  en az 32 karakter rastgele parola (kasada saklayın; kaybolursa yedek açılamaz)
+# Yüklenen PDF'ler (Storage) bu yedeğe dahil değildir. Geri yükleme: web/STAGING-RUNBOOK.md §14.
+
+on:
+  schedule:
+    - cron: '30 0 * * *' # 03:30 İstanbul
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ] && [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+            echo "::warning::Yedek kurulumu bekliyor: SUPABASE_DB_URL ve BACKUP_PASSPHRASE secret'ları tanımlı değil; yedek alınmadı."
+            echo "ready=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          test -n "${SUPABASE_DB_URL:-}" || { echo "::error::SUPABASE_DB_URL eksik"; exit 1; }
+          test "${#BACKUP_PASSPHRASE}" -ge 32 || { echo "::error::BACKUP_PASSPHRASE eksik ya da 32 karakterden kısa"; exit 1; }
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install PostgreSQL 17 client
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Dump and encrypt
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          day="$(TZ=Europe/Istanbul date +%F)"
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" --schema=public --format=custom --no-owner --no-privileges --file=db.dump
+          test -s db.dump
+          /usr/lib/postgresql/17/bin/pg_restore --list db.dump | grep -q "TABLE DATA public customers" || { echo "::error::yedekte customers tablosu yok"; exit 1; }
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-fd 0 --symmetric --cipher-algo AES256 --output "ganu-db-$day.dump.gpg" db.dump
+          shred -u db.dump
+          ls -l "ganu-db-$day.dump.gpg"
+          echo "DAY=$day" >> "$GITHUB_ENV"
+
+      - name: Upload encrypted backup
+        if: steps.cfg.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ganu-db-${{ env.DAY }}
+          path: ganu-db-*.dump.gpg
+          retention-days: 30
+          if-no-files-found: error

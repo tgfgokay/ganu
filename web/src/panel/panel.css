@@ -152,6 +152,15 @@
 .pl-table tr.pl-tr-urgent td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .pl-who { background: #ecfeff; border: 1px solid #a5f3fc; color: #155e75; border-radius: 10px; padding: 10px 12px; font-size: 14px; }
 
+.pl-checklist { list-style: none; margin: 0; padding: 4px 8px 8px; display: grid; gap: 2px; }
+.pl-checklist li { display: flex; align-items: center; gap: 10px; padding: 8px 6px; font-size: 14px; color: var(--ink); border-radius: 8px; }
+.pl-checklist li .mark { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; border: 1.5px solid var(--line); color: var(--muted); flex: none; }
+.pl-checklist li.ok { color: var(--muted); }
+.pl-checklist li.ok .mark { background: #dcfce7; border-color: #86efac; color: #15803d; }
+.pl-checklist .grow { flex: 1; }
+.pl-checklist .pl-linkbtn, .pl-card .pl-linkbtn { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--navy); text-decoration: underline; cursor: pointer; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
 /* ---------- LIST ROWS ---------- */
 .pl-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 10px; }
 .pl-row:hover { background: #f7f9fb; }
