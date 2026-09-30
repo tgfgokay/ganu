@@ -172,13 +172,17 @@ await run('tahsilat Paraşüt\'te zaten girilmiş (kalan 0) → ikinci tahsilat 
   const r = await processInvoice(invoice({ parasut_invoice_id: 's1' }), customer({ parasut_contact_id: 'k1' }), deps(f, s))
   assert.equal(r.state, 'kesildi'); assert.equal(f.state.bodies.payment, undefined); assert.ok(s.last().parasut_payment_at)
 })
-function fakeCheck({ tokenError = null, companies = [{ id: '777', type: 'companies', attributes: { name: 'GANU OFİS HİZMETLERİ LTD. ŞTİ.' } }] } = {}) {
+function fakeCheck({ tokenError = null, tokenHtml403 = false, companies = [{ id: '777', type: 'companies', attributes: { name: 'GANU OFİS HİZMETLERİ LTD. ŞTİ.' } }] } = {}) {
   const calls = []
   const ok = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   async function fetch(url, init = {}) {
     const method = init.method || 'GET', u = new URL(url)
     calls.push(`${method} ${u.pathname}`)
-    if (u.pathname === '/oauth/token') return tokenError ? ok({ error: tokenError, error_description: 'x' }, 401) : ok({ access_token: 'tok' })
+    if (u.pathname === '/oauth/token') {
+      assert.match(init.headers['User-Agent'], /^GANU-Panel\//)
+      if (tokenHtml403) return new Response('<html><title>Attention Required! | Cloudflare</title>Sorry, you have been blocked</html>', { status: 403, headers: { 'content-type': 'text/html; charset=UTF-8', 'cf-ray': 'abc123-SIN' } })
+      return tokenError ? ok({ error: tokenError, error_description: 'x' }, 401) : ok({ access_token: 'tok' })
+    }
     assert.equal(method, 'GET', 'bağlantı testi yazma isteği yapmamalı')
     if (u.pathname === '/v4/me') { assert.equal(u.searchParams.get('include'), 'companies'); return ok({ data: { id: 'u1' }, included: companies }) }
     if (u.pathname === '/v4/777/products/55') return ok({ data: { id: '55', attributes: { name: 'Sanal Ofis Hizmeti' } } })
@@ -203,5 +207,11 @@ await run('bağlantı testi: yanlış client → invalid_client', async () => {
 await run('bağlantı testi: kullanıcı şirkete erişemiyorsa şirket adımında durur', async () => {
   const f = fakeCheck({ companies: [{ id: '999', type: 'companies', attributes: { name: 'Başka' } }] }), r = await checkConnection({ fetch: f.fetch, sleep: async () => {}, env })
   assert.equal(r.state, 'hata'); assert.equal(r.step, 'şirket'); assert.equal(f.calls.length, 2)
+})
+await run('bağlantı testi: Cloudflare HTML 403 → JSON olmayan yanıt + güvenlik duvarı + cf-ray gösterilir, şifre yazılmaz', async () => {
+  const r = await checkConnection({ fetch: fakeCheck({ tokenHtml403: true }).fetch, sleep: async () => {}, env })
+  assert.equal(r.state, 'hata'); assert.equal(r.step, 'oturum')
+  assert.match(r.message, /\(403, JSON olmayan yanıt: text\/html — Cloudflare\/güvenlik duvarı engeli olası, cf-ray abc123-SIN\)/)
+  assert.doesNotMatch(r.message, /pw|sec/)
 })
 console.log('einvoice parasut flow tests PASS')
