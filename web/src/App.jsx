@@ -422,7 +422,7 @@ function CtaBand({ t, locale }) {
       <div className="wrap">
         <motion.div className="cta-band" {...reveal} variants={stagger}>
           <motion.h2 variants={rise}><RichTitle value={t.cta.title} dot /></motion.h2>
-          <motion.p variants={rise}>{marketingOnly&&locale==='tr'?'Hizmet kapsamını inceleyin; çevrim içi satış açılana kadar teklif ve sorularınız için bize e-posta gönderin.':t.cta.text}</motion.p>
+          <motion.p variants={rise}>{marketingOnly&&locale==='tr'?'Hizmet kapsamını inceleyin; teklif ve sorularınız için bize telefon, WhatsApp veya e-postayla ulaşın.':t.cta.text}</motion.p>
           <motion.a variants={rise} href={locale==='tr'?withBase(marketingOnly?'/satin-al':salesEnabled?'/satin-al':'/mesafeli-satis#satis-kapali'):'mailto:info@ganu.com.tr?subject=Istanbul%20virtual%20office%20quote'} className="btn btn-solid big">{locale==='tr'&&marketingOnly?'Teklif al':locale==='tr'&&!salesEnabled?'Satış hazırlıkta':t.cta.button} →</motion.a>
           <motion.p variants={rise} style={{ marginTop: 12, fontSize: 14, opacity: 0.75 }}>
             {t.cta.question} <a href="mailto:info@ganu.com.tr">info@ganu.com.tr</a>

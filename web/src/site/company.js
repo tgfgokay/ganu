@@ -13,7 +13,12 @@ export const COMPANY = Object.freeze({
   phone: '0537 974 62 90',
   phoneHref: 'tel:+905379746290',
   contactPerson: 'Ali Topçu (Şirket Müdürü)',
+  whatsapp: '905379746290',
 })
+
+// Teklif kanalları: sitede form yoktur, talep telefon/WhatsApp/e-posta ile alınır.
+export const whatsappHref = (text) => `https://wa.me/${COMPANY.whatsapp}?text=${encodeURIComponent(text)}`
+export const mailtoHref = (subject, body = '') => `mailto:${COMPANY.email}?subject=${encodeURIComponent(subject)}${body ? `&body=${encodeURIComponent(body)}` : ''}`
 
 const normalized = (value) => value !== '/' ? String(value || '/').replace(/\/+$/, '') : '/'
 export const COMPANY_ROUTES = [
