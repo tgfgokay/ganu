@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { inspections, customers, withCustomerNames, INSPECTION_RESULT } from '../lib/store.js'
 import { Modal, fmtDate } from './_ui.jsx'
 import { localISO } from '../lib/dates.js'
@@ -21,6 +22,7 @@ export default function Yoklama() {
   const [rows, setRows] = useState([])
   const [custs, setCusts] = useState([])
   const [modal, setModal] = useState(null)
+  const [params, setParams] = useSearchParams()
 
   const load = async () => {
     const [ins, cs] = await Promise.all([inspections.list(), customers.list()])
@@ -29,6 +31,11 @@ export default function Yoklama() {
     setCusts(cs)
   }
   useEffect(() => { load() }, [])
+  // Müşteri sayfasından "+ Yoklama kaydı": ?musteri=<id> ile o müşteri seçili yeni kayıt açılır.
+  useEffect(() => {
+    const id = params.get('musteri')
+    if (id && custs.some((c) => c.id === id)) { setModal({ mode: 'new', data: { ...emptyForm(), customer_id: id } }); setParams({}, { replace: true }) }
+  }, [custs])
 
   const pendingCount = useMemo(() => rows.filter((r) => r.result === 'bekleniyor').length, [rows])
 
