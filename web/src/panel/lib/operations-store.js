@@ -44,6 +44,8 @@ export async function recordCommissionPayment(row){return commissionPayments.cre
 export const PROVIDER_STATUS=Object.freeze({paytr:'Kurulum bekliyor',efatura:'Kurulum bekliyor',email:'Kurulum bekliyor',sms:'Kurulum bekliyor',whatsapp:'Kurulum bekliyor'})
 // Sunucu (issue-einvoice) EINVOICE_ENABLED ve Paraşüt secret'ları yoksa 503 döner; panel dış servise doğrudan yazmaz.
 export async function issueEInvoice(invoiceId){requireCloud();const {data,error}=await supabase.functions.invoke('issue-einvoice',{body:{invoice_id:invoiceId}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'başarısız',message:'e-Belge servisine ulaşılamadı.'}}
+// Paraşüt bağlantı testi: belge kesmez, yalnız okur.
+export async function checkParasut(){requireCloud();const {data,error}=await supabase.functions.invoke('issue-einvoice',{body:{check:true}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'hata',message:'e-Belge servisine ulaşılamadı.'}}
 export const PAYMENT_METHODS=['havale','kart','nakit','diğer']
 // PayTR Link API: tutar DB'den; kurulum yoksa sunucu 503 döner.
 export async function createPaymentLink(invoiceId){requireCloud();const {data,error}=await supabase.functions.invoke('paytr-link',{body:{invoice_id:invoiceId}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'başarısız',message:'PayTR link servisine ulaşılamadı.'}}

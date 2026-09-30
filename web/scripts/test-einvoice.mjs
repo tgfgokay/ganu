@@ -1,6 +1,6 @@
 // Paraşüt e-Belge akışı: sahte Paraşüt sunucusuyla uçtan uca senaryolar (ağ yok).
 import assert from 'node:assert/strict'
-import { processInvoice, missingFields } from '../supabase/functions/issue-einvoice/parasut.ts'
+import { processInvoice, missingFields, checkConnection } from '../supabase/functions/issue-einvoice/parasut.ts'
 
 const env = { clientId: 'cid', clientSecret: 'sec', username: 'api@ganu.com.tr', password: 'pw', companyId: '777', productId: '55', accountId: '9', siteUrl: 'https://ganu.com.tr' }
 const customer = (over = {}) => ({ id: 'c1', title: 'Aydın Yazılım Ltd. Şti.', email: 'muhasebe@aydin.test', tax_no: '1234567890', tc: '', tax_office: 'Beykoz', address: 'Kavacık Mah. Ekinciler Cad. No:19', city: 'İstanbul', district: 'Beykoz', parasut_contact_id: null, ...over })
@@ -143,4 +143,36 @@ await run('PDF gecikirse: kesildi kalır, PDF sonra alınır', async () => {
   assert.equal(r.state, 'kesildi'); assert.equal(r.pdf, null); assert.equal(s.last().einvoice_pdf, undefined)
 })
 
+function fakeCheck({ tokenError = null, companies = [{ id: '777', type: 'companies', attributes: { name: 'GANU OFİS HİZMETLERİ LTD. ŞTİ.' } }] } = {}) {
+  const calls = []
+  const ok = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+  async function fetch(url, init = {}) {
+    const method = init.method || 'GET', u = new URL(url)
+    calls.push(`${method} ${u.pathname}`)
+    if (u.pathname === '/oauth/token') return tokenError ? ok({ error: tokenError, error_description: 'x' }, 401) : ok({ access_token: 'tok' })
+    assert.equal(method, 'GET', 'bağlantı testi yazma isteği yapmamalı')
+    if (u.pathname === '/v4/me') { assert.equal(u.searchParams.get('include'), 'companies'); return ok({ data: { id: 'u1' }, included: companies }) }
+    if (u.pathname === '/v4/777/products/55') return ok({ data: { id: '55', attributes: { name: 'Sanal Ofis Hizmeti' } } })
+    if (u.pathname === '/v4/777/accounts/9') return ok({ data: { id: '9', attributes: { name: 'İş Bankası TL — Tahsilat' } } })
+    throw new Error(`beklenmeyen istek ${method} ${url}`)
+  }
+  return { fetch, calls }
+}
+await run('bağlantı testi: yalnız okur, şirket/ürün/hesap adını döner', async () => {
+  const f = fakeCheck(), r = await checkConnection({ fetch: f.fetch, sleep: async () => {}, env })
+  assert.equal(r.state, 'bağlı'); assert.equal(r.company, 'GANU OFİS HİZMETLERİ LTD. ŞTİ.'); assert.equal(r.product, 'Sanal Ofis Hizmeti'); assert.equal(r.account, 'İş Bankası TL — Tahsilat')
+  assert.deepEqual(f.calls, ['POST /oauth/token', 'GET /v4/me', 'GET /v4/777/products/55', 'GET /v4/777/accounts/9'])
+})
+await run('bağlantı testi: yanlış şifre/2FA → oturum adımında invalid_grant', async () => {
+  const r = await checkConnection({ fetch: fakeCheck({ tokenError: 'invalid_grant' }).fetch, sleep: async () => {}, env })
+  assert.equal(r.state, 'hata'); assert.equal(r.step, 'oturum'); assert.match(r.message, /invalid_grant/); assert.match(r.message, /iki adımlı/)
+})
+await run('bağlantı testi: yanlış client → invalid_client', async () => {
+  const r = await checkConnection({ fetch: fakeCheck({ tokenError: 'invalid_client' }).fetch, sleep: async () => {}, env })
+  assert.equal(r.step, 'oturum'); assert.match(r.message, /Client ID\/Secret/)
+})
+await run('bağlantı testi: kullanıcı şirkete erişemiyorsa şirket adımında durur', async () => {
+  const f = fakeCheck({ companies: [{ id: '999', type: 'companies', attributes: { name: 'Başka' } }] }), r = await checkConnection({ fetch: f.fetch, sleep: async () => {}, env })
+  assert.equal(r.state, 'hata'); assert.equal(r.step, 'şirket'); assert.equal(f.calls.length, 2)
+})
 console.log('einvoice parasut flow tests PASS')

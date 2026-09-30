@@ -463,6 +463,8 @@ destek@parasut.com'dan client_id/secret, 2FA'sız ayrı API kullanıcısı (Sat�
 3. Secret'lar: `EINVOICE_ENABLED=true SITE_URL=https://ganu.com.tr PARASUT_CLIENT_ID PARASUT_CLIENT_SECRET
    PARASUT_EMAIL PARASUT_PASSWORD` (2FA'sız API kullanıcısı), ardından `supabase functions deploy issue-einvoice`
    (GitHub Actions → supabase-functions-deploy).
+   Önce panel → Faturalar → "Bağlantıyı test et": yalnız GET ile oturum, şirket, ürün ve tahsilat hesabını okur,
+   belge kesmez. `invalid_grant` = e-posta/şifre hatalı ya da 2FA açık; `invalid_client` = Client ID/Secret hatalı.
 4. İlk canlı deneme tek ve küçük tutarlı gerçek faturayla yapılır: panel → Faturalar → "e-Belge kes".
    Fonksiyon satış faturasının `gross_total` değerini KDV dahil tutarla karşılaştırır; tutmazsa taslağı siler ve
    resmîleştirmez. e-Arşiv iptali yalnız Paraşüt'ün `cancellable_until` süresi içinde mümkündür.
