@@ -83,6 +83,12 @@
 }
 .pl-nav-link:hover { background: rgba(255,255,255,.08); color: #fff; }
 .pl-nav-link.active { background: var(--teal); color: var(--navy); }
+.pl-nav-group > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+.pl-nav-group > summary::-webkit-details-marker { display: none; }
+.pl-nav-group > summary::after { content: '▸'; font-size: 12px; opacity: .7; transition: transform .15s; }
+.pl-nav-group[open] > summary::after { transform: rotate(90deg); }
+.pl-nav-group { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.12); }
+.pl-nav-sub { padding-left: 22px; font-size: 13.5px; }
 .pl-nav-ic { width: 20px; height: 20px; display: inline-flex; }
 .pl-nav-ic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .pl-logout {
@@ -213,7 +219,7 @@ table.pl-table { width: 100%; border-collapse: collapse; }
 .pl-field input:focus, .pl-field select:focus, .pl-field textarea:focus { border-color: var(--teal); }
 .pl-field textarea { resize: vertical; min-height: 64px; }
 .pl-form-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: #fff; }
-.pl-actions { display: flex; gap: 8px; }
+.pl-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* alert banner */
 .pl-alert { display: flex; gap: 12px; align-items: flex-start; background: #fffbeb; border: 1px solid #fde68a; border-radius: 14px; padding: 14px 18px; margin-bottom: 22px; }

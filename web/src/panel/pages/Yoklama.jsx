@@ -34,8 +34,10 @@ export default function Yoklama() {
   // Müşteri sayfasından "+ Yoklama kaydı": ?musteri=<id> ile o müşteri seçili yeni kayıt açılır.
   useEffect(() => {
     const id = params.get('musteri')
-    if (id && custs.some((c) => c.id === id)) { setModal({ mode: 'new', data: { ...emptyForm(), customer_id: id } }); setParams({}, { replace: true }) }
-  }, [custs])
+    if (!id || !custs.some((c) => c.id === id)) return
+    setModal({ mode: 'new', data: { ...emptyForm(), customer_id: id } })
+    const next = new URLSearchParams(params); next.delete('musteri'); setParams(next, { replace: true })
+  }, [custs, params, setParams])
 
   const pendingCount = useMemo(() => rows.filter((r) => r.result === 'bekleniyor').length, [rows])
 
