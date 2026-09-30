@@ -12,6 +12,8 @@ const emptyForm = () => ({
   notify: true, // yeni girişte müşteriye otomatik bildirim
 })
 
+const isOpenTebligat = (r) => r.type === 'tebligat' && ['geldi', 'bildirildi'].includes(r.status)
+
 export default function Kargo() {
   const [rows, setRows] = useState([])
   const [custs, setCusts] = useState([])
@@ -36,7 +38,8 @@ export default function Kargo() {
       if (!s.includes(q.toLowerCase())) return false
     }
     return true
-  }), [rows, q, fType, fStatus])
+  // Bekleyen tebligat en üstte (hukuki süreler tebligatla başlar); diğerleri mevcut sırada kalır.
+  }).sort((a, b) => Number(isOpenTebligat(b)) - Number(isOpenTebligat(a))), [rows, q, fType, fStatus])
 
   const save = async (form) => {
     const { notify, ...rest } = form
@@ -107,7 +110,7 @@ export default function Kargo() {
           <tbody>
             {filtered.length === 0 && <tr><td colSpan={8}><div className="pl-empty">Kayıt yok.</div></td></tr>}
             {filtered.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} className={isOpenTebligat(r) ? 'pl-tr-urgent' : undefined}>
                 <td>
                   {r.photo_url
                     ? <SecureImage stored={r.photo_url} alt="" className="pl-thumb" onClick={(e) => setLightbox(e.currentTarget.src)} />

@@ -107,13 +107,15 @@ function YoklamaForm({ modal, custs, onClose, onSave }) {
   const [f, setF] = useState(modal.data)
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
   const submit = (e) => { e.preventDefault(); if (!f.customer_id) return; onSave(f) }
+  const sel = custs.find((c) => c.id === f.customer_id)
   return (
-    <Modal title={modal.mode === 'new' ? 'Yeni yoklama kaydı' : 'Yoklama kaydını düzenle'} onClose={onClose}
+    <Modal title={`${modal.mode === 'new' ? 'Yeni yoklama kaydı' : 'Yoklama kaydını düzenle'}${sel ? ` · ${sel.title}` : ''}`} onClose={onClose}
       footer={<>
         <button className="pl-btn pl-btn-ghost" onClick={onClose}>Vazgeç</button>
         <button className="pl-btn pl-btn-solid" form="yok-form" type="submit">Kaydet</button>
       </>}>
       <form id="yok-form" className="pl-form" onSubmit={submit}>
+        {sel && <div className="pl-who" role="status">Bu kayıt <b>{sel.title}</b> için{sel.tax_no || sel.tc ? ` · ${sel.tax_no ? 'VKN' : 'TCKN'} ${sel.tax_no || sel.tc}` : ''}</div>}
         <div className="pl-field">
           <label>Müşteri *</label>
           <select value={f.customer_id} onChange={(e) => set('customer_id', e.target.value)} required>
