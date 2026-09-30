@@ -52,6 +52,29 @@ export function missingFields(c: CustomerRow): string[] {
   return out
 }
 
+// Paraşüt'ün önünde Cloudflare var; tanımlı bir User-Agent bot engeline takılma olasılığını azaltır.
+export const USER_AGENT = 'GANU-Panel/1.0 (+https://ganu.com.tr)'
+type TokenJson = { access_token?: string; error?: unknown; error_description?: unknown; errors?: { title?: string; detail?: string }[] } | null
+
+// Oturum hatası teşhisi: durum kodu, OAuth hata kodu/açıklaması ve güvenlik duvarı izleri. İstek gövdesi
+// (şifre, client secret) asla yazılmaz; açıklama 160 karakterle sınırlı.
+export function authFailure(status: number, headers: Headers, json: TokenJson, raw: string): string {
+  const parts = [String(status)]
+  const code = typeof json?.error === 'string' ? json.error : ''
+  if (code) parts.push(code)
+  const desc = String(json?.error_description || json?.errors?.[0]?.detail || json?.errors?.[0]?.title || '').slice(0, 160)
+  if (desc) parts.push(desc)
+  if (!json) {
+    const ctype = (headers.get('content-type') || 'içerik türü yok').split(';')[0]
+    const firewall = Boolean(headers.get('cf-mitigated')) || /cloudflare|attention required|you have been blocked/i.test(raw)
+    parts.push(`JSON olmayan yanıt: ${ctype}${firewall ? ' — Cloudflare/güvenlik duvarı engeli olası' : ''}`)
+  }
+  const ray = headers.get('cf-ray')
+  if (ray) parts.push(`cf-ray ${ray}`)
+  const why = code === 'invalid_client' ? ' — Client ID/Secret hatalı' : code === 'invalid_grant' ? ' — e-posta/şifre hatalı ya da iki adımlı doğrulama açık' : ''
+  return parts.join(', ') + why
+}
+
 export function client(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>) {
   let token = '', last = 0
   const pace = async () => { const wait = last + MIN_GAP_MS - Date.now(); if (wait > 0) await deps.sleep(wait); last = Date.now() }
@@ -62,15 +85,14 @@ export function client(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>) {
       grant_type: 'password', client_id: deps.env.clientId, client_secret: deps.env.clientSecret,
       username: deps.env.username, password: deps.env.password, redirect_uri: 'urn:ietf:wg:oauth:2.0:oob',
     })
-    const res = await deps.fetch(`${PARASUT_API}/oauth/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })
-    const json = await res.json().catch(() => null)
-    if (!res.ok || !json?.access_token) {
-      // OAuth hata kodu (RFC 6749 §5.2) teşhis için gösterilir; gizli değer içermez.
-      const code = typeof json?.error === 'string' ? json.error : ''
-      const why = code === 'invalid_client' ? ' — Client ID/Secret hatalı' : code === 'invalid_grant' ? ' — e-posta/şifre hatalı ya da iki adımlı doğrulama açık' : ''
-      throw new ParasutError(res.status, `Paraşüt oturumu açılamadı (${res.status}${code ? `, ${code}` : ''})${why}.`)
-    }
-    token = json.access_token
+    const res = await deps.fetch(`${PARASUT_API}/oauth/token`, {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': USER_AGENT }, body,
+    })
+    const raw = await res.text().catch(() => '')
+    let json: TokenJson = null
+    try { json = JSON.parse(raw) } catch { json = null }
+    if (!res.ok || !json?.access_token) throw new ParasutError(res.status, `Paraşüt oturumu açılamadı (${authFailure(res.status, res.headers, json, raw)}).`)
+    token = String(json?.access_token || '')
     return token
   }
   // path şirket altındadır (/v4/{company}/...); root=true ise /v4/... (ör. /me).
@@ -79,7 +101,7 @@ export function client(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>) {
       const bearer = await auth()
       await pace()
       const res = await deps.fetch(`${PARASUT_API}/v4${root ? '' : `/${deps.env.companyId}`}${path}`, {
-        method, headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+        method, headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT },
         body: body === undefined ? undefined : JSON.stringify(body),
       })
       if (res.status === 429 && attempt < 2) { await deps.sleep(10_000); continue }
