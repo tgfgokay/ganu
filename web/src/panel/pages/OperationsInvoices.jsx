@@ -1,6 +1,6 @@
 import { useEffect,useMemo,useState } from 'react'
 import { Link } from 'react-router-dom'
-import { invoices,customers,contracts,invStatus,issueEInvoice,createPaymentLink,PAYMENT_METHODS } from '../lib/operations-store.js'
+import { invoices,customers,contracts,invStatus,issueEInvoice,createPaymentLink,checkParasut,PAYMENT_METHODS } from '../lib/operations-store.js'
 import { SecureLink } from '../components/SecureAsset.jsx'
 import { PAYMENT_ACCOUNT,paymentMessage } from '../lib/company.js'
 import { Modal,fmtDate,fmtTL } from './_ui.jsx'
@@ -55,6 +55,13 @@ export function InvoiceForm({title,initial,custs,cts,lockCustomer=false,onClose,
   </Modal>
 }
 
+function ParasutCheck(){
+  const [busy,setBusy]=useState(false),[r,setR]=useState(null),ok=r?.state==='bağlı'
+  const run=async()=>{setBusy(true);try{setR(await checkParasut())}finally{setBusy(false)}}
+  const line=!r?'Fatura kesmeden yalnız okur: oturum, şirket, ürün ve tahsilat hesabı.':ok?`✓ Bağlı · ${[r.company,r.product,r.account].filter(Boolean).join(' · ')}`:`✗ ${r.step?`${r.step}: `:''}${r.message||'Test başarısız.'}`
+  return <div className="pl-card" style={{marginBottom:20}}><div className="pl-card-b"><div className="pl-row"><div className="grow"><div className="t1">Paraşüt bağlantısı</div><div className="t2" style={r?{color:ok?'#0f766e':'#b45309'}:undefined}>{line}</div></div><button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" disabled={busy} onClick={run}>{busy?'Deneniyor…':'Bağlantıyı test et'}</button></div></div></div>
+}
+
 export default function OperationsInvoices(){
   const [rows,setRows]=useState([]),[custs,setCusts]=useState([]),[cts,setCts]=useState([]),[filter,setFilter]=useState('tümü'),[q,setQ]=useState(''),[modal,setModal]=useState(null),[error,setError]=useState('')
   const load=async()=>{try{const [inv,cs,ct]=await Promise.all([invoices.list(),customers.list(),contracts.list()]);setRows(inv);setCusts(cs);setCts(ct)}catch{setError('Kayıtlar yüklenemedi.')}}
@@ -70,6 +77,7 @@ export default function OperationsInvoices(){
     {error&&<div className="pl-alert" role="alert"><span className="msg">{error}</span></div>}
     <div className="pl-stats"><div className="pl-stat"><div className="lab">Tahsil edilen</div><div className="val teal">{fmtTL(sum(paid))}</div></div><div className="pl-stat"><div className="lab">Bekleyen</div><div className="val">{fmtTL(sum(open))}</div></div><div className="pl-stat"><div className="lab">Geciken</div><div className={`val${late.length?' warn':''}`}>{late.length}</div></div></div>
     <div className="pl-card" style={{marginBottom:20}}><div className="pl-card-b"><div className="pl-row"><div className="grow"><div className="t1">Ödeme hesabı · {PAYMENT_ACCOUNT.bank}</div><div className="t2">{PAYMENT_ACCOUNT.holder} · <code>{PAYMENT_ACCOUNT.iban}</code></div></div><CopyButton text={PAYMENT_ACCOUNT.iban.replace(/\s/g,'')} label="IBAN kopyala"/></div></div></div>
+    <ParasutCheck/>
     <div className="pl-tablewrap"><div className="pl-toolbar"><input type="search" value={q} onChange={(e)=>setQ(e.target.value)} placeholder="Müşteri ara…"/><select value={filter} onChange={(e)=>setFilter(e.target.value)}>{['tümü','bekliyor','gecikti','ödendi'].map((s)=><option key={s}>{s}</option>)}</select><span className="spacer"/><span style={{fontSize:13,color:'#64748b'}}>{shown.length} kayıt</span></div>
       <table className="pl-table"><thead><tr><th>Müşteri</th><th>Tutar</th><th>Fatura tarihi</th><th>Son ödeme</th><th>Durum</th><th>e-Belge</th><th>İşlem</th></tr></thead><tbody>
         {shown.length===0&&<tr><td colSpan={7}><div className="pl-empty">Kayıt yok.</div></td></tr>}

@@ -1,6 +1,6 @@
 // GANU · Paraşüt e-Fatura / e-Arşiv kesimi (Deno Edge Function)
 // ------------------------------------------------------------
-// İstek: POST { invoice_id } — yalnız personel JWT. Tutar, müşteri ve adres istemciden alınmaz;
+// İstek: POST { invoice_id } — yalnız personel JWT. POST { check: true } yalnız bağlantıyı dener (belge kesmez). Tutar, müşteri ve adres istemciden alınmaz;
 // fatura satırı sunucuda einvoice_claim ile tek sahiplikle alınır ve veritabanından okunur.
 // Akış ve kaldığı yerden devam kuralları: ./parasut.ts · ortak çalıştırıcı: ../_shared/einvoice-run.ts
 //
@@ -13,6 +13,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { parasutEnv, runEInvoice } from '../_shared/einvoice-run.ts'
+import { checkConnection } from './parasut.ts'
 
 const SITE = Deno.env.get('SITE_URL') || ''
 let ALLOW_ORIGIN = ''
@@ -47,7 +48,9 @@ Deno.serve(async (req) => {
   const env = parasutEnv(ALLOW_ORIGIN)
   if (!env) return json({ state: 'kapalı', message: 'e-Belge kurulumu tamamlanmadı (Paraşüt anahtarları bekleniyor); işlem yapılmadı.' }, 503)
 
-  const { invoice_id } = await req.json().catch(() => ({}))
+  const body = await req.json().catch(() => ({}))
+  if (body?.check === true) return json(await checkConnection({ fetch, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), env }))
+  const { invoice_id } = body
   if (!UUID.test(String(invoice_id || ''))) return json({ error: 'invoice_id geçersiz' }, 400)
   const url = Deno.env.get('SUPABASE_URL') || '', key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   if (!url || !key) return json({ error: 'SUPABASE_SERVICE_ROLE_KEY eksik' }, 500)

@@ -52,7 +52,7 @@ export function missingFields(c: CustomerRow): string[] {
   return out
 }
 
-export function client(deps: Deps) {
+export function client(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>) {
   let token = '', last = 0
   const pace = async () => { const wait = last + MIN_GAP_MS - Date.now(); if (wait > 0) await deps.sleep(wait); last = Date.now() }
   async function auth() {
@@ -64,15 +64,21 @@ export function client(deps: Deps) {
     })
     const res = await deps.fetch(`${PARASUT_API}/oauth/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body })
     const json = await res.json().catch(() => null)
-    if (!res.ok || !json?.access_token) throw new ParasutError(res.status, `Paraşüt oturumu açılamadı (${res.status}).`)
+    if (!res.ok || !json?.access_token) {
+      // OAuth hata kodu (RFC 6749 §5.2) teşhis için gösterilir; gizli değer içermez.
+      const code = typeof json?.error === 'string' ? json.error : ''
+      const why = code === 'invalid_client' ? ' — Client ID/Secret hatalı' : code === 'invalid_grant' ? ' — e-posta/şifre hatalı ya da iki adımlı doğrulama açık' : ''
+      throw new ParasutError(res.status, `Paraşüt oturumu açılamadı (${res.status}${code ? `, ${code}` : ''})${why}.`)
+    }
     token = json.access_token
     return token
   }
-  async function call(method: string, path: string, body?: unknown): Promise<{ status: number; json: Json }> {
+  // path şirket altındadır (/v4/{company}/...); root=true ise /v4/... (ör. /me).
+  async function call(method: string, path: string, body?: unknown, root = false): Promise<{ status: number; json: Json }> {
     for (let attempt = 0; ; attempt++) {
       const bearer = await auth()
       await pace()
-      const res = await deps.fetch(`${PARASUT_API}/v4/${deps.env.companyId}${path}`, {
+      const res = await deps.fetch(`${PARASUT_API}/v4${root ? '' : `/${deps.env.companyId}`}${path}`, {
         method, headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json', Accept: 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
       })
@@ -86,9 +92,31 @@ export function client(deps: Deps) {
       return { status: res.status, json }
     }
   }
-  return { call }
+  return { call, auth }
 }
 type Client = ReturnType<typeof client>
+
+// Bağlantı testi: fatura kesmeden yalnız okuma (GET) — oturum, şirket erişimi, ürün ve tahsilat hesabı.
+export type CheckResult = { state: 'bağlı' | 'hata'; step?: string; message: string; company?: string; product?: string; account?: string }
+export async function checkConnection(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>): Promise<CheckResult> {
+  const p = client(deps), env = deps.env
+  let step = 'oturum'
+  try {
+    await p.auth()
+    step = 'şirket'
+    const me = await p.call('GET', '/me?include=companies', undefined, true)
+    const company = (me.json?.included || []).find((x) => x?.type === 'companies' && String(x.id) === String(env.companyId))
+    if (!company) return { state: 'hata', step, message: `Bu Paraşüt kullanıcısı ${env.companyId} numaralı şirkete erişemiyor.` }
+    step = 'ürün'
+    const product = env.productId ? await p.call('GET', `/products/${env.productId}`) : null
+    step = 'tahsilat hesabı'
+    const account = env.accountId ? await p.call('GET', `/accounts/${env.accountId}`) : null
+    return { state: 'bağlı', message: 'Paraşüt bağlantısı çalışıyor; hiçbir belge oluşturulmadı.',
+      company: company.attributes?.name, product: product?.json?.data?.attributes?.name, account: account?.json?.data?.attributes?.name }
+  } catch (e) {
+    return { state: 'hata', step, message: e instanceof Error ? e.message : String(e) }
+  }
+}
 
 async function findOrCreateContact(p: Client, c: CustomerRow): Promise<string> {
   const taxId = digits(c.tax_no) || digits(c.tc)
