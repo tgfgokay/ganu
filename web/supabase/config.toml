@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.issue-einvoice]
 verify_jwt = true
+
+[functions.paytr-link]
+verify_jwt = false

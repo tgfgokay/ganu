@@ -43,6 +43,9 @@ jobs:
       - name: Paraşüt e-Belge flow (fake API)
         run: npm run test:einvoice
 
+      - name: PayTR payment link signing and callback decisions
+        run: npm run test:paytr
+
       - name: Build canonical root
         run: npm run build
 
@@ -64,6 +67,7 @@ jobs:
           supabase/functions/admin-gate/index.ts
           supabase/functions/get-file/index.ts
           supabase/functions/issue-einvoice/index.ts
+          supabase/functions/paytr-link/index.ts
           supabase/functions/pos-payment/index.ts
           supabase/functions/purchase-flow/index.ts
           supabase/functions/send-notification/index.ts
