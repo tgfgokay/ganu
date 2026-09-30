@@ -458,11 +458,11 @@ JWT allow, logout/session ve mobil görünüm gözlenmiş PASS olmalıdır.
 destek@parasut.com'dan client_id/secret, 2FA'sız ayrı API kullanıcısı (Satışlar + Kasa/Banka yetkisi).
 
 1. `0011_einvoice_parasut.sql` uygula; `supabase/tests/staging_0011_einvoice_parasut_tests.sql` tüm satırlarda PASS.
-2. Paraşüt'te bir kez: `GET /v4/me?include=companies` → company_id; "Sanal Ofis Hizmeti" ürünü → product_id;
-   tahsilatın düşeceği banka/kasa hesabı → account_id.
+2. Paraşüt kayıtları hazır (30.09.2026, arayüzden): company_id `852734`, ürün "Sanal Ofis Hizmeti" `1077554069`,
+   banka hesabı "İş Bankası TL — Tahsilat" `1000681581` — `_shared/einvoice-run.ts` içinde varsayılan (secret verilirse o geçer).
 3. Secret'lar: `EINVOICE_ENABLED=true SITE_URL=https://ganu.com.tr PARASUT_CLIENT_ID PARASUT_CLIENT_SECRET
-   PARASUT_COMPANY_ID PARASUT_EMAIL PARASUT_PASSWORD PARASUT_PRODUCT_ID PARASUT_ACCOUNT_ID`, ardından
-   `supabase functions deploy issue-einvoice`.
+   PARASUT_EMAIL PARASUT_PASSWORD` (2FA'sız API kullanıcısı), ardından `supabase functions deploy issue-einvoice`
+   (GitHub Actions → supabase-functions-deploy).
 4. İlk canlı deneme tek ve küçük tutarlı gerçek faturayla yapılır: panel → Faturalar → "e-Belge kes".
    Fonksiyon satış faturasının `gross_total` değerini KDV dahil tutarla karşılaştırır; tutmazsa taslağı siler ve
    resmîleştirmez. e-Arşiv iptali yalnız Paraşüt'ün `cancellable_until` süresi içinde mümkündür.
