@@ -33,6 +33,9 @@ export function trackingUrl(carrier,code){const item=CARRIERS.find((x)=>x.v===ca
 export function timeSlots(open='09:00',close='18:00',step=30){const min=(t)=>Number(t.slice(0,2))*60+Number(t.slice(3,5)),pad=(n)=>String(n).padStart(2,'0'),out=[];for(let m=min(open);m<=min(close);m+=step)out.push(`${pad(Math.floor(m/60))}:${pad(m%60)}`);return out}
 export function bookingConflict(list,{date,start,end,exceptId}={}){return list.find((b)=>b.id!==exceptId&&b.date===date&&['talep','onaylandı'].includes(b.status)&&start<b.end&&b.start<end)||null}
 export async function notifyEvent(eventKey,customer,vars={}){return notifications.create({customer_id:customer.id,channel:'panel',event:eventKey,message:JSON.stringify(vars),status:'kayıt',sent_at:new Date().toISOString()})}
+// Gönderi durumu (Kargo + müşteri sayfası ortak; lib/store.js ile aynı sözleşme): teslim/yönlendirmede tarih dolar,
+// "bildirildi" ve "teslim" müşteriye bildirim kaydı düşer.
+export async function setMailStatus(row,status,customer){const patch={status};if((status==='teslim'||status==='yönlendirildi')&&!row.delivered_at)patch.delivered_at=localISO();await mail.update(row.id,patch);if(!customer)return;if(status==='bildirildi')await notifyEvent(row.type==='tebligat'?'tebligat_arrived':'mail_arrived',customer,{tur:row.type,gonderen:row.sender||'—'});else if(status==='teslim')await notifyEvent('delivered',customer,{tarih:patch.delivered_at||''})}
 export const INVOICE_STATUS=['bekliyor','ödendi','gecikti']
 export const EXPENSE_CATEGORIES=['kira','personel','kargo','ofis','vergi','diğer']
 export const PARTNER_STATUS=['başvuru','aktif','pasif']

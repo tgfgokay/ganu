@@ -10,6 +10,7 @@
 import { supabase, usingSupabase } from './supabase.js'
 import { withBase } from '../../base.js'
 import { PACKAGE_PRICES } from '../../catalog.js'
+import { localISO } from './dates.js'
 export { PACKAGE_PRICES }
 export { PACKAGES, PACKAGE_MONTHLY, PACKAGE_CUSTOM, onCatalog, loadCatalog } from '../../catalog.js'
 
@@ -1000,6 +1001,17 @@ export async function logNotification({ customer_id, channel, event, to, message
    Ayarlarda açık kanallara göre şablonu doldurup log'a yazar.
    Sağlayıcı bağlanınca (Netgsm/WhatsApp/Edge Function) burada gerçek
    gönderim yapılır; şimdilik kayıt tutar. */
+// Gönderi durumu (Kargo sayfası ve müşteri sayfası ortak): teslim/yönlendirmede tarih dolar;
+// "bildirildi" ve "teslim" müşteriye bildirim kaydı düşer.
+export async function setMailStatus(row, status, customer) {
+  const patch = { status }
+  if ((status === 'teslim' || status === 'yönlendirildi') && !row.delivered_at) patch.delivered_at = localISO()
+  await mail.update(row.id, patch)
+  if (!customer) return
+  if (status === 'bildirildi') await notifyEvent(row.type === 'tebligat' ? 'tebligat_arrived' : 'mail_arrived', customer, { tur: row.type, gonderen: row.sender || '—' })
+  else if (status === 'teslim') await notifyEvent('delivered', customer, { tarih: patch.delivered_at || '' })
+}
+
 export async function notifyEvent(eventKey, customer, vars = {}) {
   const cfg = getConfig()
   const tpl = getTemplate(eventKey)

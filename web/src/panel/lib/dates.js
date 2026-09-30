@@ -6,3 +6,5 @@ const parse=(iso)=>new Date(`${iso}T00:00:00`)
 export const addDaysISO=(iso,n)=>{const d=parse(iso);d.setDate(d.getDate()+n);return localISO(d)}
 // Bir yıllık dönemin son günü: 29.09.2026 → 28.09.2027
 export const oneYearLaterISO=(iso)=>{const d=parse(iso);d.setFullYear(d.getFullYear()+1);d.setDate(d.getDate()-1);return localISO(d)}
+// iso tarihine bugünden kaç gün var (geçmişse negatif) — İstanbul yerel takvim günü.
+export const daysUntil=(iso)=>Math.round((parse(iso)-parse(localISO()))/86400000)

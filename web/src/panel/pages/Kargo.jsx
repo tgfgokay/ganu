@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
-import { mail, customers, withCustomerNames, notifyEvent, fileToStoredUrl, trackingUrl, MAIL_TYPES, MAIL_STATUS, CARRIERS } from '../lib/store.js'
+import { useSearchParams } from 'react-router-dom'
+import { mail, customers, withCustomerNames, notifyEvent, setMailStatus, fileToStoredUrl, trackingUrl, MAIL_TYPES, MAIL_STATUS, CARRIERS } from '../lib/store.js'
 import { SecureImage } from '../components/SecureAsset.jsx'
 import { Modal, StatusBadge, TypeBadge, fmtDate } from './_ui.jsx'
 import { localISO } from '../lib/dates.js'
@@ -23,12 +24,20 @@ export default function Kargo() {
   const [modal, setModal] = useState(null) // {mode,data}
   const [lightbox, setLightbox] = useState(null) // photo url
 
+  const [params, setParams] = useSearchParams()
   const load = async () => {
     const [ml, cs] = await Promise.all([mail.list(), customers.list()])
     setRows(await withCustomerNames(ml))
     setCusts(cs)
   }
   useEffect(() => { load() }, [])
+  // Operasyon sayfası (?yeni=1) ya da müşteri sayfası (?musteri=<id>) "yeni giriş" formunu doğrudan açar.
+  useEffect(() => {
+    const id = params.get('musteri'), yeni = params.get('yeni')
+    if (!custs.length || (!id && !yeni)) return
+    setModal({ mode: 'new', data: { ...emptyForm(), ...(id && custs.some((c) => c.id === id) ? { customer_id: id } : {}) } })
+    const next = new URLSearchParams(params); next.delete('musteri'); next.delete('yeni'); setParams(next, { replace: true })
+  }, [custs, params, setParams])
 
   const filtered = useMemo(() => rows.filter((r) => {
     if (fType && r.type !== fType) return false
@@ -59,24 +68,7 @@ export default function Kargo() {
   }
   const del = async (id) => { if (confirm('Bu gönderi silinsin mi?')) { await mail.remove(id); load() } }
 
-  const quickStatus = async (r, status) => {
-    const patch = { status }
-    // teslim/yönlendirme geçişinde tarih otomatik dolsun
-    if ((status === 'teslim' || status === 'yönlendirildi') && !r.delivered_at) {
-      patch.delivered_at = localISO()
-    }
-    await mail.update(r.id, patch)
-    // müşteriye bildirim kaydı düş (kargo geldi / tebligat / teslim edildi)
-    if (r.customer) {
-      if (status === 'bildirildi') {
-        const ev = r.type === 'tebligat' ? 'tebligat_arrived' : 'mail_arrived'
-        await notifyEvent(ev, r.customer, { tur: r.type, gonderen: r.sender || '—' })
-      } else if (status === 'teslim') {
-        await notifyEvent('delivered', r.customer, { tarih: patch.delivered_at || '' })
-      }
-    }
-    load()
-  }
+  const quickStatus = async (r, status) => { await setMailStatus(r, status, r.customer); load() }
 
   return (
     <div>
