@@ -2,7 +2,7 @@
 // ------------------------------------------------------------
 // İstek: POST { invoice_id } — yalnız personel JWT. Tutar, müşteri ve adres istemciden alınmaz;
 // fatura satırı sunucuda einvoice_claim ile tek sahiplikle alınır ve veritabanından okunur.
-// Akış ve kaldığı yerden devam kuralları: ./parasut.ts
+// Akış ve kaldığı yerden devam kuralları: ./parasut.ts · ortak çalıştırıcı: ../_shared/einvoice-run.ts
 //
 // Fail-closed: EINVOICE_ENABLED=true ve tüm Paraşüt secret'ları yoksa hiçbir dış çağrı yapılmaz.
 //   supabase secrets set EINVOICE_ENABLED=true SITE_URL=https://ganu.com.tr
@@ -12,7 +12,7 @@
 // Dağıtım: supabase functions deploy issue-einvoice
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { processInvoice, type CustomerRow, type Env, type InvoiceRow } from './parasut.ts'
+import { parasutEnv, runEInvoice } from '../_shared/einvoice-run.ts'
 
 const SITE = Deno.env.get('SITE_URL') || ''
 let ALLOW_ORIGIN = ''
@@ -35,17 +35,6 @@ async function isStaffRequest(req: Request): Promise<boolean> {
   return !error && data === true
 }
 
-function parasutEnv(): Env | null {
-  const get = (k: string) => (Deno.env.get(k) || '').trim()
-  const env: Env = {
-    clientId: get('PARASUT_CLIENT_ID'), clientSecret: get('PARASUT_CLIENT_SECRET'), companyId: get('PARASUT_COMPANY_ID'),
-    username: get('PARASUT_EMAIL'), password: get('PARASUT_PASSWORD'),
-    productId: get('PARASUT_PRODUCT_ID') || undefined, accountId: get('PARASUT_ACCOUNT_ID') || undefined, siteUrl: ALLOW_ORIGIN,
-  }
-  if (get('EINVOICE_ENABLED') !== 'true' || !env.clientId || !env.clientSecret || !env.companyId || !env.username || !env.password) return null
-  return env
-}
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 Deno.serve(async (req) => {
@@ -55,45 +44,13 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json({ error: 'POST kullanın' }, 405)
   if (!(await isStaffRequest(req))) return json({ error: 'Personel yetkisi gerekli' }, 403)
-  const env = parasutEnv()
+  const env = parasutEnv(ALLOW_ORIGIN)
   if (!env) return json({ state: 'kapalı', message: 'e-Belge kurulumu tamamlanmadı (Paraşüt anahtarları bekleniyor); işlem yapılmadı.' }, 503)
 
   const { invoice_id } = await req.json().catch(() => ({}))
   if (!UUID.test(String(invoice_id || ''))) return json({ error: 'invoice_id geçersiz' }, 400)
   const url = Deno.env.get('SUPABASE_URL') || '', key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   if (!url || !key) return json({ error: 'SUPABASE_SERVICE_ROLE_KEY eksik' }, 500)
-  const db = createClient(url, key, { auth: { persistSession: false } })
-
-  const claimed = await db.rpc('einvoice_claim', { p_invoice: invoice_id })
-  if (claimed.error) return json({ error: 'Fatura alınamadı' }, 500)
-  const inv = (claimed.data || [])[0] as InvoiceRow | undefined
-  if (!inv) {
-    const { data } = await db.from('invoices').select('einvoice_status,einvoice_no,einvoice_pdf').eq('id', invoice_id).maybeSingle()
-    return json({ state: data?.einvoice_status || 'yok', einvoice_no: data?.einvoice_no, pdf: data?.einvoice_pdf,
-      message: data ? 'Fatura zaten kesilmiş, elle işaretlenmiş ya da şu an işleniyor.' : 'Fatura bulunamadı.' }, 409)
-  }
-  const { data: customer, error } = await db.from('customers').select('*').eq('id', inv.customer_id).single()
-  if (error || !customer) {
-    await db.from('invoices').update({ einvoice_status: 'başarısız', einvoice_error: 'Müşteri bulunamadı.' }).eq('id', inv.id)
-    return json({ state: 'başarısız', message: 'Müşteri bulunamadı.' }, 422)
-  }
-
-  const store = {
-    async patchInvoice(id: string, patch: Record<string, unknown>) {
-      const { error } = await db.from('invoices').update(patch).eq('id', id); if (error) throw new Error(`Fatura kaydı güncellenemedi: ${error.message}`)
-    },
-    async setContact(customerId: string, contactId: string) {
-      const { error } = await db.from('customers').update({ parasut_contact_id: contactId }).eq('id', customerId); if (error) throw new Error(`Cari kaydı güncellenemedi: ${error.message}`)
-    },
-    async savePdf(customerId: string, invoiceId: string, bytes: Uint8Array) {
-      const path = `customers/${customerId}/efatura-${invoiceId}.pdf`
-      const { error } = await db.storage.from('secure-docs').upload(path, bytes, { contentType: 'application/pdf', upsert: true })
-      if (error) throw new Error(`PDF depolanamadı: ${error.message}`)
-      return `secure:${path}`
-    },
-  }
-  const result = await processInvoice(inv, customer as CustomerRow, {
-    fetch, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), store, env,
-  })
-  return json(result, result.state === 'başarısız' ? 502 : 200)
+  const out = await runEInvoice(createClient(url, key, { auth: { persistSession: false } }), invoice_id, env)
+  return json(out.body, out.status)
 })

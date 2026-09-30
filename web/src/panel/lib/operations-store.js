@@ -45,6 +45,8 @@ export const PROVIDER_STATUS=Object.freeze({paytr:'Kurulum bekliyor',efatura:'Ku
 // Sunucu (issue-einvoice) EINVOICE_ENABLED ve Paraşüt secret'ları yoksa 503 döner; panel dış servise doğrudan yazmaz.
 export async function issueEInvoice(invoiceId){requireCloud();const {data,error}=await supabase.functions.invoke('issue-einvoice',{body:{invoice_id:invoiceId}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'başarısız',message:'e-Belge servisine ulaşılamadı.'}}
 export const PAYMENT_METHODS=['havale','kart','nakit','diğer']
+// PayTR Link API: tutar DB'den; kurulum yoksa sunucu 503 döner.
+export async function createPaymentLink(invoiceId){requireCloud();const {data,error}=await supabase.functions.invoke('paytr-link',{body:{invoice_id:invoiceId}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'başarısız',message:'PayTR link servisine ulaşılamadı.'}}
 export function getConfig(){return {real_send:false,efatura_enabled:false,pos_enabled:false,providers:PROVIDER_STATUS}}
 export function setConfig(){throw new Error('Dış servis ayarları bu panelden açılamaz.')}
 export const EFATURA_PROVIDERS=[]

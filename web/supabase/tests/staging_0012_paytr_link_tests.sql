@@ -1,0 +1,25 @@
+create temp table _ganu_0012_results(name text,expected text,actual text,result text);
+do $$ declare b boolean;s text;cid uuid;iid uuid;jid uuid;
+begin
+ b:=has_function_privilege('service_role','public.paytr_mark_paid(uuid,text,numeric,date)','EXECUTE');
+ insert into _ganu_0012_results values('mark_paid yalnız service-role','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ b:=has_function_privilege('authenticated','public.paytr_mark_paid(uuid,text,numeric,date)','EXECUTE') or has_function_privilege('anon','public.paytr_mark_paid(uuid,text,numeric,date)','EXECUTE');
+ insert into _ganu_0012_results values('mark_paid anon/auth kapalı','false',b::text,case when not b then 'PASS' else 'FAIL' end);
+ insert into public.customers(title,status) values('TEST_0012','aday') returning id into cid;
+ insert into public.invoices(customer_id,amount) values(cid,1199) returning id into iid;
+ s:=public.paytr_mark_paid(iid,'OID0012A',1199,current_date);
+ insert into _ganu_0012_results values('ilk bildirim ödendi yapar','ödendi',s,case when s='ödendi' then 'PASS' else 'FAIL' end);
+ select status='ödendi' and payment_method='kart' and paytr_merchant_oid='OID0012A' into b from public.invoices where id=iid;
+ insert into _ganu_0012_results values('fatura kart ile ödendi kaydı','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ s:=public.paytr_mark_paid(iid,'OID0012A',1199,current_date);
+ insert into _ganu_0012_results values('aynı bildirim tekrarı','tekrar',s,case when s='tekrar' then 'PASS' else 'FAIL' end);
+ s:=public.paytr_mark_paid(iid,'OID0012B',1199,current_date);
+ insert into _ganu_0012_results values('ikinci ödeme incelemeye düşer','inceleme',s,case when s='inceleme' then 'PASS' else 'FAIL' end);
+ select payment_review like '%OID0012B%' into b from public.invoices where id=iid;
+ insert into _ganu_0012_results values('çift tahsilat notu yazılır','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ insert into public.invoices(customer_id,amount,status,paid_date,payment_method) values(cid,1199,'ödendi',current_date,'havale') returning id into jid;
+ s:=public.paytr_mark_paid(jid,'OID0012C',1199,current_date);
+ insert into _ganu_0012_results values('havaleyle ödenmişe kart ödemesi incelemeye','inceleme',s,case when s='inceleme' then 'PASS' else 'FAIL' end);
+ delete from public.customers where id=cid;
+end $$;
+select * from _ganu_0012_results order by name;

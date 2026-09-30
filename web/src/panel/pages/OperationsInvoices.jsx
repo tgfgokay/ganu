@@ -1,6 +1,6 @@
 import { useEffect,useMemo,useState } from 'react'
 import { Link } from 'react-router-dom'
-import { invoices,customers,contracts,invStatus,issueEInvoice,PAYMENT_METHODS } from '../lib/operations-store.js'
+import { invoices,customers,contracts,invStatus,issueEInvoice,createPaymentLink,PAYMENT_METHODS } from '../lib/operations-store.js'
 import { SecureLink } from '../components/SecureAsset.jsx'
 import { PAYMENT_ACCOUNT,paymentMessage } from '../lib/company.js'
 import { Modal,fmtDate,fmtTL } from './_ui.jsx'
@@ -17,6 +17,9 @@ export const markPaid=(row)=>invoices.update(row.id,{status:'ödendi',paid_date:
 
 export function CopyButton({text,label}){const [done,setDone]=useState(false);const copy=async()=>{try{await navigator.clipboard.writeText(text);setDone(true);setTimeout(()=>setDone(false),1800)}catch{prompt('Kopyalayın:',text)}};return <button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" onClick={copy}>{done?'✓ Kopyalandı':label}</button>}
 export const PaymentMessageButton=({row,customer})=><CopyButton text={paymentMessage(row,customer)} label="Ödeme mesajı"/>
+// PayTR'de faturaya özel kart linki üretir; ödeme bildirimi faturayı kendiliğinden "ödendi" yapar.
+export function PaymentLinkButton({row,onDone}){const [busy,setBusy]=useState(false);if(row.payment_link)return null;const run=async()=>{setBusy(true);try{const r=await createPaymentLink(row.id);alert(r?.link?`Kart linki hazır:\n${r.link}\n\n"Ödeme mesajı" artık linki içerir.`:(r?.message||'Link oluşturulamadı.'))}finally{setBusy(false);onDone?.()}};return <button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" disabled={busy} onClick={run}>{busy?'Oluşturuluyor…':'Kart linki'}</button>}
+export const ReviewNote=({row})=>row.payment_review?<div className="sub" style={{color:'#b45309'}} title={row.payment_review}>⚠ ödeme incelemesi: {row.payment_review}</div>:null
 
 // Paraşüt'te resmî e-Belge keser (geri alınamaz). Kesilmiş ama PDF'i gelmemiş faturada yalnız PDF'i alır.
 export function EDocCell({row,onDone}){
@@ -70,7 +73,7 @@ export default function OperationsInvoices(){
     <div className="pl-tablewrap"><div className="pl-toolbar"><input type="search" value={q} onChange={(e)=>setQ(e.target.value)} placeholder="Müşteri ara…"/><select value={filter} onChange={(e)=>setFilter(e.target.value)}>{['tümü','bekliyor','gecikti','ödendi'].map((s)=><option key={s}>{s}</option>)}</select><span className="spacer"/><span style={{fontSize:13,color:'#64748b'}}>{shown.length} kayıt</span></div>
       <table className="pl-table"><thead><tr><th>Müşteri</th><th>Tutar</th><th>Fatura tarihi</th><th>Son ödeme</th><th>Durum</th><th>e-Belge</th><th>İşlem</th></tr></thead><tbody>
         {shown.length===0&&<tr><td colSpan={7}><div className="pl-empty">Kayıt yok.</div></td></tr>}
-        {shown.map((r)=><tr key={r.id}><td>{byId[r.customer_id]?<Link to={`/panel/musteriler/${r.customer_id}`} className="strong">{byId[r.customer_id].title}</Link>:'—'}{r.note&&<div className="sub">{r.note}</div>}{r.payment_link&&invStatus(r)!=='ödendi'&&<div className="sub">kart linki eklendi</div>}</td><td className="pl-num">{fmtTL(r.amount)}</td><td className="pl-num">{fmtDate(r.issue_date)}</td><td className="pl-num">{fmtDate(r.due_date)}</td><td><InvoiceBadge row={r}/>{r.paid_date&&<div className="sub">{fmtDate(r.paid_date)}</div>}</td><td><EDocCell row={r} onDone={load}/></td><td><div className="pl-actions">{invStatus(r)!=='ödendi'&&<><PaymentMessageButton row={r} customer={byId[r.customer_id]}/><button className="pl-btn pl-btn-teal pl-btn-sm" onClick={async()=>{await markPaid(r);load()}}>Ödendi</button></>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({mode:'edit',data:{...r}})}>Düzenle</button>{!r.parasut_invoice_id&&<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(r)}>Sil</button>}</div></td></tr>)}
+        {shown.map((r)=><tr key={r.id}><td>{byId[r.customer_id]?<Link to={`/panel/musteriler/${r.customer_id}`} className="strong">{byId[r.customer_id].title}</Link>:'—'}{r.note&&<div className="sub">{r.note}</div>}{r.payment_link&&invStatus(r)!=='ödendi'&&<div className="sub">kart linki eklendi</div>}<ReviewNote row={r}/></td><td className="pl-num">{fmtTL(r.amount)}</td><td className="pl-num">{fmtDate(r.issue_date)}</td><td className="pl-num">{fmtDate(r.due_date)}</td><td><InvoiceBadge row={r}/>{r.paid_date&&<div className="sub">{fmtDate(r.paid_date)}</div>}</td><td><EDocCell row={r} onDone={load}/></td><td><div className="pl-actions">{invStatus(r)!=='ödendi'&&<><PaymentLinkButton row={r} onDone={load}/><PaymentMessageButton row={r} customer={byId[r.customer_id]}/><button className="pl-btn pl-btn-teal pl-btn-sm" onClick={async()=>{await markPaid(r);load()}}>Ödendi</button></>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({mode:'edit',data:{...r}})}>Düzenle</button>{!r.parasut_invoice_id&&<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(r)}>Sil</button>}</div></td></tr>)}
       </tbody></table></div>
     {modal&&<InvoiceForm title={modal.mode==='new'?'Yeni fatura kaydı':'Fatura kaydını düzenle'} initial={modal.data} custs={custs} cts={cts} onClose={()=>setModal(null)} onSave={save}/>}
   </div>

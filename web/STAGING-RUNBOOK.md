@@ -26,6 +26,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 10. `supabase/migrations/0009_legal_consent_evidence.sql` — exact legal metin sürümü + immutable ön bilgilendirme/erken ifa kanıtı + satış proof gate
 11. `supabase/migrations/0010_panel_operations.sql` — müşteri adres/il/ilçe, sözleşme faturalama dönemi, fatura↔sözleşme bağı
 12. `supabase/migrations/0011_einvoice_parasut.sql` — Paraşüt e-Belge iş durumu, tek sahiplik `einvoice_claim` (service-role)
+13. `supabase/migrations/0012_paytr_link.sql` — PayTR link/ödeme referansı, idempotent `paytr_mark_paid` (service-role)
 
 ```bash
 set -euo pipefail
@@ -41,8 +42,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0008_pos_reconciliation
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0009_legal_consent_evidence.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0010_panel_operations.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0011_einvoice_parasut.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0012_paytr_link.sql
 ```
-`supabase db push` artık boş hedefte 0000→0011 sırasını eksiksiz görür. `0000`,
+`supabase db push` artık boş hedefte 0000→0012 sırasını eksiksiz görür. `0000`,
 canonical `supabase-schema.sql` dosyasının byte-exact kopyasıdır; `scripts/staging-readiness.sh`
 iki dosyanın ayrışmasını fail-closed engeller. Şema değişikliğinde ikisi aynı committe güncellenmelidir.
 
@@ -184,6 +186,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/rollbacks/0012_paytr_link.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0011_einvoice_parasut.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0010_panel_operations.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0009_legal_consent_evidence.down.sql
@@ -464,3 +467,17 @@ destek@parasut.com'dan client_id/secret, 2FA'sız ayrı API kullanıcısı (Sat�
    Fonksiyon satış faturasının `gross_total` değerini KDV dahil tutarla karşılaştırır; tutmazsa taslağı siler ve
    resmîleştirmez. e-Arşiv iptali yalnız Paraşüt'ün `cancellable_until` süresi içinde mümkündür.
 5. Yerel doğrulama: `npm run test:einvoice` (sahte Paraşüt sunucusu, ağ yok).
+
+## 13) PayTR Linkle Ödeme (0012 + paytr-link)
+
+Ön koşul: PayTR üye iş yeri onayı + Linkle Ödeme yetkisi + **Link API onayı** (PayTR ayrıca onaylar).
+
+1. `0012_paytr_link.sql` uygula; `supabase/tests/staging_0012_paytr_link_tests.sql` tüm satırlarda PASS.
+2. Secret'lar: `PAYTR_LINK_ENABLED=true PAYTR_MERCHANT_ID PAYTR_MERCHANT_KEY PAYTR_MERCHANT_SALT` (Mağaza Paneli >
+   Destek & Kurulum > Entegrasyon Bilgileri). Tek çekim için `PAYTR_MAX_INSTALLMENT=1` (varsayılan).
+   Test ödemeleri için geçici `PAYTR_ACCEPT_TEST=true`; canlıda kaldırılır. Ödeme gelince e-Belge için `EINVOICE_AUTO=true` (§12 kurulu olmalı).
+3. `supabase functions deploy paytr-link --no-verify-jwt`. Bildirim adresi linkle birlikte gönderilir:
+   `https://<ref>.supabase.co/functions/v1/paytr-link` (panel Bildirim URL ayarından bağımsız).
+4. Test: panel → Faturalar → "Kart linki" → test kartıyla öde → fatura "ödendi (kart)"; tekrar bildirim ikinci kez işlenmez,
+   tutar uyuşmazlığı ve ikinci ödeme `payment_review` alanına düşer.
+5. Yerel doğrulama: `npm run test:paytr` (imza ve karar mantığı, ağ yok).
