@@ -483,3 +483,18 @@ destek@parasut.com'dan client_id/secret, 2FA'sız ayrı API kullanıcısı (Sat�
 4. Test: panel → Faturalar → "Kart linki" → test kartıyla öde → fatura "ödendi (kart)"; tekrar bildirim ikinci kez işlenmez,
    tutar uyuşmazlığı ve ikinci ödeme `payment_review` alanına düşer.
 5. Yerel doğrulama: `npm run test:paytr` (imza ve karar mantığı, ağ yok).
+
+## 14) Gece veritabanı yedeği (supabase-db-backup)
+
+Free planda otomatik yedek/PITR yok. `.github/workflows/supabase-db-backup.yml` her gece 03:30'da (İstanbul) `public` şemasının tam yedeğini alır, AES-256 ile şifreler ve 30 gün saklar. Yüklenen PDF'ler (Storage) yedeğe dahil değildir.
+
+1. Kurulum (bir kez) — repository secret'ları:
+   - `SUPABASE_DB_URL`: Supabase → Project Settings → Database → Connection string → **Session pooler** URI (şifre dahil). Doğrudan bağlantı IPv6'dır, GitHub runner'ından ulaşılmaz.
+   - `BACKUP_PASSPHRASE`: en az 32 karakter rastgele parola; parola kasasında saklanır. Kaybolursa yedek açılamaz.
+   İkisi de yoksa iş uyarı verip atlar; biri eksikse ya da parola kısaysa başarısız olur.
+2. İlk deneme: Actions → supabase-db-backup → Run workflow → artifact `ganu-db-YYYY-MM-DD` oluşmalı.
+3. Geri yükleme (önce boş bir test projesine):
+   `gpg -d ganu-db-YYYY-MM-DD.dump.gpg > db.dump` → `pg_restore --list db.dump` ile içeriği kontrol et →
+   `pg_restore --clean --if-exists --no-owner --no-privileges -d "<hedef veritabanı URI>" db.dump`.
+   Canlı projeye geri yükleme yalnız veri kaybı doğrulandıktan sonra ve öncesinde yeni bir yedek alınarak yapılır.
+4. Ayda bir: son artifact'in varlığı; yılda en az bir kez test projesine geri yükleme denemesi.
