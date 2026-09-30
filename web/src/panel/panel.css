@@ -141,6 +141,11 @@
 
 .pl-alert .pl-linkbtn { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--navy); text-decoration: underline; cursor: pointer; }
 
+.pl-row.pl-row-urgent { box-shadow: inset 3px 0 0 var(--danger); background: #fff7f7; }
+.pl-table tr.pl-tr-urgent td { background: #fff7f7; }
+.pl-table tr.pl-tr-urgent td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+.pl-who { background: #ecfeff; border: 1px solid #a5f3fc; color: #155e75; border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+
 /* ---------- LIST ROWS ---------- */
 .pl-row { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 10px; }
 .pl-row:hover { background: #f7f9fb; }
