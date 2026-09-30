@@ -6,8 +6,8 @@ const env = { clientId: 'cid', clientSecret: 'sec', username: 'api@ganu.com.tr',
 const customer = (over = {}) => ({ id: 'c1', title: 'Aydın Yazılım Ltd. Şti.', email: 'muhasebe@aydin.test', tax_no: '1234567890', tc: '', tax_office: 'Beykoz', address: 'Kavacık Mah. Ekinciler Cad. No:19', city: 'İstanbul', district: 'Beykoz', parasut_contact_id: null, ...over })
 const invoice = (over = {}) => ({ id: '0b1c2d3e-0000-4000-8000-000000000001', customer_id: 'c1', amount: 1199, issue_date: '2026-09-29', due_date: '2026-10-04', status: 'ödendi', paid_date: '2026-09-29', note: 'Ekim 2026', payment_method: 'havale', parasut_invoice_id: null, parasut_payment_at: null, einvoice_kind: null, einvoice_job_id: null, einvoice_status: 'işleniyor', ...over })
 
-function fakeParasut({ inbox = null, grossDelta = 0, jobPendingPolls = 1, pdf204 = 1, rateLimitOnce = false, activeDocFromStart = false } = {}) {
-  const calls = [], state = { contacts: 0, invoices: 0, jobs: 0, deleted: [], jobPolls: 0, pdfPolls: 0, doc: activeDocFromStart ? { id: 'ea1', type: 'e_archives' } : null, limited: false, bodies: {} }
+function fakeParasut({ inbox = null, grossDelta = 0, jobPendingPolls = 1, pdf204 = 1, rateLimitOnce = false, activeDocFromStart = false, postLostOnce = false, existing = [], paidInParasut = false } = {}) {
+  const calls = [], state = { contacts: 0, invoices: 0, jobs: 0, deleted: [], jobPolls: 0, pdfPolls: 0, doc: activeDocFromStart ? { id: 'ea1', type: 'e_archives' } : null, limited: false, bodies: {}, list: [...existing], lost: false }
   const ok = (body, status = 200) => new Response(body === null ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   async function fetch(url, init = {}) {
     const method = init.method || 'GET', u = new URL(url), path = u.pathname.replace('/v4/777', '') + u.search
@@ -19,16 +19,22 @@ function fakeParasut({ inbox = null, grossDelta = 0, jobPendingPolls = 1, pdf204
     if (rateLimitOnce && !state.limited) { state.limited = true; return ok({ errors: [{ title: 'Too Many Requests' }] }, 429) }
     if (method === 'GET' && u.pathname.endsWith('/contacts')) return ok({ data: [] })
     if (method === 'POST' && u.pathname.endsWith('/contacts')) { state.contacts++; state.bodies.contact = body; return ok({ data: { id: 'k1', type: 'contacts' } }, 201) }
+    if (method === 'GET' && u.pathname.endsWith('/sales_invoices')) {
+      assert.equal(u.searchParams.get('filter[contact_id]'), 'k1'); assert.equal(u.searchParams.get('filter[issue_date]'), '2026-09-29')
+      return ok({ data: state.list })
+    }
     if (method === 'POST' && u.pathname.endsWith('/sales_invoices')) {
       state.invoices++; state.bodies.invoice = body
       const d = body.data.relationships.details.data[0].attributes
       const gross = Math.round(d.unit_price * (1 + d.vat_rate / 100) * 100) / 100 + grossDelta
+      state.list.push({ id: `s${state.invoices}`, type: 'sales_invoices', attributes: { description: body.data.attributes.description, gross_total: String(gross) } })
+      if (postLostOnce && !state.lost) { state.lost = true; throw new TypeError('fetch failed') } // Paraşüt açtı, yanıt kayboldu
       return ok({ data: { id: `s${state.invoices}`, type: 'sales_invoices', attributes: { gross_total: String(gross), net_total: String(d.unit_price) } } }, 201)
     }
-    if (method === 'DELETE' && /\/sales_invoices\/s\d+$/.test(u.pathname)) { state.deleted.push(u.pathname.split('/').pop()); return ok(null, 204) }
+    if (method === 'DELETE' && /\/sales_invoices\/s\d+$/.test(u.pathname)) { const id = u.pathname.split('/').pop(); state.deleted.push(id); state.list = state.list.filter((x) => x.id !== id); return ok(null, 204) }
     if (method === 'POST' && /\/sales_invoices\/s\d+\/payments$/.test(u.pathname)) { state.bodies.payment = body; return ok({ data: { id: 'pay1', type: 'payments' } }, 201) }
     if (method === 'GET' && /\/sales_invoices\/s\d+$/.test(u.pathname)) {
-      assert.equal(u.searchParams.get('include'), 'active_e_document')
+      if (u.searchParams.get('include') !== 'active_e_document') return ok({ data: { id: 's1', type: 'sales_invoices', attributes: { remaining: state.bodies.payment || paidInParasut ? 0 : 1199 } } })
       if (!state.doc) return ok({ data: { id: 's1', type: 'sales_invoices', relationships: { active_e_document: { data: null } } } })
       return ok({ data: { id: 's1', type: 'sales_invoices', relationships: { active_e_document: { data: state.doc } } }, included: [{ id: state.doc.id, type: state.doc.type, attributes: { uuid: 'uuid-1', invoice_number: 'GAN2026000000001' } }] })
     }
@@ -143,6 +149,29 @@ await run('PDF gecikirse: kesildi kalır, PDF sonra alınır', async () => {
   assert.equal(r.state, 'kesildi'); assert.equal(r.pdf, null); assert.equal(s.last().einvoice_pdf, undefined)
 })
 
+await run('zaman aşımı: Paraşüt faturayı açtı ama yanıt kayboldu → tekrar denemede aynı fatura kullanılır, ikinci fatura açılmaz', async () => {
+  const f = fakeParasut({ postLostOnce: true }), s1 = fakeStore()
+  const r1 = await processInvoice(invoice(), customer(), deps(f, s1))
+  assert.equal(r1.state, 'başarısız'); assert.equal(f.state.invoices, 1); assert.equal(s1.last().parasut_invoice_id, undefined)
+  const s2 = fakeStore(), r2 = await processInvoice(invoice(), customer({ parasut_contact_id: 'k1' }), deps(f, s2))
+  assert.equal(r2.state, 'kesildi'); assert.equal(f.state.invoices, 1); assert.equal(s2.last().parasut_invoice_id, 's1')
+})
+await run('kurtarma: aynı işaretli birden fazla aday → otomatik seçim yok, yeni fatura açılmaz', async () => {
+  const cand = (id) => ({ id, type: 'sales_invoices', attributes: { description: 'Ekim 2026 · GANU 0b1c2d3e', gross_total: '1199.0' } })
+  const f = fakeParasut({ existing: [cand('s7'), cand('s8')] }), s = fakeStore()
+  const r = await processInvoice(invoice(), customer({ parasut_contact_id: 'k1' }), deps(f, s))
+  assert.equal(r.state, 'başarısız'); assert.match(r.message, /2 satış faturası adayı var \(s7, s8\)/); assert.equal(f.state.invoices, 0)
+})
+await run('kurtarma: işaret tutuyor ama tutar tutmuyor → otomatik seçim yok', async () => {
+  const f = fakeParasut({ existing: [{ id: 's9', type: 'sales_invoices', attributes: { description: 'x · GANU 0b1c2d3e', gross_total: '500.0' } }] })
+  const r = await processInvoice(invoice(), customer({ parasut_contact_id: 'k1' }), deps(f, fakeStore()))
+  assert.equal(r.state, 'başarısız'); assert.match(r.message, /otomatik seçilmedi/); assert.equal(f.state.invoices, 0)
+})
+await run('tahsilat Paraşüt\'te zaten girilmiş (kalan 0) → ikinci tahsilat girilmez, kayıt güncellenir', async () => {
+  const f = fakeParasut({ paidInParasut: true }), s = fakeStore()
+  const r = await processInvoice(invoice({ parasut_invoice_id: 's1' }), customer({ parasut_contact_id: 'k1' }), deps(f, s))
+  assert.equal(r.state, 'kesildi'); assert.equal(f.state.bodies.payment, undefined); assert.ok(s.last().parasut_payment_at)
+})
 function fakeCheck({ tokenError = null, companies = [{ id: '777', type: 'companies', attributes: { name: 'GANU OFİS HİZMETLERİ LTD. ŞTİ.' } }] } = {}) {
   const calls = []
   const ok = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
