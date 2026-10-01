@@ -49,6 +49,8 @@ export const PROVIDER_STATUS=Object.freeze({paytr:'Kurulum bekliyor',efatura:'Ku
 export async function issueEInvoice(invoiceId){requireCloud();const {data,error}=await supabase.functions.invoke('issue-einvoice',{body:{invoice_id:invoiceId}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'başarısız',message:'e-Belge servisine ulaşılamadı.'}}
 // Paraşüt bağlantı testi: belge kesmez, yalnız okur.
 export async function checkParasut(){requireCloud();const {data,error}=await supabase.functions.invoke('issue-einvoice',{body:{check:true}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'hata',message:'e-Belge servisine ulaşılamadı.'}}
+// İşlem kaydı (0013): müşterinin son değişiklikleri. Tablo yoksa (migration uygulanmadıysa) boş döner.
+export async function customerHistory(customerId,limit=20){if(!usingSupabase)return [];const {data,error}=await supabase.from('audit_log').select('id,at,actor_email,table_name,action,changes').eq('customer_id',customerId).order('at',{ascending:false}).limit(limit);return error?[]:(data||[])}
 export const PAYMENT_METHODS=['havale','kart','nakit','diğer']
 // PayTR Link API: tutar DB'den; kurulum yoksa sunucu 503 döner.
 export async function createPaymentLink(invoiceId){requireCloud();const {data,error}=await supabase.functions.invoke('paytr-link',{body:{invoice_id:invoiceId}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{state:'başarısız',message:'PayTR link servisine ulaşılamadı.'}}

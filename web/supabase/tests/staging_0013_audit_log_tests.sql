@@ -1,0 +1,31 @@
+-- 0013 testleri. Not: audit_log değiştirilemez olduğu için test müşterisinin (TEST_0013) kayıtları audit_log'da kalır.
+create temp table _ganu_0013_results(name text,expected text,actual text,result text);
+do $$ declare b boolean;cid uuid;n int;c jsonb;
+begin
+ b:=has_table_privilege('authenticated','public.audit_log','SELECT');
+ insert into _ganu_0013_results values('personel okuyabilir (grant)','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ b:=has_table_privilege('authenticated','public.audit_log','INSERT') or has_table_privilege('authenticated','public.audit_log','UPDATE') or has_table_privilege('authenticated','public.audit_log','DELETE') or has_table_privilege('anon','public.audit_log','SELECT');
+ insert into _ganu_0013_results values('anon okuyamaz, kimse yazamaz','false',b::text,case when not b then 'PASS' else 'FAIL' end);
+ b:=has_function_privilege('authenticated','public.audit_row()','EXECUTE') or has_function_privilege('anon','public.audit_row()','EXECUTE');
+ insert into _ganu_0013_results values('audit_row doğrudan çağrılamaz','false',b::text,case when not b then 'PASS' else 'FAIL' end);
+ insert into public.customers(title,status,access_code) values('TEST_0013','aday','GIZLI0013') returning id into cid;
+ select count(*) into n from public.audit_log where customer_id=cid and action='INSERT' and table_name='customers';
+ insert into _ganu_0013_results values('ekleme kaydedildi','1',n::text,case when n=1 then 'PASS' else 'FAIL' end);
+ select changes into c from public.audit_log where customer_id=cid and action='INSERT' order by id desc limit 1;
+ insert into _ganu_0013_results values('erişim kodu kayda yazılmaz','false',(c ? 'access_code')::text,case when not (c ? 'access_code') then 'PASS' else 'FAIL' end);
+ update public.customers set title='TEST_0013_B' where id=cid;
+ select changes into c from public.audit_log where customer_id=cid and action='UPDATE' order by id desc limit 1;
+ b:= (c->'title'->>0)='TEST_0013' and (c->'title'->>1)='TEST_0013_B' and not (c ? 'status');
+ insert into _ganu_0013_results values('güncellemede yalnız değişen alan (eski,yeni)','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ update public.customers set title='TEST_0013_B' where id=cid;
+ select count(*) into n from public.audit_log where customer_id=cid and action='UPDATE';
+ insert into _ganu_0013_results values('değişmeyen güncelleme yazılmaz','1',n::text,case when n=1 then 'PASS' else 'FAIL' end);
+ begin update public.audit_log set table_name='x' where customer_id=cid; b:=false; exception when others then b:=true; end;
+ insert into _ganu_0013_results values('kayıt güncellenemez','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ begin delete from public.audit_log where customer_id=cid; b:=false; exception when others then b:=true; end;
+ insert into _ganu_0013_results values('kayıt silinemez','true',b::text,case when b then 'PASS' else 'FAIL' end);
+ delete from public.customers where id=cid;
+ select count(*) into n from public.audit_log where customer_id=cid and action='DELETE';
+ insert into _ganu_0013_results values('silme kaydedildi','1',n::text,case when n=1 then 'PASS' else 'FAIL' end);
+end $$;
+select * from _ganu_0013_results order by name;
