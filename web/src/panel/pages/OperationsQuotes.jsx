@@ -35,7 +35,7 @@ export default function OperationsQuotes() {
   const byC = useMemo(() => Object.fromEntries(cs.map((c) => [c.id, c])), [cs]), byI = useMemo(() => Object.fromEntries(invs.map((i) => [i.id, i])), [invs])
   const shown = rows.filter((r) => {
     const s = stage(r, byI[r.invoice_id])
-    if (filter === 'açık' && (['iptal', 'reddedildi', 'süresi_doldu'].includes(r.status) || r.activated_at)) return false
+    if (filter === 'açık' && (['iptal', 'reddedildi', 'süresi_doldu'].includes(r.status) || r.activated_at) && !r.last_error) return false
     if (filter === 'dikkat' && !s.warn && !r.last_error) return false
     if (QUOTE_STATUS.includes(filter) && r.status !== filter) return false
     const c = byC[r.customer_id]

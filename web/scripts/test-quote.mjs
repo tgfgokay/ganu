@@ -99,6 +99,11 @@ assert.ok(sent.every(([, , key]) => /^quote-(paid|welcome)-q1$/.test(key)), 'Res
 r = await runQuotePipeline(db, 'q1', 'https://ganu.com.tr')
 assert.equal(r.state, 'hata'); assert.match(r.error, /tutar/)
 
+;({ db, st } = fakeDb())
+st.quote.status = 'iptal'
+r = await runQuotePipeline(db, 'q1', 'https://ganu.com.tr')
+assert.equal(r.state, 'hata'); assert.match(r.error, /İPTAL EDİLMİŞ TEKLİFE ÖDEME/); assert.match(st.quote.last_error, /iade/)
+
 envVars.RESEND_API_KEY = ''
 ;({ db, st } = fakeDb())
 r = await runQuotePipeline(db, 'q1', 'https://ganu.com.tr')

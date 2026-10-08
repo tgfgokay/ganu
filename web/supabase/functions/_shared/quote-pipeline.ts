@@ -15,6 +15,11 @@ export async function runQuotePipeline(db: any, quoteId: string, siteUrl: string
   const fail = async (msg: string) => { await db.from('quotes').update({ last_error: msg.slice(0, 500) }).eq('id', quoteId); return { state: 'hata', steps, error: msg } }
   const { data: q } = await db.from('quotes').select('*').eq('id', quoteId).maybeSingle()
   if (!q) return { state: 'yok', steps }
+  if (q.status === 'iptal' && q.invoice_id) {
+    // Kart linki verilmiş teklif iptal edildikten sonra ödeme geldiyse: aktivasyon yok, zorunlu personel incelemesi (panelde 'dikkat').
+    const { data: paid } = await db.from('invoices').select('status').eq('id', q.invoice_id).maybeSingle()
+    if (paid?.status === 'ödendi') return fail('İPTAL EDİLMİŞ TEKLİFE ÖDEME GELDİ — iade ya da yeniden etkinleştirme kararı verin.')
+  }
   if (q.status !== 'kabul' || !q.invoice_id) return { state: 'kabul_yok', steps }
   const { data: inv } = await db.from('invoices').select('id,status,amount,einvoice_status,einvoice_no,quote_id').eq('id', q.invoice_id).maybeSingle()
   if (!inv || inv.quote_id !== q.id) return fail('Teklifin faturası bulunamadı ya da başka teklife bağlı.')
