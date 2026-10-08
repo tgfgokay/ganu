@@ -11,8 +11,10 @@
 // Dağıtım: supabase functions deploy paytr-link --no-verify-jwt
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { buildCreateRequest, PAYTR_LINK_CREATE, processCallback, type LinkEnv } from './paytr.ts'
+import { processCallback, type LinkEnv } from './paytr.ts'
 import { parasutEnv, runEInvoice } from '../_shared/einvoice-run.ts'
+import { createInvoiceLink, paytrLinkEnv } from '../_shared/paytr-create.ts'
+import { runQuotePipeline } from '../_shared/quote-pipeline.ts'
 
 const SITE = Deno.env.get('SITE_URL') || ''
 let ALLOW_ORIGIN = ''
@@ -27,17 +29,7 @@ const json = (body: unknown, status = 200) =>
 const text = (body: string, status = 200) => new Response(body, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function linkEnv(): LinkEnv | null {
-  const get = (k: string) => (Deno.env.get(k) || '').trim()
-  const base = get('SUPABASE_URL').replace(/\/+$/, '')
-  const env: LinkEnv = {
-    merchantId: get('PAYTR_MERCHANT_ID'), merchantKey: get('PAYTR_MERCHANT_KEY'), merchantSalt: get('PAYTR_MERCHANT_SALT'),
-    callbackUrl: `${base}/functions/v1/paytr-link`, maxInstallment: get('PAYTR_MAX_INSTALLMENT') || '1',
-    debug: get('PAYTR_DEBUG') === 'true', acceptTest: get('PAYTR_ACCEPT_TEST') === 'true',
-  }
-  if (get('PAYTR_LINK_ENABLED') !== 'true' || !base || !env.merchantId || !env.merchantKey || !env.merchantSalt) return null
-  return env
-}
+function linkEnv(): LinkEnv | null { return paytrLinkEnv() }
 function serviceDb() {
   const url = Deno.env.get('SUPABASE_URL') || '', key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   if (!url || !key) throw new Error('SUPABASE_SERVICE_ROLE_KEY eksik')
@@ -72,12 +64,16 @@ async function handleCallback(req: Request, env: LinkEnv): Promise<Response> {
       return { data: r.data, error: r.error }
     },
   })
-  if (out.paidInvoiceId && Deno.env.get('EINVOICE_AUTO') === 'true') {
-    const penv = parasutEnv(ALLOW_ORIGIN)
-    if (penv) {
-      const task = runEInvoice(db(), out.paidInvoiceId, penv).catch(() => undefined)
+  if (out.paidInvoiceId) {
+    const waitUntil = (p: Promise<unknown>) => (globalThis as unknown as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(p)
+    const { data: linked } = await db().from('invoices').select('quote_id').eq('id', out.paidInvoiceId).maybeSingle()
+    if (linked?.quote_id) {
+      // Teklif faturası: e-Belge + ödeme/sözleşme e-postası + aktivasyon hattı (yanıtı bekletmeden; takılırsa panelden "Devam ettir").
+      waitUntil(runQuotePipeline(db(), linked.quote_id, ALLOW_ORIGIN).catch(() => undefined))
+    } else if (Deno.env.get('EINVOICE_AUTO') === 'true') {
+      const penv = parasutEnv(ALLOW_ORIGIN)
       // Yanıtı bekletmeden arka planda sürdür; yoksa personel "e-Belge kes" ile tamamlar.
-      ;(globalThis as unknown as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(task)
+      if (penv) waitUntil(runEInvoice(db(), out.paidInvoiceId, penv).catch(() => undefined))
     }
   }
   return text(out.body, out.status)
@@ -87,21 +83,8 @@ async function handleCreate(req: Request, env: LinkEnv): Promise<Response> {
   if (!(await isStaffRequest(req))) return json({ error: 'Personel yetkisi gerekli' }, 403)
   const { invoice_id, renew } = await req.json().catch(() => ({}))
   if (!UUID.test(String(invoice_id || ''))) return json({ error: 'invoice_id geçersiz' }, 400)
-  const db = serviceDb()
-  const { data: inv } = await db.from('invoices').select('id,customer_id,amount,status,note,due_date,payment_link,paytr_link_id').eq('id', invoice_id).maybeSingle()
-  if (!inv) return json({ state: 'yok', message: 'Fatura bulunamadı.' }, 404)
-  if (inv.status === 'ödendi') return json({ state: 'ödendi', message: 'Fatura zaten ödenmiş.' }, 409)
-  if (inv.paytr_link_id && inv.payment_link && renew !== true) return json({ state: 'hazır', link: inv.payment_link, message: 'Bu faturanın kart linki zaten var.' })
-  const { data: customer } = await db.from('customers').select('title,email').eq('id', inv.customer_id).maybeSingle()
-  if (!customer) return json({ state: 'başarısız', message: 'Müşteri bulunamadı.' }, 422)
-  let body: URLSearchParams
-  try { body = await buildCreateRequest(inv, customer, env) } catch (e) { return json({ state: 'başarısız', message: String((e as Error).message) }, 422) }
-  const res = await fetch(PAYTR_LINK_CREATE, { method: 'POST', body })
-  const out = await res.json().catch(() => null)
-  if (out?.status !== 'success' || !out?.link) return json({ state: 'başarısız', message: `PayTR link oluşturamadı: ${out?.err_msg || out?.status || res.status}` }, 502)
-  const { error } = await db.from('invoices').update({ payment_link: String(out.link), paytr_link_id: String(out.id) }).eq('id', inv.id)
-  if (error) return json({ state: 'başarısız', message: `Link oluştu ama kaydedilemedi: ${out.link}` }, 500)
-  return json({ state: 'hazır', link: String(out.link) })
+  const out = await createInvoiceLink(serviceDb(), String(invoice_id), env, renew === true)
+  return json(out.body, out.status)
 }
 
 Deno.serve(async (req) => {

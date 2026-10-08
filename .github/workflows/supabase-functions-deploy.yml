@@ -41,7 +41,7 @@ jobs:
           test "$GITHUB_REPOSITORY" = "tgfgokay/ganu"
           test "$GITHUB_REF" = "refs/heads/main"
           test -n "${SUPABASE_ACCESS_TOKEN:-}" || { echo "::error::SUPABASE_ACCESS_TOKEN secret tanımlı değil"; exit 1; }
-          allowed=" admin-gate get-file issue-einvoice paytr-link pos-payment purchase-flow send-notification "
+          allowed=" admin-gate get-file issue-einvoice paytr-link pos-payment purchase-flow send-notification quote-public quote-staff "
           for fn in $FUNCTIONS; do
             [[ "$allowed" == *" $fn "* ]] || { echo "::error::izinli olmayan fonksiyon: $fn"; exit 1; }
             test -f "supabase/functions/$fn/index.ts"
