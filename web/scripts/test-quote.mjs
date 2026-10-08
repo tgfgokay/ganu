@@ -33,6 +33,12 @@ const q = { quote_no: 'GANU-T-2026-0001', party_type: 'kuruluş', planned_compan
 const c = { title: 'Ali Veli', tc: '10000000146', email: 'ali@ornek.com', phone: '05xx', ...adr }
 const vars = Q.contractVars(q, c, '2026-10-08')
 assert.equal(vars.bitis, '07.10.2027')
+// Postgres ile aynı ay sonu davranışı (date + interval '1 month' - 1)
+assert.equal(Q.contractPeriod('2026-01-31', 'aylık').end, '2026-02-27')
+assert.equal(Q.contractPeriod('2028-01-31', 'aylık').end, '2028-02-28')
+assert.equal(Q.contractPeriod('2028-02-29', 'yıllık').end, '2029-02-27')
+assert.equal(Q.contractPeriod('2026-12-15', 'aylık').end, '2027-01-14')
+assert.equal(Q.contractPeriod('2026-10-08', 'yıllık').end, '2027-10-07')
 assert.equal(vars.musteri_kimlik, 'TCKN 10000000146')
 assert.equal(vars.kurulacak_sirket, 'Yeni Ltd')
 assert.equal(Q.renderContract('Taraf: {{musteri_unvan}} / {{ tutar }}', vars), 'Taraf: Ali Veli / 17.091,00 TL (KDV dahil)')
@@ -48,7 +54,7 @@ function fakeDb({ invStatus = 'ödendi', amount = 17091, addressDoc = 'gerekmiyo
   const table = (name) => {
     const ctx = { name, filters: {} }
     const api = {
-      select: () => api, eq: (k, v) => { ctx.filters[k] = v; return api }, in: () => api,
+      select: () => api, eq: (k, v) => { ctx.filters[k] = v; return api }, in: () => api, is: () => api,
       maybeSingle: async () => ({ data: name === 'quotes' ? st.quote : name === 'invoices' ? st.inv : st.cust }),
       single: async () => ({ data: name === 'customers' ? st.cust : null }),
       update: (patch) => { st.updates.push([name, patch]); if (name === 'quotes') Object.assign(st.quote, patch); return api },
@@ -60,7 +66,6 @@ function fakeDb({ invStatus = 'ödendi', amount = 17091, addressDoc = 'gerekmiyo
     from: table,
     rpc: async (fn, args) => {
       st.rpc.push(fn)
-      if (fn === 'quote_claim_mail') { const k = args.p_kind === 'paid' ? 'paid_mail_at' : 'welcome_mail_at'; if (st.quote[k]) return { data: false }; st.quote[k] = 'now'; return { data: true } }
       if (fn === 'quote_try_activate') {
         const missing = []; if (st.inv.status !== 'ödendi') missing.push('ödeme'); if (st.quote.address_doc === 'bekliyor') missing.push('adres_belgesi')
         if (missing.length) return { data: { state: 'eksik', missing } }

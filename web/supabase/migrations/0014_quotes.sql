@@ -71,6 +71,9 @@ create table if not exists public.quotes(
   contract_id uuid references public.contracts(id) on delete set null,
   address_doc text not null default 'bekliyor' check (address_doc in ('bekliyor','yüklendi','gerekmiyor')),
   address_doc_note text, address_doc_by uuid, address_doc_at timestamptz,
+  address_doc_id uuid references public.documents(id) on delete set null,
+  otp_pending_sha text,               -- kodun üretildiği anda müşteriye gösterilen metnin özeti (kod bu metne bağlı)
+  accepted_party jsonb,               -- kabul anındaki taraf bilgisi (değişmez kopya)
   paid_mail_at timestamptz, welcome_mail_at timestamptz, activated_at timestamptz,
   last_error text,
   notes text,
@@ -128,7 +131,16 @@ begin
   elsif tg_op='INSERT' then diff := n;
   else diff := o;
   end if;
-  diff := diff - 'portal_password' - 'access_code' - 'token_hash' - 'otp_hash' - 'contract_text' - 'body_md';
+  diff := diff - 'portal_password' - 'access_code';
+  -- teklif tablosunda beyaz liste: kişisel veri, kanıt ve gizli alanlar işlem kaydına kopyalanmaz.
+  if tg_table_name='quotes' then
+    select coalesce(jsonb_object_agg(key,value),'{}'::jsonb) into diff from jsonb_each(diff)
+     where key in ('quote_no','status','package_id','billing_period','amount','discount_pct','valid_until','sent_at','send_count','viewed_at',
+       'accepted_at','acceptance_method','template_version','contract_sha256','invoice_id','contract_id','address_doc','address_doc_id',
+       'address_doc_at','activated_at','cancelled_at','rejected_at','paid_mail_at','welcome_mail_at');
+    if diff='{}'::jsonb then return null; end if;
+  elsif tg_table_name='contract_templates' then diff := diff - 'body_md';
+  end if;
   claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
   insert into public.audit_log(actor, actor_email, table_name, row_id, customer_id, action, changes)
   values (auth.uid(), claims->>'email', tg_table_name, rid, nullif(cid,'')::uuid, tg_op, diff);
@@ -149,99 +161,141 @@ language sql security definer set search_path=public,pg_catalog as $$
   select 'GANU-T-'||to_char(now() at time zone 'Europe/Istanbul','YYYY')||'-'||lpad(nextval('public.quote_no_seq')::text,4,'0');
 $$;
 
--- Kabul (OTP doğrulandıktan sonra Edge çağırır). Tek seferlik: yalnız 'gönderildi' + süresi geçmemiş + aynı token.
--- Fatura (tahsilat kaydı) ve sözleşme satırı aynı işlemde açılır; sözleşme 'bekliyor' durumunda kalır, aktivasyonda 'aktif'.
-create or replace function public.quote_accept(p_quote uuid, p_token_hash text, p_template text, p_text text, p_sha text,
-  p_method text, p_evidence jsonb, p_party jsonb) returns jsonb
+-- Link üretimi (personel "gönder"): token değişimi, şablon sabitleme ve sayaç tek kilit altında.
+create or replace function public.quote_rotate_token(p_quote uuid, p_hash text, p_email text) returns text
 language plpgsql security definer set search_path=public,pg_catalog as $$
-declare q public.quotes%rowtype; t public.contract_templates%rowtype; inv uuid; con uuid; s date; e date;
+declare q public.quotes%rowtype; tv text;
 begin
   select * into q from public.quotes where id=p_quote for update;
-  if not found then return jsonb_build_object('state','yok'); end if;
-  if q.status='kabul' then return jsonb_build_object('state','zaten','invoice_id',q.invoice_id); end if;
-  if p_method='otp_email' and (q.status<>'gönderildi' or q.token_hash is distinct from p_token_hash) then return jsonb_build_object('state','geçersiz'); end if;
-  if p_method='ıslak_imza' and q.status not in ('taslak','gönderildi') then return jsonb_build_object('state','geçersiz'); end if;
-  if p_method not in ('otp_email','ıslak_imza') then return jsonb_build_object('state','geçersiz'); end if;
-  if q.valid_until < (now() at time zone 'Europe/Istanbul')::date then
-    update public.quotes set status='süresi_doldu' where id=q.id; return jsonb_build_object('state','süresi_doldu');
-  end if;
-  select * into t from public.contract_templates where version=p_template;
-  if not found or p_sha !~ '^[0-9a-f]{64}$' or coalesce(p_text,'')='' then return jsonb_build_object('state','geçersiz'); end if;
-  -- taraf bilgisi (müşteri sayfasında tamamlanır/teyit edilir)
-  update public.customers set
-    title=coalesce(nullif(trim(p_party->>'title'),''),title),
-    contact=coalesce(nullif(trim(p_party->>'contact'),''),contact),
-    tc=coalesce(nullif(p_party->>'tc',''),tc),
-    tax_no=coalesce(nullif(p_party->>'tax_no',''),tax_no),
-    tax_office=coalesce(nullif(trim(p_party->>'tax_office'),''),tax_office),
-    address=coalesce(nullif(trim(p_party->>'address'),''),address),
-    city=coalesce(nullif(trim(p_party->>'city'),''),city),
-    district=coalesce(nullif(trim(p_party->>'district'),''),district)
-  where id=q.customer_id;
-  s := coalesce(q.start_date,(now() at time zone 'Europe/Istanbul')::date);
-  e := (case when q.billing_period='aylık' then s + interval '1 month' else s + interval '1 year' end)::date - 1;
-  insert into public.contracts(customer_id,package,start_date,end_date,price,status,billing_period,quote_id,accepted_at,acceptance_method,contract_sha256)
-  values(q.customer_id,q.package_id,s,e,q.amount,'bekliyor',q.billing_period,q.id,now(),p_method,p_sha) returning id into con;
-  insert into public.invoices(customer_id,amount,status,issue_date,due_date,note,contract_id,quote_id)
-  values(q.customer_id,q.amount,'bekliyor',(now() at time zone 'Europe/Istanbul')::date,(now() at time zone 'Europe/Istanbul')::date+7,
-    q.quote_no||' · '||q.package_id||' ('||q.billing_period||')',con,q.id) returning id into inv;
-  update public.quotes set status='kabul',accepted_at=now(),acceptance_method=p_method,acceptance_evidence=p_evidence,
-    template_version=p_template,contract_text=p_text,contract_sha256=p_sha,invoice_id=inv,contract_id=con,
-    otp_hash=null,otp_expires_at=null where id=q.id;
-  return jsonb_build_object('state','kabul','invoice_id',inv,'contract_id',con);
+  if not found then return 'yok'; end if;
+  if q.status not in ('taslak','gönderildi') then return 'durum'; end if;
+  if q.valid_until < (now() at time zone 'Europe/Istanbul')::date then return 'süre'; end if;
+  if q.sent_at > now()-interval '30 seconds' then return 'çok_sık'; end if;
+  if p_hash !~ '^[0-9a-f]{64}$' then return 'geçersiz'; end if;
+  select version into tv from public.contract_templates where active;
+  if tv is null then return 'şablon'; end if;
+  update public.quotes set token_hash=p_hash, template_version=tv, status='gönderildi', sent_at=now(), sent_to=p_email, send_count=send_count+1,
+    otp_hash=null, otp_expires_at=null, otp_attempts=0, otp_sent_count=0, otp_pending_sha=null where id=q.id;
+  return 'ok';
 end $$;
 
--- OTP denemesi: kilitli satırda sayaç artırılır; 5 hatalı denemeden sonra yeni kod istenmeli.
-create or replace function public.quote_otp_check(p_quote uuid, p_token_hash text, p_otp_hash text) returns text
+-- Doğrulama kodu üretimi: sayaç, bekleme süresi ve kodun bağlı olduğu metin özeti tek kilit altında.
+create or replace function public.quote_issue_otp(p_quote uuid, p_token_hash text, p_otp_hash text, p_sha text) returns text
 language plpgsql security definer set search_path=public,pg_catalog as $$
 declare q public.quotes%rowtype;
 begin
   select * into q from public.quotes where id=p_quote for update;
   if not found or q.status<>'gönderildi' or q.token_hash is distinct from p_token_hash then return 'geçersiz'; end if;
-  if q.otp_hash is null or q.otp_expires_at is null or q.otp_expires_at<now() then return 'süre'; end if;
-  if q.otp_attempts>=5 then return 'kilit'; end if;
-  if q.otp_hash=p_otp_hash then return 'ok'; end if;
-  update public.quotes set otp_attempts=otp_attempts+1 where id=q.id;
-  return 'hatalı';
+  if q.otp_sent_count>=5 then return 'limit'; end if;
+  if q.otp_last_sent_at > now()-interval '60 seconds' then return 'bekle'; end if;
+  if p_otp_hash !~ '^[0-9a-f]{64}$' or p_sha !~ '^[0-9a-f]{64}$' then return 'geçersiz'; end if;
+  update public.quotes set otp_hash=p_otp_hash, otp_expires_at=now()+interval '10 minutes', otp_attempts=0,
+    otp_sent_count=otp_sent_count+1, otp_last_sent_at=now(), otp_pending_sha=p_sha where id=q.id;
+  return 'ok';
 end $$;
 
--- Aktivasyon: tekrar çağrılabilir. Koşullar: teklif kabul, kabul kanıtı, faturası bu teklife ait ve tutarı eşit ve ödenmiş,
--- adres belgesi çözülmüş, sözleşme iptal/bitmiş değil. Müşteri yalnız 'aday' ise 'aktif'e geçer (askıda/ayrıldı değişmez).
+-- Kabul. otp_email: kod doğrulaması + kodun üretildiği metin özetiyle eşleşme + kabul AYNI kilit altında (tek seferlik).
+-- ıslak_imza: personel, yüklenmiş imzalı sözleşmeyle kabul eder. Tahsilat satırı ve sözleşme satırı aynı işlemde açılır.
+create or replace function public.quote_accept(p_quote uuid, p_token_hash text, p_otp_hash text, p_template text, p_text text, p_sha text,
+  p_method text, p_evidence jsonb, p_party jsonb, p_start date, p_end date) returns jsonb
+language plpgsql security definer set search_path=public,pg_catalog as $$
+declare q public.quotes%rowtype; cu public.customers%rowtype; inv uuid; con uuid; s date; e date; party jsonb;
+begin
+  select * into q from public.quotes where id=p_quote for update;
+  if not found then return jsonb_build_object('state','yok'); end if;
+  if q.status='kabul' then return jsonb_build_object('state','zaten','invoice_id',q.invoice_id); end if;
+  if p_method not in ('otp_email','ıslak_imza') then return jsonb_build_object('state','geçersiz'); end if;
+  if p_method='ıslak_imza' and q.status not in ('taslak','gönderildi') then return jsonb_build_object('state','geçersiz'); end if;
+  if q.valid_until < (now() at time zone 'Europe/Istanbul')::date then
+    update public.quotes set status='süresi_doldu' where id=q.id; return jsonb_build_object('state','süresi_doldu');
+  end if;
+  if p_sha !~ '^[0-9a-f]{64}$' or coalesce(p_text,'')='' or p_start is null or p_end is null or p_end<p_start then return jsonb_build_object('state','geçersiz'); end if;
+  if not exists(select 1 from public.contract_templates where version=p_template) then return jsonb_build_object('state','geçersiz'); end if;
+  if p_method='otp_email' then
+    if q.status<>'gönderildi' or q.token_hash is distinct from p_token_hash then return jsonb_build_object('state','geçersiz'); end if;
+    if q.template_version is distinct from p_template then return jsonb_build_object('state','şablon'); end if;
+    if q.otp_hash is null or q.otp_expires_at is null or q.otp_expires_at<now() then return jsonb_build_object('state','süre'); end if;
+    if q.otp_attempts>=5 then return jsonb_build_object('state','kilit'); end if;
+    if q.otp_hash is distinct from p_otp_hash then
+      update public.quotes set otp_attempts=otp_attempts+1 where id=q.id; return jsonb_build_object('state','hatalı');
+    end if;
+    if q.otp_pending_sha is distinct from p_sha then return jsonb_build_object('state','metin'); end if;
+    update public.customers set
+      title=coalesce(nullif(trim(p_party->>'title'),''),title), contact=coalesce(nullif(trim(p_party->>'contact'),''),contact),
+      tc=coalesce(nullif(p_party->>'tc',''),tc), tax_no=coalesce(nullif(p_party->>'tax_no',''),tax_no),
+      tax_office=coalesce(nullif(trim(p_party->>'tax_office'),''),tax_office), address=coalesce(nullif(trim(p_party->>'address'),''),address),
+      city=coalesce(nullif(trim(p_party->>'city'),''),city), district=coalesce(nullif(trim(p_party->>'district'),''),district)
+    where id=q.customer_id;
+  end if;
+  select * into cu from public.customers where id=q.customer_id;
+  party := jsonb_build_object('title',cu.title,'contact',cu.contact,'tc',cu.tc,'tax_no',cu.tax_no,'tax_office',cu.tax_office,
+    'address',cu.address,'city',cu.city,'district',cu.district,'email',cu.email,'party_type',q.party_type,'planned_company',q.planned_company);
+  s := p_start; e := p_end;
+  insert into public.contracts(customer_id,package,start_date,end_date,price,status,billing_period,quote_id,accepted_at,acceptance_method,contract_sha256)
+  values(q.customer_id,q.package_id,s,e,q.amount,'bekliyor',q.billing_period,q.id,now(),p_method,p_sha) returning id into con;
+  insert into public.invoices(customer_id,amount,status,issue_date,due_date,note,contract_id,quote_id)
+  values(q.customer_id,q.amount,'bekliyor',(now() at time zone 'Europe/Istanbul')::date,(now() at time zone 'Europe/Istanbul')::date+7,
+    q.quote_no||' · '||q.package_id||' ('||q.billing_period||')',con,q.id) returning id into inv;
+  update public.quotes set status='kabul',accepted_at=now(),acceptance_method=p_method,acceptance_evidence=p_evidence,accepted_party=party,
+    template_version=p_template,contract_text=p_text,contract_sha256=p_sha,invoice_id=inv,contract_id=con,
+    otp_hash=null,otp_expires_at=null,otp_pending_sha=null where id=q.id;
+  return jsonb_build_object('state','kabul','invoice_id',inv,'contract_id',con);
+end $$;
+
+-- İptal (personel): teklif → fatura sırasıyla kilitlenir (PayTR bildirimi yalnız faturayı kilitler; kilitlenme döngüsü yok).
+-- Ödenmiş/kesilmiş/aktif kayıt iptal edilmez. Kart linki verilmişse, PayTR panelinden link silindiği teyit edilerek p_force ile.
+create or replace function public.quote_cancel(p_quote uuid, p_force boolean) returns jsonb
+language plpgsql security definer set search_path=public,pg_catalog as $$
+declare q public.quotes%rowtype; i public.invoices%rowtype;
+begin
+  select * into q from public.quotes where id=p_quote for update;
+  if not found then return jsonb_build_object('state','yok'); end if;
+  if q.status in ('iptal','reddedildi','süresi_doldu') then return jsonb_build_object('state',q.status); end if;
+  if q.status='kabul' then
+    if q.activated_at is not null then return jsonb_build_object('state','aktif'); end if;
+    select * into i from public.invoices where id=q.invoice_id for update;
+    if found then
+      if i.status='ödendi' or i.parasut_invoice_id is not null or i.paytr_merchant_oid is not null then return jsonb_build_object('state','ödenmiş'); end if;
+      if i.paytr_link_id is not null and not coalesce(p_force,false) then return jsonb_build_object('state','link_var'); end if;
+    end if;
+    update public.quotes set status='iptal', cancelled_at=now(), invoice_id=null, token_hash=null where id=q.id;
+    if found then delete from public.invoices where id=i.id; end if;
+    update public.contracts set status='iptal' where id=q.contract_id and quote_id=q.id;
+    return jsonb_build_object('state','iptal');
+  end if;
+  update public.quotes set status='iptal', cancelled_at=now(), token_hash=null, otp_hash=null, otp_pending_sha=null where id=q.id;
+  return jsonb_build_object('state','iptal');
+end $$;
+
+-- Aktivasyon: tekrar çağrılabilir. Koşullar: teklif kabul + kanıt; fatura ve sözleşme BU teklife ve BU müşteriye ait;
+-- fatura ödenmiş ve tutarı eşit; adres belgesi çözülmüş; müşteri 'aday' ya da 'aktif' (askıda/ayrıldı ise engel).
 create or replace function public.quote_try_activate(p_quote uuid) returns jsonb
 language plpgsql security definer set search_path=public,pg_catalog as $$
-declare q public.quotes%rowtype; i public.invoices%rowtype; c public.contracts%rowtype; missing text[] := '{}';
+declare q public.quotes%rowtype; i public.invoices%rowtype; c public.contracts%rowtype; cu public.customers%rowtype; missing text[] := '{}';
 begin
   select * into q from public.quotes where id=p_quote for update;
   if not found then return jsonb_build_object('state','yok'); end if;
   if q.activated_at is not null then return jsonb_build_object('state','zaten'); end if;
-  if q.status<>'kabul' or q.accepted_at is null or q.contract_sha256 is null then missing := array_append(missing,'kabul'); end if;
+  if q.status<>'kabul' or q.accepted_at is null or q.contract_sha256 is null or q.acceptance_evidence is null then missing := array_append(missing,'kabul'); end if;
   select * into i from public.invoices where id=q.invoice_id;
-  if not found or i.quote_id is distinct from q.id or i.status<>'ödendi' or i.amount<>q.amount then missing := array_append(missing,'ödeme'); end if;
-  select * into c from public.contracts where id=q.contract_id;
-  if not found or c.quote_id is distinct from q.id or c.status in ('iptal','bitti') then missing := array_append(missing,'sözleşme'); end if;
+  if not found or i.quote_id is distinct from q.id or i.customer_id<>q.customer_id or i.status<>'ödendi' or i.amount<>q.amount then missing := array_append(missing,'ödeme'); end if;
+  select * into c from public.contracts where id=q.contract_id for update;
+  if not found or c.quote_id is distinct from q.id or c.customer_id<>q.customer_id or c.status not in ('bekliyor','aktif') then missing := array_append(missing,'sözleşme'); end if;
   if q.address_doc='bekliyor' then missing := array_append(missing,'adres_belgesi'); end if;
+  select * into cu from public.customers where id=q.customer_id for update;
+  if not found or cu.status not in ('aday','aktif') then missing := array_append(missing,'müşteri_durumu'); end if;
   if cardinality(missing)>0 then return jsonb_build_object('state','eksik','missing',to_jsonb(missing)); end if;
-  update public.contracts set status='aktif' where id=c.id and status='bekliyor';
-  update public.customers set status='aktif' where id=q.customer_id and status='aday';
+  update public.contracts set status='aktif' where id=c.id;
+  update public.customers set status='aktif' where id=cu.id;
   update public.quotes set activated_at=now(), last_error=null where id=q.id;
   return jsonb_build_object('state','aktif');
 end $$;
 
--- Tek seferlik e-posta: kolon boşsa doldurur ve true döner (iki işçi aynı postayı göndermez).
-create or replace function public.quote_claim_mail(p_quote uuid, p_kind text) returns boolean
-language plpgsql security definer set search_path=public,pg_catalog as $$
-begin
-  if p_kind='paid' then update public.quotes set paid_mail_at=now() where id=p_quote and paid_mail_at is null;
-  elsif p_kind='welcome' then update public.quotes set welcome_mail_at=now() where id=p_quote and welcome_mail_at is null and activated_at is not null;
-  else return false; end if;
-  return found;
-end $$;
-
-revoke all on function public.quote_next_no(), public.quote_accept(uuid,text,text,text,text,text,jsonb,jsonb),
-  public.quote_otp_check(uuid,text,text), public.quote_try_activate(uuid), public.quote_claim_mail(uuid,text)
+revoke all on function public.quote_next_no(), public.quote_rotate_token(uuid,text,text), public.quote_issue_otp(uuid,text,text,text),
+  public.quote_accept(uuid,text,text,text,text,text,text,jsonb,jsonb,date,date), public.quote_cancel(uuid,boolean), public.quote_try_activate(uuid)
   from public, anon, authenticated;
-grant execute on function public.quote_next_no(), public.quote_accept(uuid,text,text,text,text,text,jsonb,jsonb),
-  public.quote_otp_check(uuid,text,text), public.quote_try_activate(uuid), public.quote_claim_mail(uuid,text) to service_role;
+grant execute on function public.quote_next_no(), public.quote_rotate_token(uuid,text,text), public.quote_issue_otp(uuid,text,text,text),
+  public.quote_accept(uuid,text,text,text,text,text,text,jsonb,jsonb,date,date), public.quote_cancel(uuid,boolean), public.quote_try_activate(uuid) to service_role;
 
 -- Teklif sayfası hız sınırı (purchase_rate_limits tablosu, ayrı eylem adları).
 create or replace function public.quote_rate_limit(p_ip_hash text,p_action text,p_limit int,p_window_seconds int)

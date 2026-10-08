@@ -1,7 +1,7 @@
 // Ödeme sonrası teklif hattı. Her adım kendi başına tekrar çağrılabilir (idempotent); hata olursa quotes.last_error'a yazılır,
 // personel panelden "Devam ettir" ile yeniden çalıştırır. Dış servis çağrıları DB işleminin DIŞINDA yapılır.
 //  1) e-Belge: EINVOICE_AUTO=true + EINVOICE_ENABLED + Paraşüt secret'ları varsa mevcut runEInvoice (einvoice_claim tek sahiplik); yoksa atlanır (elle kesilir).
-//  2) "Ödemeniz alındı" e-postası + kabul edilmiş sözleşme metni (quote_claim_mail ile bir kez).
+//  2) "Ödemeniz alındı" e-postası + kabul edilmiş sözleşme metni (Resend idempotency anahtarıyla bir kez).
 //  3) Aktivasyon denemesi (quote_try_activate); başarılıysa hoş geldin e-postası (bir kez).
 import { parasutEnv, runEInvoice } from './einvoice-run.ts'
 import { sendMail, mailReady } from './mail.ts'
@@ -39,16 +39,15 @@ export async function runQuotePipeline(db: any, quoteId: string, siteUrl: string
     } else steps.push('e-Belge: otomatik kapalı (elle kesilecek)')
   }
 
-  // 2) Ödeme + sözleşme e-postası
+  // 2) Ödeme + sözleşme e-postası. Önce gönderilir, sonra işaretlenir; eşzamanlı/yinelenen çalıştırmalarda
+  //    Resend Idempotency-Key (24 saat) ikinci gönderimi engeller. Gönderim sonrası çökme → bir sonraki çalıştırmada aynı anahtarla tekrar (gitmez).
   if (!q.paid_mail_at && c.email) {
     if (!mailReady()) steps.push('ödeme e-postası: e-posta servisi kurulmadı')
     else {
-      const { data: claimed } = await db.rpc('quote_claim_mail', { p_quote: q.id, p_kind: 'paid' })
-      if (claimed === true) {
-        const m = await sendMail(c.email, paidMail(q, c, einvoiceNo), `quote-paid-${q.id}`)
-        if (!m.ok) { await db.from('quotes').update({ paid_mail_at: null }).eq('id', q.id); return fail(m.error || 'Ödeme e-postası gönderilemedi.') }
-        steps.push('ödeme e-postası gönderildi')
-      }
+      const m = await sendMail(c.email, paidMail(q, c, einvoiceNo), `quote-paid-${q.id}`)
+      if (!m.ok) return fail(m.error || 'Ödeme e-postası gönderilemedi.')
+      await db.from('quotes').update({ paid_mail_at: new Date().toISOString() }).eq('id', q.id).is('paid_mail_at', null)
+      steps.push('ödeme e-postası gönderildi')
     }
   }
 
@@ -58,13 +57,12 @@ export async function runQuotePipeline(db: any, quoteId: string, siteUrl: string
   if (a.data?.state === 'eksik') { await db.from('quotes').update({ last_error: null }).eq('id', q.id); return { state: 'eksik', steps, missing: a.data.missing } }
   if (a.data?.state === 'aktif' || a.data?.state === 'zaten') {
     steps.push(a.data.state === 'aktif' ? 'müşteri aktif' : 'zaten aktif')
-    if (c.email && mailReady()) {
-      const { data: claimed } = await db.rpc('quote_claim_mail', { p_quote: q.id, p_kind: 'welcome' })
-      if (claimed === true) {
-        const m = await sendMail(c.email, welcomeMail(q, c), `quote-welcome-${q.id}`)
-        if (!m.ok) { await db.from('quotes').update({ welcome_mail_at: null }).eq('id', q.id); return fail(m.error || 'Hoş geldin e-postası gönderilemedi.') }
-        steps.push('hoş geldin e-postası gönderildi')
-      }
+    const { data: q2 } = await db.from('quotes').select('welcome_mail_at').eq('id', q.id).maybeSingle()
+    if (c.email && mailReady() && !q2?.welcome_mail_at) {
+      const m = await sendMail(c.email, welcomeMail(q, c), `quote-welcome-${q.id}`)
+      if (!m.ok) return fail(m.error || 'Hoş geldin e-postası gönderilemedi.')
+      await db.from('quotes').update({ welcome_mail_at: new Date().toISOString() }).eq('id', q.id).is('welcome_mail_at', null)
+      steps.push('hoş geldin e-postası gönderildi')
     }
     return { state: 'aktif', steps }
   }

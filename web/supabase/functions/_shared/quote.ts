@@ -101,11 +101,18 @@ export function renderContract(body: string, vars: TemplateVars): string {
   if (unknown.length) throw new Error(`Sözleşme şablonunda bilinmeyen alan: ${[...new Set(unknown)].join(', ')}`)
   return out
 }
+// Postgres "tarih + interval" ile aynı: ay sonu taşmaz (31.01 + 1 ay = 28/29.02), sonra 1 gün geri.
+export function contractPeriod(start: string, period: string): { start: string; end: string } {
+  const [y, m, d] = start.split('-').map(Number)
+  const months = period === 'aylık' ? 1 : 12
+  const ty = y + Math.floor((m - 1 + months) / 12), tm = (m - 1 + months) % 12
+  const last = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
+  const end = new Date(Date.UTC(ty, tm, Math.min(d, last)))
+  end.setUTCDate(end.getUTCDate() - 1)
+  return { start, end: end.toISOString().slice(0, 10) }
+}
 export function contractVars(q: Record<string, any>, c: Record<string, any>, today = istanbulToday()): TemplateVars {
-  const start = q.start_date || today
-  const d = new Date(`${start}T00:00:00Z`)
-  if (q.billing_period === 'aylık') d.setUTCMonth(d.getUTCMonth() + 1); else d.setUTCFullYear(d.getUTCFullYear() + 1)
-  d.setUTCDate(d.getUTCDate() - 1)
+  const { start, end } = contractPeriod(q.start_date || today, q.billing_period)
   const kimlik = q.party_type === 'şirket' ? `VKN ${digits(c.tax_no)}` : `TCKN ${digits(c.tc)}`
   return {
     teklif_no: q.quote_no, tarih: trDate(today), taraf_turu: q.party_type === 'şirket' ? 'Tüzel kişi' : q.party_type === 'kuruluş' ? 'Gerçek kişi (kurulacak şirket hesabına)' : 'Gerçek kişi',
@@ -113,7 +120,7 @@ export function contractVars(q: Record<string, any>, c: Record<string, any>, tod
     musteri_eposta: c.email || '', musteri_telefon: c.phone || '', yetkili: q.party_type === 'şirket' ? (c.contact || '') : (c.title || ''),
     kurulacak_sirket: q.party_type === 'kuruluş' ? (q.planned_company || '-') : '-', paket: q.package_id, donem: q.billing_period,
     tutar: `${tl(q.amount)} TL (KDV dahil)`, liste_tutar: `${tl(q.list_amount)} TL`, indirim: q.discount_pct ? `%${q.discount_pct}` : '-',
-    baslangic: trDate(start), bitis: trDate(d.toISOString().slice(0, 10)),
+    baslangic: trDate(start), bitis: trDate(end),
   }
 }
 

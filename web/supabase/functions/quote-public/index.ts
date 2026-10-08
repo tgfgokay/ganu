@@ -9,10 +9,10 @@
 //   reject      → müşteri teklifi reddeder (isteğe bağlı gerekçe)
 // Secret'lar: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SITE_URL, QUOTE_SECRET (≥32 rastgele karakter), RESEND_API_KEY
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { cleanParty, contractVars, keyedHash, maskEmail, maskId, newOtp, otpHash, partyErrors, renderContract, sha256Hex, validToken, type PartyType } from '../_shared/quote.ts'
+import { cleanParty, contractPeriod, contractVars, istanbulToday, keyedHash, maskEmail, maskId, newOtp, otpHash, partyErrors, renderContract, sha256Hex, validToken, type PartyType } from '../_shared/quote.ts'
 import { mailReady, sendMail } from '../_shared/mail.ts'
 import { otpMail } from '../_shared/quote.ts'
-import { createInvoiceLink, paytrLinkEnv } from '../_shared/paytr-create.ts'
+import { createInvoiceLink, paytrLinkEnv, type LinkOutcome } from '../_shared/paytr-create.ts'
 
 const SITE = (Deno.env.get('SITE_URL') || '').replace(/\/+$/, '')
 let ORIGIN = ''
@@ -55,9 +55,11 @@ async function byToken(db: Db, token: unknown) {
   if (q.status === 'süresi_doldu') throw new AppError(410, 'Teklifin geçerlilik süresi dolmuştur.')
   return { q, hash }
 }
-async function activeTemplate(db: Db) {
-  const { data } = await db.from('contract_templates').select('version,title,body_md').eq('active', true).maybeSingle()
-  if (!data) throw new AppError(503, 'Sözleşme metni hazırlanıyor; kısa süre sonra tekrar deneyin.')
+// Teklif, gönderildiği anda etkin olan şablon sürümüne sabitlenir (quote_rotate_token); müşteri hep o metni görür.
+async function quoteTemplate(db: Db, q: Record<string, any>) {
+  if (!q.template_version) throw new AppError(503, 'Sözleşme metni hazırlanıyor; kısa süre sonra tekrar deneyin.')
+  const { data } = await db.from('contract_templates').select('version,title,body_md').eq('version', q.template_version).maybeSingle()
+  if (!data) throw new AppError(503, 'Sözleşme metni bulunamadı; info@ganu.com.tr adresine yazın.')
   return data
 }
 function partyFrom(q: Record<string, any>, raw: Record<string, unknown>) {
@@ -67,10 +69,11 @@ function partyFrom(q: Record<string, any>, raw: Record<string, unknown>) {
   return p
 }
 async function render(db: Db, q: Record<string, any>, p: ReturnType<typeof cleanParty>) {
-  const tpl = await activeTemplate(db)
+  const tpl = await quoteTemplate(db, q)
   const { data: c } = await db.from('customers').select('email,phone').eq('id', q.customer_id).single()
-  const text = renderContract(tpl.body_md, contractVars(q, { ...p, email: c?.email, phone: c?.phone }))
-  return { tpl, text, sha: await sha256Hex(text), email: String(c?.email || '') }
+  const today = istanbulToday()
+  const text = renderContract(tpl.body_md, contractVars(q, { ...p, email: c?.email, phone: c?.phone }, today))
+  return { tpl, text, sha: await sha256Hex(text), email: String(c?.email || ''), period: contractPeriod(q.start_date || today, q.billing_period) }
 }
 
 async function view(db: Db, token: unknown) {
@@ -82,7 +85,7 @@ async function view(db: Db, token: unknown) {
     const { data: inv } = await db.from('invoices').select('status,payment_link,amount').eq('id', q.invoice_id).maybeSingle()
     payment = { paid: inv?.status === 'ödendi', link: inv?.status === 'ödendi' ? null : inv?.payment_link || null, amount: inv?.amount, bank: BANK, reference: q.quote_no }
   }
-  const { data: tpl } = await db.from('contract_templates').select('version,title').eq('active', true).maybeSingle()
+  const { data: tpl } = q.template_version ? await db.from('contract_templates').select('version,title').eq('version', q.template_version).maybeSingle() : { data: null }
   return json({
     quote: { quote_no: q.quote_no, status: q.status, party_type: q.party_type, planned_company: q.planned_company, package_id: q.package_id, billing_period: q.billing_period,
       list_amount: q.list_amount, discount_pct: q.discount_pct, amount: q.amount, currency: q.currency, valid_until: q.valid_until, start_date: q.start_date, accepted_at: q.accepted_at },
@@ -98,16 +101,17 @@ async function requestOtp(db: Db, b: Record<string, any>) {
   if (!mailReady()) throw new AppError(503, 'Doğrulama e-postası şu an gönderilemiyor; lütfen info@ganu.com.tr adresine yazın.')
   const { q, hash } = await byToken(db, b.token)
   if (q.status !== 'gönderildi') throw new AppError(409, q.status === 'kabul' ? 'Teklif zaten onaylanmış.' : 'Teklif onaya açık değil.')
-  if (q.otp_sent_count >= 5) throw new AppError(429, 'Çok fazla kod istendi. Yeni bağlantı için info@ganu.com.tr adresine yazın.')
-  if (q.otp_last_sent_at && Date.now() - new Date(q.otp_last_sent_at).getTime() < 60_000) throw new AppError(429, 'Yeni kod için 1 dakika bekleyin.')
   const p = partyFrom(q, b.party)
   const r = await render(db, q, p)
   const otp = newOtp()
-  const { error } = await db.from('quotes').update({ otp_hash: await otpHash(secret(), q.id, otp), otp_expires_at: new Date(Date.now() + 10 * 60_000).toISOString(), otp_attempts: 0,
-    otp_sent_count: (q.otp_sent_count || 0) + 1, otp_last_sent_at: new Date().toISOString() }).eq('id', q.id).eq('token_hash', hash).eq('status', 'gönderildi')
+  // Sayaç, 60 sn bekleme ve kodun bağlı olduğu metin özeti tek kilit altında; RPC 'ok' demezse e-posta gitmez.
+  const { data, error } = await db.rpc('quote_issue_otp', { p_quote: q.id, p_token_hash: hash, p_otp_hash: await otpHash(secret(), q.id, otp), p_sha: r.sha })
   if (error) throw new Error('OTP kaydedilemedi')
+  if (data === 'limit') throw new AppError(429, 'Çok fazla kod istendi. Yeni bağlantı için info@ganu.com.tr adresine yazın.')
+  if (data === 'bekle') throw new AppError(429, 'Yeni kod için 1 dakika bekleyin.')
+  if (data !== 'ok') throw new AppError(409, 'Teklif onaya açık değil.')
   const m = await sendMail(r.email, otpMail(q, otp))
-  if (!m.ok) throw new AppError(502, 'Doğrulama kodu gönderilemedi; biraz sonra tekrar deneyin.')
+  if (!m.ok) throw new AppError(502, 'Doğrulama kodu gönderilemedi; 1 dakika sonra tekrar deneyin.')
   return json({ state: 'kod_gönderildi', email: maskEmail(r.email), contract_version: r.tpl.version, contract_title: r.tpl.title, contract_text: r.text, sha256: r.sha })
 }
 
@@ -117,29 +121,34 @@ async function accept(db: Db, req: Request, b: Record<string, any>) {
   const { q, hash } = await byToken(db, b.token)
   if (q.status === 'kabul') return view(db, b.token)
   const p = partyFrom(q, b.party)
-  const chk = await db.rpc('quote_otp_check', { p_quote: q.id, p_token_hash: hash, p_otp_hash: await otpHash(secret(), q.id, String(b.otp)) })
-  if (chk.error) throw new Error('OTP kontrolü yapılamadı')
-  if (chk.data === 'süre') throw new AppError(400, 'Kodun süresi doldu; yeni kod isteyin.')
-  if (chk.data === 'kilit') throw new AppError(429, 'Çok fazla hatalı deneme; yeni kod isteyin.')
-  if (chk.data !== 'ok') throw new AppError(400, chk.data === 'hatalı' ? 'Kod hatalı.' : 'Teklif onaya açık değil.')
   const r = await render(db, q, p)
-  if (r.sha !== String(b.sha256 || '')) throw new AppError(409, 'Sözleşme metni değişti (tarih ya da bilgiler güncellendi). Lütfen metni yeniden görüntüleyip onaylayın.', 'sha')
-  const secretKey = secret()
+  if (r.sha !== String(b.sha256 || '')) throw new AppError(409, 'Sözleşme metni değişti (tarih ya da bilgiler güncellendi). Lütfen metni yeniden görüntüleyip yeni kod isteyin.', 'sha')
+  const key = secret()
   const evidence = {
     method: 'otp_email', email: r.email, otp_verified_at: new Date().toISOString(), template: r.tpl.version, sha256: r.sha,
-    kvkk_ack: true, contract_ack: true, ip_hmac: await keyedHash(secretKey, 'quote-legal-ip', clientIp(req)),
-    ua_hmac: await keyedHash(secretKey, 'quote-legal-ua', req.headers.get('user-agent') || ''), party_type: q.party_type,
+    kvkk_ack: true, contract_ack: true, ip_hmac: await keyedHash(key, 'quote-legal-ip', clientIp(req)),
+    ua_hmac: await keyedHash(key, 'quote-legal-ua', req.headers.get('user-agent') || ''), party_type: q.party_type,
   }
-  const { data, error } = await db.rpc('quote_accept', { p_quote: q.id, p_token_hash: hash, p_template: r.tpl.version, p_text: r.text, p_sha: r.sha, p_method: 'otp_email', p_evidence: evidence, p_party: p })
+  // Kod doğrulaması, kodun üretildiği metinle eşleşme ve kabul tek RPC'de, aynı satır kilidi altında.
+  const { data, error } = await db.rpc('quote_accept', { p_quote: q.id, p_token_hash: hash, p_otp_hash: await otpHash(key, q.id, String(b.otp)), p_template: r.tpl.version,
+    p_text: r.text, p_sha: r.sha, p_method: 'otp_email', p_evidence: evidence, p_party: p, p_start: r.period.start, p_end: r.period.end })
   if (error) throw new Error(`kabul kaydı: ${error.message}`)
-  if (data?.state !== 'kabul' && data?.state !== 'zaten') throw new AppError(409, data?.state === 'süresi_doldu' ? 'Teklifin süresi dolmuş.' : 'Teklif onaylanamadı.')
-  let link: string | null = null
+  const st = data?.state
+  if (st === 'hatalı') throw new AppError(400, 'Kod hatalı.')
+  if (st === 'süre') throw new AppError(400, 'Kodun süresi doldu; yeni kod isteyin.')
+  if (st === 'kilit') throw new AppError(429, 'Çok fazla hatalı deneme; yeni kod isteyin.')
+  if (st === 'metin') throw new AppError(409, 'Kod, ekranda gördüğünüzden farklı bilgilerle istenmiş. Yeni kod isteyin.', 'sha')
+  if (st === 'süresi_doldu') throw new AppError(410, 'Teklifin süresi dolmuş.')
+  if (st !== 'kabul' && st !== 'zaten') throw new AppError(409, 'Teklif onaylanamadı.')
+  let link: string | null = null, linkStatus = 'kapalı'
   const env = paytrLinkEnv()
   if (env && data.invoice_id) {
-    const out = await createInvoiceLink(db, data.invoice_id, env).catch(() => null)
-    link = out?.body?.link || null
+    const out = await createInvoiceLink(db, data.invoice_id, env).catch((e): LinkOutcome => ({ status: 500, body: { state: 'başarısız', message: String((e as Error)?.message || e) } }))
+    link = out.body.link || null
+    linkStatus = link ? 'hazır' : 'başarısız'
+    if (!link) await db.from('quotes').update({ last_error: `Kart linki üretilemedi: ${out.body.message || out.status}`.slice(0, 500) }).eq('id', q.id)
   }
-  return json({ state: 'kabul', payment: { paid: false, link, amount: q.amount, bank: BANK, reference: q.quote_no } })
+  return json({ state: 'kabul', payment: { paid: false, link, link_status: linkStatus, amount: q.amount, bank: BANK, reference: q.quote_no } })
 }
 
 async function reject(db: Db, b: Record<string, any>) {

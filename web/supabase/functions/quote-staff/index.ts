@@ -9,7 +9,7 @@
 //   sync          → ödeme sonrası hattı yeniden çalıştırır (e-Belge, e-posta, aktivasyon)
 // Secret'lar: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SITE_URL, QUOTE_SECRET (≥32), [RESEND_API_KEY, MAIL_FROM]
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { cleanParty, contractVars, newToken, partyErrors, quoteAmount, quoteMail, renderContract, sha256Hex, validEmail, digits, type PartyType } from '../_shared/quote.ts'
+import { cleanParty, contractPeriod, contractVars, istanbulToday, newToken, partyErrors, quoteAmount, quoteMail, renderContract, sha256Hex, validEmail, digits, type PartyType } from '../_shared/quote.ts'
 import { mailReady, sendMail } from '../_shared/mail.ts'
 import { createInvoiceLink, paytrLinkEnv } from '../_shared/paytr-create.ts'
 import { runQuotePipeline } from '../_shared/quote-pipeline.ts'
@@ -34,7 +34,7 @@ async function staffUser(req: Request): Promise<{ id: string } | null> {
   const client = createClient(url, anon, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false } })
   const { data, error } = await client.rpc('is_staff')
   if (error || data !== true) return null
-  const { data: u } = await client.auth.getUser()
+  const { data: u } = await client.auth.getUser(authorization.slice(7).trim())
   return u?.user ? { id: u.user.id } : null
 }
 type Db = ReturnType<typeof serviceDb>
@@ -94,36 +94,29 @@ async function create(db: Db, b: Record<string, any>, uid: string) {
 }
 
 async function send(db: Db, q: Record<string, any>) {
-  if (!['taslak', 'gönderildi'].includes(q.status)) return json({ error: `Bu teklif '${q.status}' durumunda; gönderilemez.` }, 409)
-  if (q.valid_until < today()) return json({ error: 'Teklifin süresi dolmuş; yeni teklif oluşturun.' }, 409)
-  const { data: tpl } = await db.from('contract_templates').select('version').eq('active', true).maybeSingle()
-  if (!tpl) return json({ error: 'Etkin sözleşme şablonu yok. Önce Ayarlar > Sözleşme şablonu bölümünden onaylı metni yükleyin.' }, 409)
   const { data: c } = await db.from('customers').select('*').eq('id', q.customer_id).single()
   if (!c || !validEmail(c.email)) return json({ error: 'Müşterinin geçerli e-posta adresi yok.' }, 422)
   const token = newToken(), hash = await sha256Hex(token)
-  const link = `${SITE}/teklif#t=${token}`
-  const { error } = await db.from('quotes').update({ token_hash: hash, status: 'gönderildi', sent_at: new Date().toISOString(), sent_to: c.email, send_count: (q.send_count || 0) + 1, otp_hash: null, otp_expires_at: null, otp_attempts: 0 }).eq('id', q.id).in('status', ['taslak', 'gönderildi'])
+  // Token değişimi + etkin şablon sürümüne sabitleme + sayaç tek kilit altında (eşzamanlı iki gönderimde son geçerli link tek).
+  const { data: st, error } = await db.rpc('quote_rotate_token', { p_quote: q.id, p_hash: hash, p_email: c.email })
   if (error) return json({ error: `Teklif güncellenemedi: ${error.message}` }, 500)
+  const why: Record<string, string> = { durum: `Bu teklif '${q.status}' durumunda; gönderilemez.`, süre: 'Teklifin süresi dolmuş; yeni teklif oluşturun.',
+    çok_sık: 'Az önce gönderildi; 30 saniye sonra tekrar deneyin.', şablon: 'Etkin sözleşme şablonu yok. Teklifler > Sözleşme şablonu bölümünden onaylı metni yükleyip etkinleştirin.' }
+  if (st !== 'ok') return json({ error: why[st] || 'Teklif gönderilemedi.' }, 409)
+  const link = `${SITE}/teklif#t=${token}`
   let mail = { ok: false, error: 'E-posta servisi kurulmadı; linki kopyalayıp müşteriye iletin.' } as { ok: boolean; error?: string }
   if (mailReady()) mail = await sendMail(c.email, quoteMail(q, c, link), `quote-send-${q.id}-${hash.slice(0, 16)}`)
   return json({ state: 'gönderildi', link, mailed: mail.ok, mail_error: mail.ok ? undefined : mail.error })
 }
 
-async function cancel(db: Db, q: Record<string, any>) {
-  if (['iptal', 'reddedildi', 'süresi_doldu'].includes(q.status)) return json({ state: q.status })
-  if (q.status === 'kabul') {
-    const { data: inv } = await db.from('invoices').select('id,status,parasut_invoice_id,paytr_merchant_oid').eq('id', q.invoice_id).maybeSingle()
-    if (inv && (inv.status === 'ödendi' || inv.parasut_invoice_id || inv.paytr_merchant_oid)) return json({ error: 'Ödemesi alınmış/faturası kesilmiş teklif iptal edilemez; iade ve fesih elle yürütülür.' }, 409)
-    if (q.activated_at) return json({ error: 'Aktif hizmet iptal edilemez.' }, 409)
-    const { error: ue } = await db.from('quotes').update({ status: 'iptal', cancelled_at: new Date().toISOString(), invoice_id: null }).eq('id', q.id).eq('status', 'kabul')
-    if (ue) return json({ error: ue.message }, 500)
-    if (inv) await db.from('invoices').delete().eq('id', inv.id).eq('status', 'bekliyor')
-    if (q.contract_id) await db.from('contracts').update({ status: 'iptal' }).eq('id', q.contract_id)
-    return json({ state: 'iptal' })
-  }
-  const { error } = await db.from('quotes').update({ status: 'iptal', cancelled_at: new Date().toISOString(), token_hash: null, otp_hash: null }).eq('id', q.id).in('status', ['taslak', 'gönderildi'])
+async function cancel(db: Db, q: Record<string, any>, force: boolean) {
+  const { data, error } = await db.rpc('quote_cancel', { p_quote: q.id, p_force: force })
   if (error) return json({ error: error.message }, 500)
-  return json({ state: 'iptal' })
+  const st = data?.state
+  if (st === 'ödenmiş') return json({ error: 'Ödemesi alınmış/faturası kesilmiş teklif iptal edilemez; iade ve fesih elle yürütülür.' }, 409)
+  if (st === 'aktif') return json({ error: 'Aktif hizmet iptal edilemez.' }, 409)
+  if (st === 'link_var') return json({ error: 'Bu teklife kart ödeme linki verilmiş. PayTR panelinden linki silin, sonra “Linki sildim, iptal et” ile tekrar deneyin.', code: 'link_var' }, 409)
+  return json({ state: st })
 }
 
 async function acceptManual(db: Db, q: Record<string, any>, b: Record<string, any>, uid: string) {
@@ -136,11 +129,13 @@ async function acceptManual(db: Db, q: Record<string, any>, b: Record<string, an
   const { data: c } = await db.from('customers').select('*').eq('id', q.customer_id).single()
   const errs = partyErrors(q.party_type, { title: c.title, contact: c.contact, tc: c.tc, tax_no: c.tax_no, tax_office: c.tax_office, address: c.address, city: c.city, district: c.district })
   if (errs.length) return json({ error: `Müşteri kaydında eksik: ${errs.join(', ')}` }, 422)
+  const today = istanbulToday(), period = contractPeriod(q.start_date || today, q.billing_period)
   let text: string
-  try { text = renderContract(tpl.body_md, contractVars(q, c)) } catch (e) { return json({ error: String((e as Error).message) }, 422) }
+  try { text = renderContract(tpl.body_md, contractVars(q, c, today)) } catch (e) { return json({ error: String((e as Error).message) }, 422) }
   const sha = await sha256Hex(text)
   const evidence = { method: 'ıslak_imza', staff: uid, document_id: doc.id, template: tpl.version, at: new Date().toISOString() }
-  const { data, error } = await db.rpc('quote_accept', { p_quote: q.id, p_token_hash: q.token_hash, p_template: tpl.version, p_text: text, p_sha: sha, p_method: 'ıslak_imza', p_evidence: evidence, p_party: {} })
+  const { data, error } = await db.rpc('quote_accept', { p_quote: q.id, p_token_hash: null, p_otp_hash: null, p_template: tpl.version, p_text: text, p_sha: sha,
+    p_method: 'ıslak_imza', p_evidence: evidence, p_party: {}, p_start: period.start, p_end: period.end })
   if (error) return json({ error: error.message }, 500)
   return json(data)
 }
@@ -150,11 +145,14 @@ async function addressDoc(db: Db, q: Record<string, any>, b: Record<string, any>
   if (!['yüklendi', 'gerekmiyor', 'bekliyor'].includes(v)) return json({ error: 'Değer geçersiz.' }, 400)
   const note = String(b.note || '').trim().slice(0, 500)
   if (v === 'gerekmiyor' && note.length < 5) return json({ error: "'Gerekmiyor' için gerekçe yazın." }, 400)
+  let docId: string | null = null
   if (v === 'yüklendi') {
-    const { count } = await db.from('documents').select('id', { count: 'exact', head: true }).eq('customer_id', q.customer_id).eq('type', 'isyeri_kullanim')
-    if (!count) return json({ error: "Önce müşteriye 'İşyeri/Adres Kullanım Belgesi' türünde imzalı belgeyi yükleyin." }, 422)
+    if (!UUID.test(String(b.document_id || ''))) return json({ error: 'İmzalı adres belgesini seçin.' }, 400)
+    const { data: doc } = await db.from('documents').select('id,customer_id,type,file_url').eq('id', String(b.document_id)).maybeSingle()
+    if (!doc || doc.customer_id !== q.customer_id || doc.type !== 'isyeri_kullanim' || !doc.file_url) return json({ error: "Belge bu müşteriye ait 'İşyeri/Adres Kullanım Belgesi' türünde yüklenmiş dosya olmalı." }, 422)
+    docId = doc.id
   }
-  const { error } = await db.from('quotes').update({ address_doc: v, address_doc_note: note || null, address_doc_by: uid, address_doc_at: new Date().toISOString() }).eq('id', q.id)
+  const { error } = await db.from('quotes').update({ address_doc: v, address_doc_note: note || null, address_doc_id: docId, address_doc_by: uid, address_doc_at: new Date().toISOString() }).eq('id', q.id).is('activated_at', null)
   if (error) return json({ error: error.message }, 500)
   const r = await runQuotePipeline(db, q.id, ORIGIN)
   return json({ state: v, pipeline: r })
@@ -175,7 +173,7 @@ Deno.serve(async (req) => {
     const q = await loadQuote(db, b.quote_id)
     if (!q) return json({ error: 'Teklif bulunamadı.' }, 404)
     if (b.action === 'send') return await send(db, q)
-    if (b.action === 'cancel') return await cancel(db, q)
+    if (b.action === 'cancel') return await cancel(db, q, b.force === true)
     if (b.action === 'accept_manual') return await acceptManual(db, q, b, user.id)
     if (b.action === 'address_doc') return await addressDoc(db, q, b, user.id)
     if (b.action === 'pay_link') {

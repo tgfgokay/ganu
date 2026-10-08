@@ -115,13 +115,13 @@ function NewQuote({ customers: cs, onClose, onDone }) {
 }
 
 function QuoteDetail({ q, c, inv, onClose, onChange }) {
-  const [busy, setBusy] = useState(''), [msg, setMsg] = useState(''), [link, setLink] = useState(''), [docs, setDocs] = useState([]), [docId, setDocId] = useState(''), [note, setNote] = useState(''), [showText, setShowText] = useState(false)
+  const [busy, setBusy] = useState(''), [msg, setMsg] = useState(''), [link, setLink] = useState(''), [docs, setDocs] = useState([]), [docId, setDocId] = useState(''), [addrId, setAddrId] = useState(''), [forceCancel, setForceCancel] = useState(false), [note, setNote] = useState(''), [showText, setShowText] = useState(false)
   useEffect(() => { documents.list().then((d) => setDocs(d.filter((x) => x.customer_id === q.customer_id))).catch(() => setDocs([])) }, [q.customer_id])
   const run = async (action, payload = {}, confirmText = '') => {
     if (confirmText && !confirm(confirmText)) return
     setBusy(action); setMsg('')
     const r = await quoteAction(action, { quote_id: q.id, ...payload }); setBusy('')
-    if (r?.error) { setMsg(`⚠ ${r.error}`); return }
+    if (r?.error) { setMsg(`⚠ ${r.error}`); if (r.code === 'link_var') setForceCancel(true); return }
     if (r?.link) setLink(r.link)
     if (action === 'send') setMsg(r.mailed ? `✓ Teklif e-postası ${c?.email} adresine gönderildi.` : `Link hazır. ${r.mail_error || ''}`)
     else if (action === 'sync' || r?.pipeline) { const p = r.pipeline || r; setMsg(`${p.state}${p.missing?.length ? ` · eksik: ${p.missing.join(', ')}` : ''}${p.steps?.length ? ` · ${p.steps.join(' · ')}` : ''}${p.error ? ` · ${p.error}` : ''}`) }
@@ -150,6 +150,7 @@ function QuoteDetail({ q, c, inv, onClose, onChange }) {
         {q.status === 'kabul' && !paid && <button className="pl-btn pl-btn-ghost" disabled={!!busy} onClick={() => run('pay_link')}>Kart ödeme linki</button>}
         {q.status === 'kabul' && !q.activated_at && <button className="pl-btn pl-btn-ghost" disabled={!!busy} onClick={() => run('sync')}>Devam ettir</button>}
         {!['iptal', 'reddedildi', 'süresi_doldu'].includes(q.status) && !paid && !q.activated_at && <button className="pl-btn pl-btn-danger" disabled={!!busy} onClick={() => run('cancel', {}, 'Teklif iptal edilsin mi?')}>İptal</button>}
+        {forceCancel && <button className="pl-btn pl-btn-danger" disabled={!!busy} onClick={() => run('cancel', { force: true }, 'PayTR panelinden kart linkini sildiğinizi onaylıyor musunuz? Teklif ve ödenmemiş tahsilat kaydı iptal edilecek.')}>Linki sildim, iptal et</button>}
       </div>
       {inv && !paid && <div className="sub" style={{ marginTop: 8 }}>Havale/EFT geldiyse <Link to="/panel/faturalar">Faturalar</Link> sayfasından “Ödendi (elle)” işaretleyin, sonra burada “Devam ettir”e basın.</div>}
       {['taslak', 'gönderildi'].includes(q.status) && <fieldset style={{ marginTop: 16, border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}><legend className="sub">Islak imzalı sözleşme ile onay</legend>
@@ -159,7 +160,8 @@ function QuoteDetail({ q, c, inv, onClose, onChange }) {
       {q.status === 'kabul' && !q.activated_at && <fieldset style={{ marginTop: 16, border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}><legend className="sub">Adres tahsis / kullanım belgesi</legend>
         <div className="sub">İmzalı belgeyi müşteri sayfasından “İşyeri/Adres Kullanım Belgesi” türünde yükleyip “Yüklendi” deyin. Gerekmiyorsa gerekçe yazın.</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-          <button className="pl-btn pl-btn-ghost pl-btn-sm" disabled={!!busy} onClick={() => run('address_doc', { value: 'yüklendi' })}>Yüklendi</button>
+          <select value={addrId} onChange={(e) => setAddrId(e.target.value)}><option value="">Adres belgesi seçin…</option>{docs.filter((d) => d.type === 'isyeri_kullanim').map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+          <button className="pl-btn pl-btn-ghost pl-btn-sm" disabled={!!busy || !addrId} onClick={() => run('address_doc', { value: 'yüklendi', document_id: addrId })}>Kontrol ettim, yüklendi</button>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Gerekmiyor gerekçesi" style={{ flex: 1, minWidth: 160 }} />
           <button className="pl-btn pl-btn-ghost pl-btn-sm" disabled={!!busy || note.trim().length < 5} onClick={() => run('address_doc', { value: 'gerekmiyor', note })}>Gerekmiyor</button></div></fieldset>}
       {q.contract_text && <div style={{ marginTop: 16 }}><button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setShowText((v) => !v)}>{showText ? 'Sözleşme metnini gizle' : 'Onaylanan sözleşme metni'}</button>

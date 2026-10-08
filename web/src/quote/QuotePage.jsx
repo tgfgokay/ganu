@@ -97,6 +97,7 @@ export default function QuotePage() {
       <h2 style={{ marginTop: 0, fontSize: 19 }}>{payment?.paid ? 'Ödemeniz alındı' : '3 · Ödeme'}</h2>
       {payment?.paid ? <p>Teşekkür ederiz. Fatura ve sözleşme kopyanız e-postanıza gönderilir.</p> : <>
         <p>Sözleşmeyi onayladınız. Tutar: <b>{tl(payment?.amount ?? q.amount)} TL</b> (KDV dahil).</p>
+        {payment?.link_status === 'başarısız' && <p style={{ fontSize: 14, color: '#92400e' }}>Kartla ödeme bağlantısı şu an oluşturulamadı; havale ile ödeyebilir ya da info@ganu.com.tr adresine yazabilirsiniz.</p>}
         {payment?.link && <p><a href={payment.link} style={{ ...S.btn, display: 'inline-block', textDecoration: 'none' }} rel="noopener noreferrer">Kartla öde</a></p>}
         {payment?.bank && <div style={{ background: '#f8fafc', borderRadius: 8, padding: 12, fontSize: 15 }}>
           <div><b>Havale / EFT</b></div><div>{payment.bank.bank} · {payment.bank.holder}</div><div style={{ fontFamily: 'monospace', fontSize: 16 }}>{payment.bank.iban}</div><div>Açıklama: <b>{payment.reference}</b></div></div>}

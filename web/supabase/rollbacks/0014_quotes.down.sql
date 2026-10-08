@@ -1,10 +1,11 @@
 -- 0014 rollback: teklif modülü kaldırılır. Kabul kanıtları (quotes.contract_text, acceptance_evidence) silineceği için
 -- rollback ÖNCESİNDE quotes ve contract_templates tablolarının yedeği alınmalıdır. Faturalar ve sözleşmeler korunur.
 drop function if exists public.quote_rate_limit(text,text,int,int);
-drop function if exists public.quote_claim_mail(uuid,text);
 drop function if exists public.quote_try_activate(uuid);
-drop function if exists public.quote_otp_check(uuid,text,text);
-drop function if exists public.quote_accept(uuid,text,text,text,text,text,jsonb,jsonb);
+drop function if exists public.quote_cancel(uuid,boolean);
+drop function if exists public.quote_accept(uuid,text,text,text,text,text,text,jsonb,jsonb,date,date);
+drop function if exists public.quote_issue_otp(uuid,text,text,text);
+drop function if exists public.quote_rotate_token(uuid,text,text);
 drop function if exists public.quote_next_no();
 drop index if exists public.invoices_quote_unique;
 alter table public.invoices drop column if exists quote_id;
