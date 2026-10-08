@@ -74,3 +74,5 @@ jobs:
           supabase/functions/pos-payment/index.ts
           supabase/functions/purchase-flow/index.ts
           supabase/functions/send-notification/index.ts
+          supabase/functions/quote-public/index.ts
+          supabase/functions/quote-staff/index.ts
