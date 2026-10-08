@@ -57,6 +57,10 @@ const privateShell=shell.replace('<title>GANU</title>','<title>GANU · Güvenli 
 if(!marketing)for(const routePath of ['/satin-al','/panel','/musteri','/ortak']){
   const file=outFile(routePath);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,privateShell)
 }
+// Teklif onay sayfası (yalnız personel paneli açık yayında): istemci tarafında çalışır, dizine eklenmez.
+if(!marketing||process.env.GANU_STAFF_PANEL==='true'){
+  const file=outFile('/teklif');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,privateShell.replace('GANU · Güvenli uygulama','GANU · Teklif'))
+}
 
 const indexedRoutes=routes.filter((route)=>route.indexable!==false)
 const sitemap=indexedRoutes.map((route)=>{
@@ -67,7 +71,7 @@ const sitemap=indexedRoutes.map((route)=>{
   return `  <url><loc>${escape(canonical)}</loc>${alternates}${lastmod}</url>`
 }).join('\n')
 fs.writeFileSync(path.join(dist,'sitemap.xml'),`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${sitemap}\n</urlset>\n`)
-const disallow=['/panel','/musteri','/ortak','/satin-al'].flatMap((p)=>[`Disallow: ${config.path(p)}`,`Disallow: ${config.path(p)}/`]).join('\n')
+const disallow=['/panel','/musteri','/ortak','/satin-al','/teklif'].flatMap((p)=>[`Disallow: ${config.path(p)}`,`Disallow: ${config.path(p)}/`]).join('\n')
 fs.writeFileSync(path.join(dist,'robots.txt'),`User-agent: *\nAllow: ${config.path('/')}\n${disallow}\nSitemap: ${config.absolute('/sitemap.xml')}\n`)
 
 const keep=config.base==='/'?0:config.base.split('/').filter(Boolean).length

@@ -46,6 +46,9 @@ jobs:
       - name: PayTR payment link signing and callback decisions
         run: npm run test:paytr
 
+      - name: Teklif modülü (kimlik, şablon, ödeme sonrası hat)
+        run: npm run test:quote
+
       - name: Build canonical root
         run: npm run build
 

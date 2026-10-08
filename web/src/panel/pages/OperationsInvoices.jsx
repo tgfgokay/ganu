@@ -1,6 +1,6 @@
 import { useEffect,useMemo,useState } from 'react'
 import { Link } from 'react-router-dom'
-import { invoices,customers,contracts,invStatus,issueEInvoice,createPaymentLink,checkParasut,PAYMENT_METHODS } from '../lib/operations-store.js'
+import { invoices,customers,contracts,invStatus,issueEInvoice,createPaymentLink,checkParasut,PAYMENT_METHODS,quoteAction } from '../lib/operations-store.js'
 import { SecureLink } from '../components/SecureAsset.jsx'
 import { PAYMENT_ACCOUNT,paymentMessage } from '../lib/company.js'
 import { Modal,fmtDate,fmtTL } from './_ui.jsx'
@@ -14,7 +14,7 @@ export const emptyInvoice=(customerId='')=>{const issue=today();return {customer
 // Tutarlar KDV dahildir. Paraşüt'te resmîleşmiş faturanın tutarı, tarihi ve belge alanları panelden değişmez.
 export function invoicePayload(f){const paid=f.status==='ödendi';const base={contract_id:f.contract_id||null,due_date:f.due_date||null,status:paid?'ödendi':'bekliyor',paid_date:paid?(f.paid_date||today()):null,payment_method:f.payment_method||null,payment_link:f.payment_link.trim()||null,note:f.note.trim()};if(f.parasut_invoice_id)return base;const no=f.einvoice_no.trim();return {...base,customer_id:f.customer_id,amount:Number(f.amount)||0,issue_date:f.issue_date,einvoice_no:no||null,einvoice_status:no?(f.einvoice_status||'kesildi'):null}}
 // Elle kapatma: yanlışlıkla "ödendi" işaretlemeyi önlemek için onay ister. Kartla ödemeleri PayTR bildirimi otomatik işaretler.
-export const markPaid=async(row)=>{if(!confirm(`${fmtTL(row.amount)} tutarlı fatura ELLE "ödendi" olarak işaretlenecek.\nHavale/nakit tahsilatı hesaba geçtiyse onaylayın; kartla ödemeler PayTR bildirimiyle otomatik işaretlenir.`))return false;await invoices.update(row.id,{status:'ödendi',paid_date:today()});return true}
+export const markPaid=async(row)=>{if(!confirm(`${fmtTL(row.amount)} tutarlı fatura ELLE "ödendi" olarak işaretlenecek.\nHavale/nakit tahsilatı hesaba geçtiyse onaylayın; kartla ödemeler PayTR bildirimiyle otomatik işaretlenir.`))return false;await invoices.update(row.id,{status:'ödendi',paid_date:today()});if(row.quote_id){const r=await quoteAction('sync',{quote_id:row.quote_id});if(r?.error||r?.state==='hata')alert(`Ödeme kaydedildi; teklif adımı tamamlanamadı: ${r.error||''}\nTeklifler sayfasından "Devam ettir" deneyin.`)}return true}
 // Ödenmiş faturada ödemenin kaynağı: PayTR bildirimi (otomatik) mi, personelin elle işaretlemesi mi.
 export const paidSource=(row)=>invStatus(row)!=='ödendi'?'':row.paytr_merchant_oid?'PayTR kartla · otomatik':`elle işaretlendi${row.payment_method?` · ${row.payment_method}`:''}`
 

@@ -74,3 +74,13 @@ export async function resolveStoredUrl(stored){
   const {data,error}=await supabase.storage.from(BUCKET).createSignedUrl(path,300)
   return error?'':data?.signedUrl||''
 }
+
+// Teklif modülü (0014): tablolar personel için salt okunur; her geçiş quote-staff Edge Function'ında (service-role RPC).
+export const quotes=collection('quotes')
+export const QUOTE_STATUS=['taslak','gönderildi','kabul','reddedildi','süresi_doldu','iptal']
+export const PARTY_TYPES=[{v:'şahıs',l:'Şahıs / şahıs işletmesi'},{v:'şirket',l:'Kurulu şirket (VKN var)'},{v:'kuruluş',l:'Kuruluş aşamasında (VKN yok)'}]
+export async function quoteAction(action,payload={}){requireCloud();const {data,error}=await supabase.functions.invoke('quote-staff',{body:{action,...payload}});if(!error)return data;let body=null;try{body=await error.context?.json?.()}catch{/* gövdesiz hata */}return body||{error:'Teklif servisine ulaşılamadı.'}}
+export async function listTemplates(){requireCloud();const {data,error}=await supabase.from('contract_templates').select('version,title,sha256,active,created_at').order('created_at',{ascending:false});if(error)throw error;return data||[]}
+export async function addTemplate({version,title,body_md}){requireCloud();const bytes=new TextEncoder().encode(body_md);const sha=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map((x)=>x.toString(16).padStart(2,'0')).join('');const {error}=await supabase.from('contract_templates').insert({version,title,body_md,sha256:sha,active:false});if(error)throw error;return sha}
+export async function activateTemplate(version){requireCloud();const {error:e1}=await supabase.from('contract_templates').update({active:false}).eq('active',true);if(e1)throw e1;const {error}=await supabase.from('contract_templates').update({active:true}).eq('version',version);if(error)throw error}
+export async function getTemplate(version){requireCloud();const {data,error}=await supabase.from('contract_templates').select('*').eq('version',version).single();if(error)throw error;return data}
