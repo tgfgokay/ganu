@@ -211,6 +211,12 @@ begin
   end if;
   if p_sha !~ '^[0-9a-f]{64}$' or coalesce(p_text,'')='' or p_start is null or p_end is null or p_end<p_start then return jsonb_build_object('state','geçersiz'); end if;
   if not exists(select 1 from public.contract_templates where version=p_template) then return jsonb_build_object('state','geçersiz'); end if;
+  -- Kanıt bütünlüğü: özet metinden yeniden hesaplanır; dönem teklifin başlangıcından Postgres takvimiyle türetilir.
+  if encode(sha256(convert_to(p_text,'UTF8')),'hex') <> p_sha then return jsonb_build_object('state','geçersiz'); end if;
+  if q.start_date is not null and p_start<>q.start_date then return jsonb_build_object('state','geçersiz'); end if;
+  if q.start_date is null and p_start<>(now() at time zone 'Europe/Istanbul')::date then return jsonb_build_object('state','metin'); end if;
+  if p_end <> (case when q.billing_period='aylık' then p_start + interval '1 month' else p_start + interval '1 year' end)::date - 1 then
+    return jsonb_build_object('state','geçersiz'); end if;
   if p_method='otp_email' then
     if q.status<>'gönderildi' or q.token_hash is distinct from p_token_hash then return jsonb_build_object('state','geçersiz'); end if;
     if q.template_version is distinct from p_template then return jsonb_build_object('state','şablon'); end if;
@@ -258,8 +264,16 @@ begin
       if i.status='ödendi' or i.parasut_invoice_id is not null or i.paytr_merchant_oid is not null then return jsonb_build_object('state','ödenmiş'); end if;
       if i.paytr_link_id is not null and not coalesce(p_force,false) then return jsonb_build_object('state','link_var'); end if;
     end if;
-    update public.quotes set status='iptal', cancelled_at=now(), invoice_id=null, token_hash=null where id=q.id;
-    if found then delete from public.invoices where id=i.id; end if;
+    update public.quotes set status='iptal', cancelled_at=now(), token_hash=null where id=q.id;
+    if i.id is not null and i.paytr_link_id is null then
+      update public.quotes set invoice_id=null where id=q.id;
+      delete from public.invoices where id=i.id;
+    elsif i.id is not null then
+      -- Kart linki verilmişti: kayıt silinmez; geç gelen ödeme bildirimi bu faturaya düşer ve personel iade/inceleme yapar.
+      update public.invoices set note=left('İPTAL · '||coalesce(note,''),300),
+        payment_review=left(concat_ws(' | ',payment_review,'Teklif iptal edildi ('||to_char(now() at time zone 'Europe/Istanbul','DD.MM.YYYY HH24:MI')||'); bu faturaya ödeme gelirse iade/inceleme yapın'),500)
+       where id=i.id;
+    end if;
     update public.contracts set status='iptal' where id=q.contract_id and quote_id=q.id;
     return jsonb_build_object('state','iptal');
   end if;

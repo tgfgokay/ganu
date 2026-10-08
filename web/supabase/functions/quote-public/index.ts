@@ -154,8 +154,10 @@ async function accept(db: Db, req: Request, b: Record<string, any>) {
 async function reject(db: Db, b: Record<string, any>) {
   const { q, hash } = await byToken(db, b.token)
   if (q.status !== 'gönderildi') throw new AppError(409, 'Teklif bu durumda reddedilemez.')
-  await db.from('quotes').update({ status: 'reddedildi', rejected_at: new Date().toISOString(), reject_reason: String(b.reason || '').trim().slice(0, 500) || null, otp_hash: null })
-    .eq('id', q.id).eq('token_hash', hash).eq('status', 'gönderildi')
+  const { data, error } = await db.from('quotes').update({ status: 'reddedildi', rejected_at: new Date().toISOString(), reject_reason: String(b.reason || '').trim().slice(0, 500) || null, otp_hash: null, otp_pending_sha: null })
+    .eq('id', q.id).eq('token_hash', hash).eq('status', 'gönderildi').select('id')
+  if (error) throw new Error('ret kaydedilemedi')
+  if (!data?.length) throw new AppError(409, 'Teklif bu arada onaylandı ya da değişti; sayfayı yenileyin.')
   return json({ state: 'reddedildi' })
 }
 
