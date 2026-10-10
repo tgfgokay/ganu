@@ -1,5 +1,5 @@
 import { useEffect,useState } from 'react'
-import { Link,useParams,useSearchParams } from 'react-router-dom'
+import { Link,useNavigate,useParams,useSearchParams } from 'react-router-dom'
 import { customers,contracts,mail,documents,requests,inspections,invoices,partners,invStatus,setMailStatus,customerHistory,DOC_TYPES,MAIL_STATUS,REQUEST_STATUS,fileToStoredUrl } from '../lib/operations-store.js'
 import { SecureLink } from '../components/SecureAsset.jsx'
 import { fmtDate,fmtTL } from './_ui.jsx'
@@ -7,11 +7,11 @@ import { daysUntil,oneYearLaterISO } from '../lib/dates.js'
 import CustomerForm,{ customerPayload,missingForInvoice,validateCustomer } from './OperationsCustomerForm.jsx'
 import { CustomerBadge } from './OperationsCustomers.jsx'
 import { EDocCell,InvoiceBadge,InvoiceForm,PaymentLinkButton,PaymentMessageButton,ReviewNote,emptyInvoice,markPaid,paidSource } from './OperationsInvoices.jsx'
-const AUDIT_TABLE={customers:'Müşteri',contracts:'Sözleşme',invoices:'Fatura',documents:'Belge',mail_items:'Posta/kargo',inspections:'Yoklama',requests:'Talep'}
+const AUDIT_TABLE={customers:'Müşteri',contracts:'Sözleşme',invoices:'Fatura',documents:'Belge',mail_items:'Posta/kargo',inspections:'Yoklama',requests:'Talep',quotes:'Teklif',stamp_taxes:'Damga vergisi'}
 const AUDIT_ACTION={INSERT:'eklendi',UPDATE:'güncellendi',DELETE:'silindi'}
-const AUDIT_FIELD={title:'ünvan',status:'durum',email:'e-posta',phone:'telefon',contact:'yetkili',tax_no:'vergi no',tc:'TC',tax_office:'vergi dairesi',address:'adres',city:'il',district:'ilçe',notes:'not',amount:'tutar',due_date:'son ödeme',paid_date:'ödeme tarihi',payment_method:'ödeme yöntemi',result:'sonuç',end_date:'bitiş',start_date:'başlangıç',price:'fiyat',package:'paket',delivered_at:'teslim tarihi',einvoice_status:'e-Belge durumu',einvoice_no:'e-Belge no',payment_review:'ödeme incelemesi',parasut_invoice_id:'Paraşüt fatura'}
+const AUDIT_FIELD={title:'ünvan',status:'durum',email:'e-posta',phone:'telefon',contact:'yetkili',tax_no:'vergi no',tc:'TC',tax_office:'vergi dairesi',address:'adres',city:'il',district:'ilçe',notes:'not',amount:'tutar',due_date:'son ödeme',paid_date:'ödeme tarihi',payment_method:'ödeme yöntemi',result:'sonuç',end_date:'bitiş',start_date:'başlangıç',price:'fiyat',package:'paket',delivered_at:'teslim tarihi',einvoice_status:'e-Belge durumu',einvoice_no:'e-Belge no',payment_review:'ödeme incelemesi',parasut_invoice_id:'Paraşüt fatura',customer_id:'müşteri',contract_id:'sözleşme',decided_at:'karar tarihi',sent_at:'gönderim tarihi',collected_at:'tahsil tarihi',declared_period:'beyan dönemi',base:'matrah',rate_per_mille:'oran'}
 export default function OperationsCustomerDetail(){
-  const {id}=useParams(),[params,setParams]=useSearchParams(),[history,setHistory]=useState([]),[customer,setCustomer]=useState(null),[data,setData]=useState(null),[busy,setBusy]=useState(false),[docType,setDocType]=useState('sozlesme'),[modal,setModal]=useState(null)
+  const {id}=useParams(),navigate=useNavigate(),[params,setParams]=useSearchParams(),[history,setHistory]=useState([]),[customer,setCustomer]=useState(null),[data,setData]=useState(null),[busy,setBusy]=useState(false),[docType,setDocType]=useState('sozlesme'),[modal,setModal]=useState(null)
   const load=async()=>{const c=await customers.get(id);setCustomer(c);if(!c){setData({contracts:[],mail:[],documents:[],requests:[],inspections:[],invoices:[],all:[],partners:[]});return}const [ct,ml,docs,req,ins,inv,all,ps]=await Promise.all([contracts.list(),mail.list(),documents.list(),requests.list(),inspections.list(),invoices.list(),customers.list(),partners.list()]);const mine=(x)=>x.customer_id===id;setData({contracts:ct.filter(mine),mail:ml.filter(mine),documents:docs.filter(mine),requests:req.filter(mine),inspections:ins.filter(mine),invoices:inv.filter(mine),all,partners:ps})}
   useEffect(()=>{load()},[id])
   // İşlem kaydı ayrı yüklenir: tablo henüz yoksa (0013 uygulanmadıysa) sayfa etkilenmez, kart görünmez.
@@ -29,6 +29,9 @@ export default function OperationsCustomerDetail(){
   // Bekleyen tebligat en üstte: hukuki süreler tebligatla başlar.
   const isOpenTebligat=(x)=>x.type==='tebligat'&&['geldi','bildirildi'].includes(x.status),mailSorted=[...data.mail].sort((a,b)=>Number(isOpenTebligat(b))-Number(isOpenTebligat(a)))
   const daysLeft=lastContract?.end_date?daysUntil(lastContract.end_date):null
+  // Yalnız hiçbir kaydı olmayan müşteri silinebilir (yanlış/deneme kaydı); silme işlem kaydında iz bırakır.
+  const deletable=['contracts','invoices','mail','documents','requests','inspections'].every((k)=>data[k].length===0)
+  const removeCustomer=async()=>{if(!confirm(`"${customer.title}" silinsin mi?\nMüşterinin sözleşme, fatura, posta, belge, talep ya da yoklama kaydı yok; silme işlem kaydında görünür.`))return;try{await customers.remove(id);navigate('/panel/musteriler',{replace:true})}catch(err){alert(err?.message||'Silinemedi.')}}
   const mailStatus=async(x,v)=>{await setMailStatus(x,v,customer);load()}
   const insResult=async(x,v)=>{await inspections.update(x.id,{result:v});load()}
   const renew=async(x)=>{if(!confirm(`${x.package} sözleşmesi ${fmtDate(x.end_date)} tarihinden itibaren 1 yıl yenilensin mi?`))return;await contracts.update(x.id,{start_date:x.end_date,end_date:oneYearLaterISO(x.end_date),status:'aktif'});load()}
@@ -41,7 +44,7 @@ export default function OperationsCustomerDetail(){
   const tab=tabs.some(([k])=>k===params.get('sekme'))?params.get('sekme'):'ozet'
   const go=(k)=>setParams(k==='ozet'?{}:{sekme:k},{replace:true})
   const onTabKey=(e)=>{const i=tabs.findIndex(([k])=>k===tab),d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(!d)return;e.preventDefault();const k=tabs[(i+d+tabs.length)%tabs.length][0];go(k);document.getElementById(`tab-${k}`)?.focus()}
-  return <div><div className="pl-head"><div><div className="pl-crumb"><Link to="/panel/musteriler">← Müşteriler</Link></div><h1>{customer.title} <CustomerBadge s={customer.status}/></h1><p>{customer.contact||'—'}{customer.bni?' · BNI Nişantaşı':''}{partner?` · ortak: ${partner.name}`:''}</p></div><button className="pl-btn pl-btn-ghost" onClick={()=>setModal({kind:'customer'})}>Düzenle</button></div>
+  return <div><div className="pl-head"><div><div className="pl-crumb"><Link to="/panel/musteriler">← Müşteriler</Link></div><h1>{customer.title} <CustomerBadge s={customer.status}/></h1><p>{customer.contact||'—'}{customer.bni?' · BNI Nişantaşı':''}{partner?` · ortak: ${partner.name}`:''}</p></div><button className="pl-btn pl-btn-ghost" onClick={()=>setModal({kind:'customer'})}>Düzenle</button>{deletable&&<button className="pl-btn pl-btn-danger" style={{marginLeft:8}} onClick={removeCustomer}>Sil</button>}</div>
     {!signed&&<div className="pl-alert"><span className="ic">✍</span><span className="msg">İmzalı hizmet sözleşmesi yüklenmedi — <button type="button" className="pl-linkbtn" onClick={()=>{setDocType('sozlesme');go('belgeler')}}>Belgeler</button> sekmesinden türü <b>Sözleşme</b> seçerek yükleyin.</span></div>}
     {missing.length>0&&<div className="pl-alert"><span className="ic">!</span><span className="msg">Fatura kesmeden önce eksik: <b>{missing.join(', ')}</b>.</span></div>}
     <div className="pl-tabs" role="tablist" aria-label="Müşteri bölümleri" onKeyDown={onTabKey}>{tabs.map(([k,l,n])=><button key={k} id={`tab-${k}`} type="button" role="tab" className="pl-tab" aria-selected={tab===k} aria-controls={`panel-${k}`} tabIndex={tab===k?0:-1} onClick={()=>go(k)}>{l}{n>0&&<span className="n hot" aria-label={`${n} iş bekliyor`}>{n}</span>}</button>)}</div>
