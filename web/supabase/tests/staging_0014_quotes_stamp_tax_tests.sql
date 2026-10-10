@@ -13,8 +13,8 @@ begin
  select count(*) into n from pg_trigger where tgname='audit_row' and tgrelid in ('public.quotes'::regclass,'public.stamp_taxes'::regclass);
  insert into _ganu_0014_results values('işlem kaydı tetikleyicileri','2',n::text,case when n=2 then 'PASS' else 'FAIL' end);
 
- insert into public.stamp_taxes(party_title,doc_date,base,copies) values('TEST_0014_DV',current_date,8325,2) returning id,amount into sid,amt;
- insert into _ganu_0014_results values('DV = 8.325 × binde 9,48 × 2 nüsha','157.84',amt::text,case when amt=157.84 then 'PASS' else 'FAIL' end);
+ insert into public.stamp_taxes(party_title,doc_date,base) values('TEST_0014_DV',current_date,8325) returning id,amount into sid,amt;
+ insert into _ganu_0014_results values('DV = 8.325 × binde 9,48 (tek nüsha)','78.92',amt::text,case when amt=78.92 then 'PASS' else 'FAIL' end);
  delete from public.stamp_taxes where id=sid;
  b:=false;begin insert into public.stamp_taxes(party_title,doc_date,base,payer) values('TEST_0014_DV',current_date,100,'banka');exception when check_violation then b:=true;end;
  insert into _ganu_0014_results values('geçersiz ödeyen red','true',b::text,case when b then 'PASS' else 'FAIL' end);
@@ -41,7 +41,7 @@ begin
   r:=public.convert_quote(qid,'{"title":"TEST_0014","tax_no":"1234567890","tax_office":"Beykoz"}',
      '{"start_date":"2026-10-09","end_date":"2027-10-08","price":8991}',
      '{"amount":8991,"issue_date":"2026-10-09","due_date":"2026-10-14","note":"TEST_0014"}',
-     '{"doc_date":"2026-10-09","base":7492.5,"copies":1}');
+     '{"doc_date":"2026-10-09","base":7492.5}');
   select count(*) into n from public.quotes where id=qid and status='kabul' and customer_id=(r->>'customer_id')::uuid and contract_id=(r->>'contract_id')::uuid;
   insert into _ganu_0014_results values('teklif kabul, müşteri ve sözleşmeye bağlı','1',n::text,case when n=1 then 'PASS' else 'FAIL' end);
   select count(*) into n from public.invoices where id=(r->>'invoice_id')::uuid and contract_id=(r->>'contract_id')::uuid and amount=8991 and status='bekliyor';

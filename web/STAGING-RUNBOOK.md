@@ -514,5 +514,5 @@ Free planda otomatik yedek/PITR yok. `.github/workflows/supabase-db-backup.yml` 
    "gönderildi" yapar → "Kabul → müşteri" tek işlemde müşteri (yeni ya da mevcut), sözleşme, ilk fatura ve damga vergisi kaydı açar.
 3. Panel → **Kayıtlar & Yönetim → Damga Vergisi**: belge ayına göre liste, beyan son günü (izleyen ayın 26'sı), CSV, "Tahsil edildi",
    "Ayı beyan edildi işaretle". Teklif dışında açılan sözleşmeler ve yenilemeler "kaydı olmayan sözleşme dönemleri" altında çıkar.
-4. Hesap: DV = matrah × binde 9,48 × imzalı asıl nüsha (veritabanında hesaplanır). Matrah öneri olarak sözleşme süresince
+4. Hesap: DV = matrah × binde 9,48, tek nüsha üzerinden (veritabanında hesaplanır). Matrah öneri olarak sözleşme süresince
    ödenecek KDV hariç toplamdır; KDV sözleşmede ayrıca gösterilmiyorsa KDV dahil tutar elle yazılır.

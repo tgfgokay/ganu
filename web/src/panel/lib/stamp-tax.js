@@ -11,7 +11,8 @@ export const periodsInTerm=(billing,months)=>billing==='aylık'?Number(months)||
 export const contractTotal=(price,billing,months)=>r2((Number(price)||0)*periodsInTerm(billing,months))
 export const netOfVat=(gross,vat=VAT_RATE)=>r2((Number(gross)||0)/(1+vat/100))
 export const stampTaxBase=(price,billing,months)=>netOfVat(contractTotal(price,billing,months))
-export const stampTaxAmount=(base,rate=DV_RATE_PER_MILLE,copies=1)=>r2((Number(base)||0)*(Number(rate)||0)*(Number(copies)||1)/1000)
+// Tek nüsha üzerinden hesaplanır (kullanıcı kararı 10.10.2026).
+export const stampTaxAmount=(base,rate=DV_RATE_PER_MILLE)=>r2((Number(base)||0)*(Number(rate)||0)/1000)
 // Müşterinin payı: 'yarı yarıya'da yarısı, 'GANU'da sıfır.
 export const customerShare=(amount,payer)=>payer==='GANU'?0:payer==='yarı yarıya'?r2(amount/2):r2(amount)
 export const discounted=(list,pct)=>r2((Number(list)||0)*(1-(Number(pct)||0)/100))

@@ -33,7 +33,7 @@ create index if not exists quotes_status_created_idx on public.quotes(status, cr
 
 -- Damga vergisi defteri: her imza ya da yenileme ayrı satırdır (vergiyi doğuran olay belge tarihidir).
 -- Taraf ünvanı/VKN kayıt anında kopyalanır; müşteri silinse de beyan kaydı okunur kalır.
--- Tutar = matrah × oran (binde) × imzalı nüsha sayısı; elle girilmez, hesaplanır.
+-- Tutar = matrah × oran (binde), tek nüsha üzerinden; elle girilmez, hesaplanır.
 create table if not exists public.stamp_taxes(
   id uuid primary key default gen_random_uuid(),
   customer_id uuid references public.customers(id) on delete set null,
@@ -46,8 +46,7 @@ create table if not exists public.stamp_taxes(
   period_end date,
   base numeric not null check (base > 0),
   rate_per_mille numeric not null default 9.48 check (rate_per_mille > 0 and rate_per_mille <= 20),
-  copies integer not null default 1 check (copies between 1 and 10),
-  amount numeric generated always as (round(base * rate_per_mille * copies / 1000, 2)) stored,
+  amount numeric generated always as (round(base * rate_per_mille / 1000, 2)) stored,
   payer text not null default 'müşteri' check (payer in ('müşteri','GANU','yarı yarıya')),
   collected_at date,
   declared_period text check (declared_period ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
@@ -116,10 +115,10 @@ begin
   if p_stamp is not null then
     st := jsonb_populate_record(null::public.stamp_taxes, p_stamp);
     insert into public.stamp_taxes(customer_id, contract_id, party_title, party_tax_id, kind, doc_date, period_start, period_end,
-                                   base, rate_per_mille, copies, payer, notes)
+                                   base, rate_per_mille, payer, notes)
     select c_id, k_id, c.title, coalesce(nullif(c.tax_no, ''), nullif(c.tc, '')), 'sözleşme', coalesce(st.doc_date, current_date),
            coalesce(st.period_start, ct.start_date), coalesce(st.period_end, ct.end_date), st.base, coalesce(st.rate_per_mille, 9.48),
-           coalesce(st.copies, 1), coalesce(st.payer, 'müşteri'), st.notes
+           coalesce(st.payer, 'müşteri'), st.notes
       from public.customers c where c.id = c_id
     returning id into s_id;
   end if;

@@ -98,9 +98,9 @@ function ConvertForm({q,custs,onClose,onDone}){
   const start0=today(),base0=stampTaxBase(q.price,q.billing_period,q.term_months)
   const [f,setF]=useState({existing:'',title:q.title||'',contact:q.contact||'',email:q.email||'',phone:q.phone||'',tax_no:q.tax_no||'',tc:q.tc||'',tax_office:q.tax_office||GANU.taxOffice,
     start_date:start0,end_date:termEndISO(start0,q.term_months),price:q.price,withInvoice:true,amount:q.price,due_date:addDaysISO(start0,5),
-    withStamp:true,doc_date:start0,base:base0,rate:DV_RATE_PER_MILLE,copies:1,payer:'müşteri'}),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+    withStamp:true,doc_date:start0,base:base0,rate:DV_RATE_PER_MILLE,payer:'müşteri'}),[error,setError]=useState(''),[busy,setBusy]=useState(false)
   const set=(k,v)=>setF((s)=>({...s,[k]:v}))
-  const dv=stampTaxAmount(f.base,f.rate,f.copies)
+  const dv=stampTaxAmount(f.base,f.rate)
   const setPrice=(v)=>setF((s)=>({...s,price:v,amount:v,base:stampTaxBase(v,q.billing_period,q.term_months)}))
   const submit=async(e)=>{e.preventDefault();setError('')
     let customer
@@ -113,7 +113,7 @@ function ConvertForm({q,custs,onClose,onDone}){
     try{const r=await convertQuote(q.id,{customer,
       contract:{package:q.package,billing_period:q.billing_period,start_date:f.start_date,end_date:f.end_date,price:Number(f.price)},
       invoice:f.withInvoice?{amount:Number(f.amount),issue_date:f.start_date,due_date:f.due_date||null,note:`${q.package} · ${f.start_date.slice(0,7)} dönemi · ${quoteNo(q)}`}:null,
-      stamp:f.withStamp?{doc_date:f.doc_date,base:Number(f.base),rate_per_mille:Number(f.rate),copies:Number(f.copies)||1,payer:f.payer,notes:quoteNo(q)}:null})
+      stamp:f.withStamp?{doc_date:f.doc_date,base:Number(f.base),rate_per_mille:Number(f.rate),payer:f.payer,notes:quoteNo(q)}:null})
       onDone(r)}catch(err){setError(err?.message||'Dönüştürülemedi.')}finally{setBusy(false)}}
   return <Modal title={`${quoteNo(q)} kabul edildi · müşteriye dönüştür`} onClose={onClose} footer={<><button className="pl-btn pl-btn-ghost" onClick={onClose}>Vazgeç</button><button className="pl-btn pl-btn-solid" form="conv-form" type="submit" disabled={busy}>{busy?'Açılıyor…':'Müşteri + sözleşme aç'}</button></>}>
     <form id="conv-form" className="pl-form" onSubmit={submit}>
@@ -130,8 +130,7 @@ function ConvertForm({q,custs,onClose,onDone}){
       {f.withInvoice&&<div className="two"><div className="pl-field"><label>Tutar (₺, KDV dahil)</label><input type="number" min="0" step="0.01" value={f.amount} onChange={(e)=>set('amount',e.target.value)}/></div><div className="pl-field"><label>Son ödeme</label><input type="date" value={f.due_date} onChange={(e)=>set('due_date',e.target.value)}/></div></div>}
       <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginTop:10}}><input type="checkbox" checked={f.withStamp} onChange={(e)=>set('withStamp',e.target.checked)}/><b>Damga vergisi kaydını aç</b></label>
       {f.withStamp&&<><div className="two"><div className="pl-field"><label>İmza tarihi</label><input type="date" value={f.doc_date} onChange={(e)=>set('doc_date',e.target.value)}/></div><div className="pl-field"><label>Matrah (₺, KDV hariç toplam)</label><input type="number" min="0" step="0.01" value={f.base} onChange={(e)=>set('base',e.target.value)}/></div></div>
-        <div className="two"><div className="pl-field"><label>Oran (binde)</label><input type="number" min="0.01" max="20" step="0.01" value={f.rate} onChange={(e)=>set('rate',e.target.value)}/></div><div className="pl-field"><label>İmzalı asıl nüsha</label><input type="number" min="1" max="10" value={f.copies} onChange={(e)=>set('copies',e.target.value)}/></div></div>
-        <div className="pl-field"><label>Ödeyen</label><select value={f.payer} onChange={(e)=>set('payer',e.target.value)}>{DV_PAYERS.map((p)=><option key={p} value={p}>{p}</option>)}</select></div>
+        <div className="two"><div className="pl-field"><label>Oran (binde)</label><input type="number" min="0.01" max="20" step="0.01" value={f.rate} onChange={(e)=>set('rate',e.target.value)}/></div><div className="pl-field"><label>Ödeyen</label><select value={f.payer} onChange={(e)=>set('payer',e.target.value)}>{DV_PAYERS.map((p)=><option key={p} value={p}>{p}</option>)}</select></div></div>
         <div className="pl-alert"><span className="msg">Damga vergisi <b>{fmtTL(dv)}</b> · müşteriden tahsil: <b>{fmtTL(customerShare(dv,f.payer))}</b></span></div></>}
     </form>
   </Modal>
