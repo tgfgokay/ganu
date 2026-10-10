@@ -1287,3 +1287,6 @@ export async function verifyMigration() {
   }
   return { mode: 'local', env: { url: false, key: false }, auth: { ok: false }, tables, ...summary }
 }
+
+// Personel paneli (Supabase) dışında yenileme sunucu işlemi yoktur; staff build bu modülü operations-store ile değiştirir.
+export async function renewContract(){throw new Error('Yenileme yalnız personel panelinde (Supabase) yapılır.')}

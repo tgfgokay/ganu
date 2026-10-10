@@ -23,7 +23,8 @@ begin
  b:=false;begin insert into public.quotes(title,package,price,billing_period) values('TEST_0014',  'Başlangıç',999,'haftalık');exception when check_violation then b:=true;end;
  insert into _ganu_0014_results values('geçersiz teklif dönemi red','true',b::text,case when b then 'PASS' else 'FAIL' end);
 
- insert into public.quotes(title,package,billing_period,list_price,price,tax_no) values('TEST_0014','Başlangıç','yıllık',9990,8991,'1234567890') returning id into qid;
+ -- 0015 sonrası yalnız gönderilmiş ve geçerli teklif kabul edilir; test teklifleri doğrudan gönderilmiş açılır.
+ insert into public.quotes(title,package,billing_period,list_price,price,tax_no,status,valid_until) values('TEST_0014','Başlangıç','yıllık',9990,8991,'1234567890','gönderildi',current_date+10) returning id into qid;
  perform set_config('request.jwt.claims',json_build_object('sub',gen_random_uuid()::text,'role','authenticated')::text,true);
  b:=false;begin perform public.convert_quote(qid,'{"title":"TEST_0014"}','{"start_date":"2026-10-09","end_date":"2027-10-08"}');exception when insufficient_privilege then b:=true;end;
  insert into _ganu_0014_results values('personel olmayan dönüştüremez','true',b::text,case when b then 'PASS' else 'FAIL' end);
@@ -33,8 +34,8 @@ begin
   insert into _ganu_0014_results values('dönüştürme (personel)','PASS','SKIP: staff_roles boş','SKIP');
  else
   perform set_config('request.jwt.claims',json_build_object('sub',staff::text,'role','authenticated')::text,true);
-  -- Yarım kalmama: fatura tutarı 0 → hata; müşteri/sözleşme de yazılmamalı.
-  b:=false;begin perform public.convert_quote(qid,'{"title":"TEST_0014_ATOM"}','{"start_date":"2026-10-09","end_date":"2027-10-08"}','{"amount":0}');exception when others then b:=true;end;
+  -- Yarım kalmama: müşteri yazıldıktan sonra sözleşme başlangıcı eksik → hata; müşteri de yazılmamalı.
+  b:=false;begin perform public.convert_quote(qid,'{"title":"TEST_0014_ATOM"}','{}');exception when others then b:=true;end;
   select count(*) into n from public.customers where title='TEST_0014_ATOM';
   insert into _ganu_0014_results values('hata olursa hiçbir kayıt açılmaz','true/0',b::text||'/'||n,case when b and n=0 then 'PASS' else 'FAIL' end);
 
@@ -52,7 +53,7 @@ begin
   b:=false;begin perform public.convert_quote(qid,'{"title":"TEST_0014"}','{"start_date":"2026-10-09","end_date":"2027-10-08"}');exception when others then b:=true;end;
   insert into _ganu_0014_results values('aynı teklif ikinci kez dönüştürülemez','true',b::text,case when b then 'PASS' else 'FAIL' end);
 
-  insert into public.quotes(title,package,price) values('TEST_0014_MEVCUT','Pro',1899) returning id into q2;
+  insert into public.quotes(title,package,price,status,valid_until) values('TEST_0014_MEVCUT','Pro',1899,'gönderildi',current_date+10) returning id into q2;
   r:=public.convert_quote(q2,json_build_object('id',r->>'customer_id')::jsonb,'{"start_date":"2026-10-09","end_date":"2027-10-08","billing_period":"aylık"}');
   select count(*) into n from public.customers where title like 'TEST_0014%';
   insert into _ganu_0014_results values('mevcut müşteriye dönüştürmede yeni müşteri açılmaz','1',n::text,case when n=1 then 'PASS' else 'FAIL' end);

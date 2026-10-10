@@ -10,5 +10,6 @@ export const oneYearLaterISO=(iso)=>{const d=parse(iso);d.setFullYear(d.getFullY
 export const daysUntil=(iso)=>Math.round((parse(iso)-parse(localISO()))/86400000)
 // n ay sonrası; ay sonu taşmaz (31.01 + 1 ay → 28/29.02).
 export const addMonthsISO=(iso,n)=>{const d=parse(iso),day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+n);d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));return localISO(d)}
-// n aylık sözleşmenin son günü: 09.10.2026, 12 ay → 08.10.2027
-export const termEndISO=(iso,months)=>addDaysISO(addMonthsISO(iso,months),-1)
+// n aylık sözleşmenin son günü: n ay sonraki aynı günün bir önceki günü (09.10.2026, 12 ay → 08.10.2027).
+// O gün hedef ayda yoksa dönem o ayın son günü biter (31.01, 1 ay → 28.02; 30.01, 1 ay → 28.02).
+export const termEndISO=(iso,months)=>{const d=parse(iso),day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+months);const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();if(day>last){d.setDate(last);return localISO(d)}d.setDate(day);return addDaysISO(localISO(d),-1)}
