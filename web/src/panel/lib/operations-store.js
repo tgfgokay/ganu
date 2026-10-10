@@ -42,7 +42,8 @@ export async function convertQuote(quoteId,{customer,contract,invoice=null,stamp
 // 0015 sunucu işlemleri: her biri tek transaction'da kontrol eder (yetki, durum, tutar) ve hata metnini döndürür.
 async function rpc(name,args){requireCloud();const {data,error}=await supabase.rpc(name,args);if(error)throw new Error(error.message||'İşlem yapılamadı.');return data}
 export const markQuoteSent=(id,channel)=>rpc('mark_quote_sent',{p_quote:id,p_channel:channel})
-export const renewContract=(id,{basis,price,priceNoticeAt=null,months=12})=>rpc('renew_contract',{p_contract:id,p_basis:basis,p_price:price,p_price_notice_at:priceNoticeAt,p_months:months})
+export const renewContract=(id,{basis,price,priceNoticeAt=null,months=12,signedDocument=null})=>rpc('renew_contract',{p_contract:id,p_basis:basis,p_price:price,p_price_notice_at:priceNoticeAt,p_months:months,p_signed_document:signedDocument})
+export const activateCustomer=(customerId,contractId,documentId)=>rpc('activate_customer',{p_customer:customerId,p_contract:contractId,p_document:documentId})
 export const prepareMonthlyInvoices=(monthISO)=>rpc('prepare_monthly_invoices',{p_month:monthISO})
 export const markInvoicePaidManual=(id,{paidDate,method,amount,reference})=>rpc('mark_invoice_paid_manual',{p_invoice:id,p_paid_date:paidDate,p_method:method,p_amount:amount,p_reference:reference})
 export const registerManualEinvoice=(id,{kind,no,issueDate,ettn,pdf})=>rpc('register_manual_einvoice',{p_invoice:id,p_kind:kind,p_no:no,p_issue:issueDate,p_ettn:ettn,p_pdf:pdf})

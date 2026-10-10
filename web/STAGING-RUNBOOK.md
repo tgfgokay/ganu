@@ -29,6 +29,7 @@ migration veya testlerin geçtiği anlamına gelmez.
 13. `supabase/migrations/0012_paytr_link.sql` — PayTR link/ödeme referansı, idempotent `paytr_mark_paid` (service-role)
 14. `supabase/migrations/0013_audit_log.sql` — değiştirilemez işlem kaydı (`audit_log` + `audit_row` tetikleyicileri)
 15. `supabase/migrations/0014_quotes_stamp_tax.sql` — teklifler, damga vergisi defteri, tek işlemde `convert_quote` (personel, RLS)
+16. `supabase/migrations/0015_audit_fixes.sql` — süreç denetimi düzeltmeleri: teklif durumu/revizyon, yenileme zinciri, hizmet dönemi, ödeme/e-belge kanıtı, damga durumu, tebligat, aktivasyon
 
 ```bash
 set -euo pipefail
@@ -47,8 +48,9 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0011_einvoice_parasut.s
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0012_paytr_link.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0013_audit_log.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0014_quotes_stamp_tax.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0015_audit_fixes.sql
 ```
-`supabase db push` artık boş hedefte 0000→0014 sırasını eksiksiz görür. `0000`,
+`supabase db push` artık boş hedefte 0000→0015 sırasını eksiksiz görür. `0000`,
 canonical `supabase-schema.sql` dosyasının byte-exact kopyasıdır; `scripts/staging-readiness.sh`
 iki dosyanın ayrışmasını fail-closed engeller. Şema değişikliğinde ikisi aynı committe güncellenmelidir.
 
@@ -190,6 +192,7 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/rollbacks/0015_audit_fixes.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0014_quotes_stamp_tax.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0013_audit_log.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0012_paytr_link.down.sql
@@ -516,3 +519,21 @@ Free planda otomatik yedek/PITR yok. `.github/workflows/supabase-db-backup.yml` 
    "Ayı beyan edildi işaretle". Teklif dışında açılan sözleşmeler ve yenilemeler "kaydı olmayan sözleşme dönemleri" altında çıkar.
 4. Hesap: DV = matrah × binde 9,48, tek nüsha üzerinden (veritabanında hesaplanır). Matrah öneri olarak sözleşme süresince
    ödenecek KDV hariç toplamdır; KDV sözleşmede ayrıca gösterilmiyorsa KDV dahil tutar elle yazılır.
+
+## 16) Süreç denetimi düzeltmeleri (0015)
+
+1. `0015_audit_fixes.sql` + `supabase/tests/staging_0015_audit_fixes_tests.sql` tek metin olarak (FAIL-guard ile) çalıştırılır; tüm satırlar PASS.
+   Test aylık takvimi yalnız kendi test sözleşmesiyle çalıştırır (`prepare_monthly_invoices(ay, sözleşme)`), gerçek sözleşmelere fatura açmaz.
+   Yerel doğrulama: PostgreSQL 16 + auth/storage taklitleriyle 0000→0015 uygulanır, 0013/0014/0015 testleri koşulur.
+2. Kurallar (sunucu): gönderilmemiş/süresi geçmiş/revize edilmiş teklif kabul edilmez; gönderilmiş teklif değişmez; yenileme eski dönemi
+   değiştirmez; ödendi geçişi PayTR (service role) ya da banka referansı ister; elle e-belge ETTN + Storage'daki PDF ister; damga kaydı
+   taslak → imzalı (tarih + belge) → beyan → ödendi; tebligat bildirim kanalı olmadan bildirildi/kapanmış sayılmaz, imha edilemez;
+   müşteri ve sözleşme yalnız `activate_customer` ile (müşteriye ait, "Sözleşme" türünde, Storage'da var olan belge) aktifleşir;
+   imza doğrulaması ve yenileme bağı API'den elle yazılamaz (`contracts_signature_guard`). Aylık fatura hazırlığı ve yenileme yalnız
+   imzası doğrulanmış aktif sözleşmede çalışır; kendiliğinden yenileme aynı bedel + 12 ay ve dönem bitişinden itibaren yapılır.
+   Kuruluş verisi: 0015 öncesi aktif sözleşmelerin imzası doğrulanmamış görünür; her müşteri için müşteri sayfası › "İmzalı sözleşmeyi
+   doğrula" ile imzalı belge bağlanır (yapılmazsa o sözleşmeye aylık fatura hazırlanmaz, yenilenmez).
+   Canlıya almadan önce kuru çalıştırma: SQL başına `select set_config('ganu.test_dry_run','on',false);` eklenerek migration + test
+   birlikte çalıştırılır; beklenen sonuç `0015 DRY-RUN OK` hatasıdır ve hiçbir değişiklik kalmaz.
+   Geri alma: `rollbacks/0015_audit_fixes.down.sql` (convert_quote'un 0014 tanımını da geri yükler; yerelde geri al → 0014 testi → yeniden uygula doğrulandı).
+3. Damga vergisi: GANU sürekli mükellef değil → beyan/ödeme imza tarihinden itibaren 15 gün (Damga Vergisi Beyannamesi).

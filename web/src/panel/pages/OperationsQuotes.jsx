@@ -108,7 +108,7 @@ function ConvertForm({q,custs,onClose,onDone}){
   const submit=async(e)=>{e.preventDefault();setError('')
     let customer
     if(f.existing)customer={id:f.existing}
-    else{const form={title:f.title,contact:f.contact,email:f.email,phone:f.phone,tax_no:f.tax_no,tc:f.tc,tax_office:f.tax_office,address:GANU.address,city:GANU.city,district:GANU.district,status:'aktif',partner_id:'',bni:!!q.bni,notes:`Teklif ${quoteNo(q)}`};const msg=validateCustomer(form,custs);if(msg)return setError(msg);customer=customerPayload(form)}
+    else{const form={title:f.title,contact:f.contact,email:f.email,phone:f.phone,tax_no:f.tax_no,tc:f.tc,tax_office:f.tax_office,address:GANU.address,city:GANU.city,district:GANU.district,status:'aday',partner_id:'',bni:!!q.bni,notes:`Teklif ${quoteNo(q)}`};const msg=validateCustomer(form,custs);if(msg)return setError(msg);customer=customerPayload(form)}
     if(!f.start_date)return setError('Sözleşme başlangıç tarihi zorunlu.')
     setBusy(true)
     try{const r=await convertQuote(q.id,{customer,
