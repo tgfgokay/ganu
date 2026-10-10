@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { contracts, customers, withCustomerNames, daysLeft, PACKAGES, PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../lib/store.js'
+import { contracts, customers, withCustomerNames, daysLeft, renewContract, PACKAGES, PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../lib/store.js'
 import { Modal, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
 import { localISO, oneYearLaterISO } from '../lib/dates.js'
 
@@ -18,6 +18,7 @@ export default function Sozlesmeler() {
   const [custs, setCusts] = useState([])
   const [modal, setModal] = useState(null)
   const [onlySoon, setOnlySoon] = useState(false)
+  const [renewing, setRenewing] = useState(null)
   const [params, setParams] = useSearchParams()
 
   const load = async () => {
@@ -31,8 +32,10 @@ export default function Sozlesmeler() {
     if (id && custs.some((c) => c.id === id)) { setModal({ mode: 'new', data: emptyForm(id) }); setParams({}, { replace: true }) }
   }, [custs])
 
-  const filtered = useMemo(() => onlySoon ? rows.filter((r) => r._days <= 30) : rows, [rows, onlySoon])
-  const soonCount = rows.filter((r) => r._days <= 30).length
+  // Yenileme eski dönemi değiştirmez: sunucu (renew_contract) yeni dönem satırı açar (0015).
+  const renewed = useMemo(() => new Set(rows.map((r) => r.previous_contract_id).filter(Boolean)), [rows])
+  const filtered = useMemo(() => onlySoon ? rows.filter((r) => r._days <= 30 && !renewed.has(r.id)) : rows, [rows, onlySoon, renewed])
+  const soonCount = rows.filter((r) => r._days <= 30 && r._days >= 0 && !renewed.has(r.id)).length
 
   const save = async (form) => {
     const payload = { ...form, price: Number(form.price) || 0 }
@@ -41,11 +44,6 @@ export default function Sozlesmeler() {
     setModal(null); load()
   }
   const del = async (id) => { if (confirm('Sözleşme silinsin mi?')) { await contracts.remove(id); load() } }
-  const renew = async (r) => {
-    const newStart = r.end_date
-    await contracts.update(r.id, { start_date: newStart, end_date: oneYearLater(newStart), status: 'aktif' })
-    load()
-  }
 
   return (
     <div>
@@ -91,7 +89,9 @@ export default function Sozlesmeler() {
                 <td><DaysBadge endDate={r.end_date} /></td>
                 <td>
                   <div className="pl-actions">
-                    <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => renew(r)}>Yenile</button>
+                    {renewed.has(r.id)
+                      ? <span className="pl-badge b-mektup">yenilendi</span>
+                      : <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => setRenewing(r)}>Yenile</button>}
                     <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setModal({ mode: 'edit', data: { ...r } })}>Düzenle</button>
                     <button className="pl-btn pl-btn-danger pl-btn-sm" onClick={() => del(r.id)}>Sil</button>
                   </div>
@@ -103,6 +103,7 @@ export default function Sozlesmeler() {
       </div>
 
       {modal && <SozForm modal={modal} custs={custs} onClose={() => setModal(null)} onSave={save} />}
+      {renewing && <RenewForm contract={renewing} onClose={() => setRenewing(null)} onDone={() => { setRenewing(null); load() }} />}
     </div>
   )
 }
@@ -174,6 +175,41 @@ function SozForm({ modal, custs, onClose, onSave }) {
             Otomatik yenileme (müşteri onaylı)
           </label>
         </div>
+      </form>
+    </Modal>
+  )
+}
+
+// Yenileme dayanağı sözleşmeye göre seçilir: "otomatik_madde" kendiliğinden uzama (yeni damga vergisi kâğıdı yok; fiyat artışı
+// yalnız ≥45 gün önce yapılmış bildirimle), "yeni_imza" yeni imzalı sözleşme (taslak damga kaydı açılır). Yıllık dönemde
+// yeni dönem faturası da açılır; aylıkta "Bu ayın aylık faturalarını hazırla" kullanılır.
+export function RenewForm({ contract, onClose, onDone }) {
+  const [f, setF] = useState({ basis: 'otomatik_madde', price: String(contract.price ?? ''), notice: '', months: 12 })
+  const [error, setError] = useState(''), [busy, setBusy] = useState(false)
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
+  const raised = Number(f.price) > Number(contract.price)
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true); setError('')
+    try { await renewContract(contract.id, { basis: f.basis, price: Number(f.price), priceNoticeAt: f.notice || null, months: Number(f.months) || 12 }); onDone() }
+    catch (err) { setError(err?.message || 'Yenilenemedi.') } finally { setBusy(false) }
+  }
+  return (
+    <Modal title={`Yenile · ${contract.customer?.title || ''}`} onClose={onClose}
+      footer={<><button className="pl-btn pl-btn-ghost" onClick={onClose}>Vazgeç</button><button className="pl-btn pl-btn-solid" form="renew-form" type="submit" disabled={busy}>{busy ? 'Yenileniyor…' : 'Yeni dönemi aç'}</button></>}>
+      <form id="renew-form" className="pl-form" onSubmit={submit}>
+        {error && <div className="pl-alert" role="alert"><span className="msg">{error}</span></div>}
+        <p className="sub" style={{ marginTop: 0 }}>Mevcut dönem ({fmtDate(contract.start_date)} – {fmtDate(contract.end_date)}) olduğu gibi kalır; yeni dönem {fmtDate(contract.end_date)} sonrasından başlar.</p>
+        <div className="pl-field"><label>Dayanak</label>
+          <select value={f.basis} onChange={(e) => set('basis', e.target.value)}>
+            <option value="otomatik_madde">Sözleşmedeki kendiliğinden yenileme maddesi</option>
+            <option value="yeni_imza">Yeni imzalı sözleşme</option>
+          </select></div>
+        <div className="two">
+          <div className="pl-field"><label>Yeni dönem bedeli (₺/{contract.billing_period === 'aylık' ? 'ay' : 'yıl'}, KDV dahil)</label><input type="number" min="0" step="0.01" value={f.price} onChange={(e) => set('price', e.target.value)} required /></div>
+          <div className="pl-field"><label>Süre (ay)</label><input type="number" min="1" max="60" value={f.months} onChange={(e) => set('months', e.target.value)} /></div>
+        </div>
+        {raised && f.basis === 'otomatik_madde' && <div className="pl-field"><label>Fiyat artışının müşteriye bildirildiği tarih (bitişten en az 45 gün önce) *</label><input type="date" value={f.notice} onChange={(e) => set('notice', e.target.value)} required /></div>}
+        {f.basis === 'yeni_imza' && <p className="sub">Yeni sözleşme için damga vergisi kaydı taslak açılır; imzalı belge yüklenince kesinleşir.</p>}
       </form>
     </Modal>
   )

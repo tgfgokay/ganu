@@ -39,6 +39,15 @@ export async function setMailStatus(row,status,customer){const patch={status};if
 export const QUOTE_STATUS=['taslak','gönderildi','kabul','red']
 // Teklifi tek işlemde müşteri + sözleşme (+ ilk fatura, + damga vergisi kaydı) yapar; biri başarısız olursa hiçbiri yazılmaz (0014).
 export async function convertQuote(quoteId,{customer,contract,invoice=null,stamp=null}){requireCloud();const {data,error}=await supabase.rpc('convert_quote',{p_quote:quoteId,p_customer:customer,p_contract:contract,p_invoice:invoice,p_stamp:stamp});if(error)throw new Error(error.message||'Teklif dönüştürülemedi.');return data}
+// 0015 sunucu işlemleri: her biri tek transaction'da kontrol eder (yetki, durum, tutar) ve hata metnini döndürür.
+async function rpc(name,args){requireCloud();const {data,error}=await supabase.rpc(name,args);if(error)throw new Error(error.message||'İşlem yapılamadı.');return data}
+export const markQuoteSent=(id,channel)=>rpc('mark_quote_sent',{p_quote:id,p_channel:channel})
+export const renewContract=(id,{basis,price,priceNoticeAt=null,months=12})=>rpc('renew_contract',{p_contract:id,p_basis:basis,p_price:price,p_price_notice_at:priceNoticeAt,p_months:months})
+export const prepareMonthlyInvoices=(monthISO)=>rpc('prepare_monthly_invoices',{p_month:monthISO})
+export const markInvoicePaidManual=(id,{paidDate,method,amount,reference})=>rpc('mark_invoice_paid_manual',{p_invoice:id,p_paid_date:paidDate,p_method:method,p_amount:amount,p_reference:reference})
+export const registerManualEinvoice=(id,{kind,no,issueDate,ettn,pdf})=>rpc('register_manual_einvoice',{p_invoice:id,p_kind:kind,p_no:no,p_issue:issueDate,p_ettn:ettn,p_pdf:pdf})
+export const QUOTE_CHANNELS=[['whatsapp','WhatsApp'],['e-posta','E-posta'],['elden','Elden'],['diğer','Diğer']]
+export const MANUAL_PAY_METHODS=['havale','nakit','diğer']
 // BNI Nişantaşı indirimi (gizli kod tablosundan; okunamazsa %10).
 export async function bniDiscountPct(){if(!usingSupabase)return 10;const {data}=await supabase.from('discount_codes').select('pct').eq('code','BNINISANTASI').eq('active',true).maybeSingle();return Number(data?.pct)||10}
 export const INVOICE_STATUS=['bekliyor','ödendi','gecikti']

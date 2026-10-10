@@ -4,8 +4,9 @@
 --   • sözleşme: yenileme eski dönemi değiştirmez, yeni dönem satırı açar (previous_contract_id);
 --   • fatura: hizmet dönemi + dönem başına tek fatura; elle tahsilat banka referansı, elle e-belge ETTN ister;
 --   • damga vergisi: kabulde taslak; imzalı belgeyle kesinleşir; beyan ve vergi ödemesi ayrı izlenir;
---   • tebligat: girişim/teslim ayrımı, bildirim kanıtı olmadan kapanmaz, imha edilemez;
---   • ayrılış ve KVKK aydınlatma/UETS bildirimi müşteri üzerinde izlenir.
+--   • tebligat: girişim/teslim ayrımı, bildirim kanalı olmadan bildirildi/kapanmış sayılmaz, imha edilemez;
+--   • ayrılış ve KVKK aydınlatma/UETS bildirimi müşteri üzerinde izlenir; yeni müşterinin adresi imzalı sözleşmeyle aktifleşir.
+-- Tur 4 kırmızı takım bulguları (NULL atlatma, aylık takvim, durum geri dönüşleri, yenileme koşulları) bu sürümde kapatıldı.
 
 -- Takvim kuralı (tek yer): n ay sonraki aynı günün bir öncesi; o gün yoksa hedef ayın son günü.
 -- 09.10.2026+12 → 08.10.2027 · 31.01.2026+1 → 28.02.2026 · 31.01.2026+12 → 30.01.2027
@@ -21,6 +22,24 @@ begin
   return first_day + (d - 2);
 end $$;
 grant execute on function public.term_end(date, integer) to authenticated;
+
+-- Aylık faturalama çapası: başlangıç gününün n ay sonraki karşılığı; o gün yoksa ayın son günü (TBK 92).
+-- 31.01 → 28.02 → 31.03 → 30.04: her takvim ayına tek dönem başlangıcı düşer.
+create or replace function public.billing_anchor(p_start date, p_n integer) returns date
+language plpgsql immutable set search_path = pg_catalog as $$
+declare first_day date := (date_trunc('month', p_start) + make_interval(months => p_n))::date;
+        last_d integer := extract(day from (first_day + interval '1 month' - interval '1 day'))::integer;
+begin
+  return first_day + (least(extract(day from p_start)::integer, last_d) - 1);
+end $$;
+
+-- Sözleşme kaç aylık: başlangıç → bitiş (bitiş günü dahil); 09.10.2026–08.10.2027 → 12, 31.01–28.02 → 1.
+create or replace function public.term_months(p_start date, p_end date) returns integer
+language sql immutable set search_path = pg_catalog as $$
+  select greatest(1, round((extract(year from p_end + 1) - extract(year from p_start)) * 12
+       + (extract(month from p_end + 1) - extract(month from p_start))
+       + (extract(day from p_end + 1) - extract(day from p_start)) / 30.0)::integer)
+$$;
 
 -- ---------------------------------------------------------------- Teklif
 alter table public.quotes add column if not exists replaces_quote_id uuid references public.quotes(id) on delete set null;
@@ -45,6 +64,15 @@ begin
   if new.status = 'kabul' and old.status is distinct from 'kabul' and new.contract_id is null then
     raise exception 'Teklif yalnız müşteriye dönüştürülerek kabul edilir' using errcode = 'check_violation';
   end if;
+  -- Tek yönlü durumlar: taslak → gönderildi | red; gönderildi → kabul | red; kabul ve red kapanır.
+  if new.status is distinct from old.status and not (
+       (old.status = 'taslak' and new.status in ('gönderildi','red'))
+    or (old.status = 'gönderildi' and new.status in ('kabul','red'))) then
+    raise exception 'Teklif durumu % → % değiştirilemez', old.status, new.status using errcode = 'check_violation';
+  end if;
+  if old.superseded_at is not null and new.superseded_at is null then
+    raise exception 'Revize edilmiş teklif geri alınamaz' using errcode = 'check_violation';
+  end if;
   return new;
 end $$;
 drop trigger if exists quotes_freeze on public.quotes;
@@ -53,7 +81,7 @@ create trigger quotes_freeze before update on public.quotes for each row execute
 -- Personel teklifi gerçekten gönderdiğinde işaretler; revizyonsa önceki teklif aynı işlemde geçersizleşir.
 create or replace function public.mark_quote_sent(p_quote uuid, p_channel text) returns void
 language plpgsql security invoker set search_path = public, pg_catalog as $$
-declare q public.quotes;
+declare q public.quotes; prev public.quotes;
 begin
   if not public.is_staff() then raise exception 'Yetkisiz' using errcode = '42501'; end if;
   select * into q from public.quotes where id = p_quote for update;
@@ -62,17 +90,20 @@ begin
   if q.valid_until is null or q.valid_until < (now() at time zone 'Europe/Istanbul')::date then
     raise exception 'Geçerlilik tarihi boş ya da geçmiş';
   end if;
-  update public.quotes set status = 'gönderildi', sent_at = now(), sent_channel = p_channel where id = p_quote;
+  if p_channel is null or p_channel not in ('whatsapp','e-posta','elden','diğer') then raise exception 'Gönderim kanalı zorunlu'; end if;
   if q.replaces_quote_id is not null then
-    update public.quotes set superseded_at = now(), status = 'red', decided_at = coalesce(decided_at, now())
-     where id = q.replaces_quote_id and status in ('taslak','gönderildi');
+    -- Önceki teklif kilitlenir; kabul edilmişse revizyon gönderilemez (işlem bütünüyle geri alınır).
+    select * into prev from public.quotes where id = q.replaces_quote_id for update;
+    if found and prev.status = 'kabul' then raise exception 'Önceki teklif kabul edilmiş; revizyon gönderilemez'; end if;
+    update public.quotes set superseded_at = now() where id = q.replaces_quote_id and superseded_at is null;
   end if;
+  update public.quotes set status = 'gönderildi', sent_at = now(), sent_channel = p_channel where id = p_quote;
 end $$;
 revoke all on function public.mark_quote_sent(uuid, text) from public, anon;
 grant execute on function public.mark_quote_sent(uuid, text) to authenticated;
 
 -- ---------------------------------------------------------------- Sözleşme, fatura dönemi
-alter table public.contracts add column if not exists previous_contract_id uuid references public.contracts(id) on delete restrict;
+alter table public.contracts add column if not exists previous_contract_id uuid references public.contracts(id);  -- NO ACTION: devamı olan dönem tek başına silinemez
 alter table public.contracts add column if not exists renewal_basis text;
 alter table public.contracts add column if not exists price_notice_at date;
 alter table public.contracts drop constraint if exists contracts_renewal_basis_check;
@@ -96,12 +127,15 @@ alter table public.invoices add column if not exists einvoice_verified_at timest
 create unique index if not exists invoices_einvoice_uuid_unique on public.invoices(lower(einvoice_uuid)) where einvoice_uuid is not null and einvoice_uuid <> '';
 
 -- Ödendi geçişi kanıt ister: PayTR bildirimi (paytr_merchant_oid) ya da banka/makbuz referansı.
+-- PayTR yolu: paytr_merchant_oid yalnız imzası doğrulanmış bildirimi işleyen paytr_mark_paid (service role) tarafından yazılır.
+-- Elle yol: mark_invoice_paid_manual banka referansı + doğrulayan personel yazar.
 create or replace function public.invoices_paid_needs_proof() returns trigger
 language plpgsql set search_path = public, pg_catalog as $$
 begin
-  if new.status = 'ödendi' and (tg_op = 'INSERT' or old.status is distinct from 'ödendi')
-     and new.paytr_merchant_oid is null and coalesce(btrim(new.payment_reference), '') = '' then
-    raise exception 'Ödeme kanıtı (banka referansı) olmadan fatura ödendi yapılamaz' using errcode = 'check_violation';
+  if new.status = 'ödendi' and (tg_op = 'INSERT' or old.status is distinct from 'ödendi') and not (
+       (new.paytr_merchant_oid is not null and coalesce(auth.role(), '') = 'service_role')
+    or (coalesce(btrim(new.payment_reference), '') <> '' and new.payment_verified_by is not null)) then
+    raise exception 'Ödeme kanıtı olmadan fatura ödendi yapılamaz (PayTR bildirimi ya da banka referansı)' using errcode = 'check_violation';
   end if;
   return new;
 end $$;
@@ -138,12 +172,15 @@ begin
   select * into inv from public.invoices where id = p_invoice for update;
   if not found then raise exception 'Fatura bulunamadı'; end if;
   if inv.einvoice_status in ('kesildi','işleniyor') then raise exception 'Bu faturanın e-belgesi zaten kayıtlı ya da işleniyor'; end if;
-  if p_kind not in ('e-arşiv','e-fatura') then raise exception 'Belge türü e-arşiv ya da e-fatura olmalı'; end if;
+  if p_kind is null or p_kind not in ('e-arşiv','e-fatura') then raise exception 'Belge türü e-arşiv ya da e-fatura olmalı'; end if;
   if coalesce(btrim(p_no), '') = '' then raise exception 'Belge numarası zorunlu'; end if;
   if p_ettn is null or p_ettn !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then raise exception 'ETTN 36 karakterlik UUID olmalı'; end if;
   if p_issue is null or p_issue > (now() at time zone 'Europe/Istanbul')::date then raise exception 'Belge tarihi boş ya da ileri tarihli'; end if;
-  if coalesce(p_pdf, '') !~ '^secure:' then raise exception 'Belgenin PDF dosyası yüklenmeli'; end if;
+  if coalesce(p_pdf, '') !~ '^secure:' or not exists (select 1 from storage.objects o where o.bucket_id = 'secure-docs' and o.name = substr(p_pdf, 8)) then
+    raise exception 'Belgenin PDF dosyası yüklenmeli';
+  end if;
   update public.invoices set einvoice_kind = p_kind, einvoice_no = btrim(p_no), issue_date = p_issue, einvoice_uuid = lower(p_ettn),
+         due_date = case when status = 'ödendi' then due_date else p_issue + 7 end,
          einvoice_pdf = p_pdf, einvoice_status = 'kesildi', einvoice_error = null, einvoice_verified_by = auth.uid(), einvoice_verified_at = now()
    where id = p_invoice;
 end $$;
@@ -165,6 +202,18 @@ alter table public.stamp_taxes add constraint stamp_taxes_signed_needs_date chec
 create or replace function public.stamp_taxes_freeze() returns trigger
 language plpgsql set search_path = public, pg_catalog as $$
 begin
+  -- Tek yönlü: taslak → imzalı (imza tarihi + imzalı belge) → beyan_edildi (beyan tarihi) → ödendi (vergi ödeme tarihi).
+  if new.paper_status is distinct from old.paper_status then
+    if not ((old.paper_status = 'taslak' and new.paper_status = 'imzalı') or (old.paper_status = 'imzalı' and new.paper_status = 'beyan_edildi')
+         or (old.paper_status = 'beyan_edildi' and new.paper_status = 'ödendi')) then
+      raise exception 'Damga vergisi durumu % → % değiştirilemez', old.paper_status, new.paper_status using errcode = 'check_violation';
+    end if;
+  end if;
+  if new.paper_status <> 'taslak' and (new.doc_date is null or new.signed_document_id is null) then
+    raise exception 'İmza tarihi ve imzalı sözleşme belgesi zorunlu' using errcode = 'check_violation';
+  end if;
+  if new.paper_status in ('beyan_edildi','ödendi') and new.filed_at is null then raise exception 'Beyan tarihi zorunlu' using errcode = 'check_violation'; end if;
+  if new.paper_status = 'ödendi' and new.tax_paid_at is null then raise exception 'Vergi ödeme tarihi zorunlu' using errcode = 'check_violation'; end if;
   if old.paper_status in ('beyan_edildi','ödendi') and (new.base is distinct from old.base or new.rate_per_mille is distinct from old.rate_per_mille
      or new.doc_date is distinct from old.doc_date or new.party_title is distinct from old.party_title) then
     raise exception 'Beyan edilmiş damga vergisi kaydı değiştirilemez' using errcode = 'check_violation';
@@ -173,6 +222,15 @@ begin
 end $$;
 drop trigger if exists stamp_taxes_freeze on public.stamp_taxes;
 create trigger stamp_taxes_freeze before update on public.stamp_taxes for each row execute function public.stamp_taxes_freeze();
+-- Yeni kayıt doğrudan imzalı açılırsa da aynı kanıtlar istenir.
+create or replace function public.stamp_taxes_insert_check() returns trigger
+language plpgsql set search_path = public, pg_catalog as $$
+begin
+  if new.paper_status <> 'taslak' then raise exception 'Damga vergisi kaydı taslak açılır; imza "İmzalandı" ile işlenir' using errcode = 'check_violation'; end if;
+  return new;
+end $$;
+drop trigger if exists stamp_taxes_insert_check on public.stamp_taxes;
+create trigger stamp_taxes_insert_check before insert on public.stamp_taxes for each row execute function public.stamp_taxes_insert_check();
 
 -- ---------------------------------------------------------------- Tebligat ve posta
 alter table public.mail_items add column if not exists issuer text;
@@ -192,6 +250,9 @@ create or replace function public.mail_items_notice() returns trigger
 language plpgsql set search_path = public, pg_catalog as $$
 declare moved boolean := tg_op = 'INSERT' or old.status is distinct from new.status;
 begin
+  if moved and new.type = 'tebligat' and new.status in ('bildirildi','teslim','yönlendirildi') and new.notify_channel is null then
+    raise exception 'Tebligat bildirimi için kanal zorunlu (müşteriye nasıl haber verildi?)' using errcode = 'check_violation';
+  end if;
   if moved and new.status = 'bildirildi' and new.notified_at is null then new.notified_at := now(); end if;
   if moved and new.type = 'tebligat' and new.status in ('teslim','yönlendirildi') and new.notified_at is null then
     raise exception 'Tebligat müşteriye bildirilmeden kapatılamaz' using errcode = 'check_violation';
@@ -210,13 +271,33 @@ alter table public.customers add column if not exists mail_handover_at date;
 alter table public.customers add column if not exists privacy_notice_version text;
 alter table public.customers add column if not exists privacy_notice_delivered_at date;
 alter table public.customers add column if not exists etebligat_informed_at date;
+alter table public.customers add column if not exists address_activated_at date;
+
+-- Adres kullanımı imzalı sözleşmeyle başlar: müşteri 'aktif'e ancak "Sözleşme" türünde yüklenmiş belgesi varsa geçer.
+-- Mevcut aktif müşteriler etkilenmez (yalnız durum değişiminde ve panel kullanıcısının işleminde denetlenir).
+create or replace function public.customers_activation_gate() returns trigger
+language plpgsql set search_path = public, pg_catalog as $$
+begin
+  if new.status = 'aktif' and (tg_op = 'INSERT' or old.status is distinct from 'aktif') and coalesce(auth.role(), '') = 'authenticated' then
+    if tg_op = 'INSERT' or not exists (select 1 from public.documents d where d.customer_id = new.id and d.type = 'sozlesme') then
+      raise exception 'Müşteri imzalı sözleşme yüklenmeden aktifleştirilemez' using errcode = 'check_violation';
+    end if;
+    new.address_activated_at := coalesce(new.address_activated_at, (now() at time zone 'Europe/Istanbul')::date);
+  end if;
+  return new;
+end $$;
+drop trigger if exists customers_activation_gate on public.customers;
+create trigger customers_activation_gate before insert or update on public.customers for each row execute function public.customers_activation_gate();
 
 -- ---------------------------------------------------------------- Teklif dönüştürme (kontroller + dönem + taslak damga)
+-- Fiyat, süre, bitiş, ilk fatura (her zaman açılır, vade fatura tarihi + 7 gün) ve damga matrahı sunucuda tekliften hesaplanır;
+-- istemciden yalnız müşteri bilgisi, başlangıç tarihi ve not alınır. Yeni müşteri 'aday' açılır; adres, imzalı sözleşme
+-- yüklenince aktifleşir (customers_activation_gate). Mevcut müşteriye dönüştürmede VKN/TCKN teklifle eşleşmeli.
 create or replace function public.convert_quote(p_quote uuid, p_customer jsonb, p_contract jsonb, p_invoice jsonb default null, p_stamp jsonb default null)
 returns jsonb language plpgsql security invoker set search_path = public, pg_catalog as $$
 declare
-  q public.quotes; cu public.customers; ct public.contracts; inv public.invoices; st public.stamp_taxes;
-  c_id uuid; k_id uuid; i_id uuid; s_id uuid; v_start date; v_end date; v_first_end date;
+  q public.quotes; cu public.customers; ct public.contracts; inv public.invoices; st public.stamp_taxes; ex public.customers;
+  c_id uuid; k_id uuid; i_id uuid; s_id uuid; v_start date; v_end date; v_first_end date; v_issue date; v_periods numeric;
 begin
   if not public.is_staff() then raise exception 'Yetkisiz' using errcode = '42501'; end if;
   select * into q from public.quotes where id = p_quote for update;
@@ -228,38 +309,47 @@ begin
   end if;
 
   if nullif(p_customer->>'id', '') is not null then
-    c_id := (p_customer->>'id')::uuid;
-    if not exists (select 1 from public.customers where id = c_id) then raise exception 'Müşteri bulunamadı'; end if;
+    select * into ex from public.customers where id = (p_customer->>'id')::uuid;
+    if not found then raise exception 'Müşteri bulunamadı'; end if;
+    if coalesce(nullif(q.tax_no, ''), nullif(q.tc, '')) is not null
+       and coalesce(nullif(q.tax_no, ''), nullif(q.tc, '')) is distinct from coalesce(nullif(ex.tax_no, ''), nullif(ex.tc, '')) then
+      raise exception 'Teklifteki VKN/TCKN seçilen müşteriyle eşleşmiyor';
+    end if;
+    c_id := ex.id;
   else
     cu := jsonb_populate_record(null::public.customers, p_customer - 'id');
+    if coalesce(btrim(cu.title), '') = '' then raise exception 'Müşteri ünvanı zorunlu'; end if;
     insert into public.customers(title, contact, email, phone, tax_no, tc, tax_office, address, city, district, status, partner_id, bni, notes)
     values (cu.title, cu.contact, cu.email, cu.phone, cu.tax_no, cu.tc, cu.tax_office, cu.address, cu.city, cu.district,
-            coalesce(cu.status, 'aktif'), cu.partner_id, coalesce(cu.bni, q.bni, false), cu.notes)
+            'aday', cu.partner_id, coalesce(cu.bni, q.bni, false), cu.notes)
     returning id into c_id;
   end if;
 
   ct := jsonb_populate_record(null::public.contracts, p_contract);
   v_start := ct.start_date;
   if v_start is null then raise exception 'Sözleşme başlangıç tarihi zorunlu'; end if;
-  v_end := public.term_end(v_start, q.term_months);           -- bitiş sunucuda hesaplanır; istemci değeri yok sayılır
+  v_end := public.term_end(v_start, q.term_months);
+  -- Hizmet sözleşmesi şablonu (Madde 6.2) kendiliğinden yenileme içerir; ayar sözleşmeden farklıysa sözleşme sayfasından değiştirilir.
   insert into public.contracts(customer_id, package, billing_period, start_date, end_date, price, status, auto_renew)
-  values (c_id, q.package, q.billing_period, v_start, v_end, q.price, 'aktif', coalesce(ct.auto_renew, false))
+  values (c_id, q.package, q.billing_period, v_start, v_end, q.price, 'aktif', coalesce(ct.auto_renew, true))
   returning id into k_id;
 
-  if p_invoice is not null then
-    inv := jsonb_populate_record(null::public.invoices, p_invoice);
-    v_first_end := least(v_end, public.term_end(v_start, case when q.billing_period = 'aylık' then 1 else 12 end));
-    insert into public.invoices(customer_id, contract_id, amount, issue_date, due_date, status, note, service_period_start, service_period_end)
-    values (c_id, k_id, q.price, coalesce(inv.issue_date, v_start), coalesce(inv.due_date, coalesce(inv.issue_date, v_start) + 7), 'bekliyor', inv.note, v_start, v_first_end)
-    returning id into i_id;
-  end if;
+  inv := jsonb_populate_record(null::public.invoices, coalesce(p_invoice, '{}'::jsonb));
+  v_issue := v_start;
+  v_first_end := case when q.billing_period = 'aylık' and q.term_months > 1 then least(v_end, public.billing_anchor(v_start, 1) - 1)
+                      when q.billing_period = 'aylık' then v_end
+                      else least(v_end, public.term_end(v_start, 12)) end;
+  insert into public.invoices(customer_id, contract_id, amount, issue_date, due_date, status, note, service_period_start, service_period_end)
+  values (c_id, k_id, q.price, v_issue, v_issue + 7, 'bekliyor', inv.note, v_start, v_first_end)
+  returning id into i_id;
 
   if p_stamp is not null then
     st := jsonb_populate_record(null::public.stamp_taxes, p_stamp);
+    v_periods := case when q.billing_period = 'aylık' then q.term_months else q.term_months / 12.0 end;
     insert into public.stamp_taxes(customer_id, contract_id, party_title, party_tax_id, kind, paper_status, doc_date, period_start, period_end,
                                    base, rate_per_mille, payer, notes)
     select c_id, k_id, c.title, coalesce(nullif(c.tax_no, ''), nullif(c.tc, '')), 'sözleşme', 'taslak', null, v_start, v_end,
-           st.base, coalesce(st.rate_per_mille, 9.48), coalesce(st.payer, 'müşteri'), st.notes
+           round(q.price * v_periods / 1.2, 2), 9.48, coalesce(st.payer, 'müşteri'), st.notes
       from public.customers c where c.id = c_id
     returning id into s_id;
   end if;
@@ -272,21 +362,28 @@ revoke all on function public.convert_quote(uuid, jsonb, jsonb, jsonb, jsonb) fr
 grant execute on function public.convert_quote(uuid, jsonb, jsonb, jsonb, jsonb) to authenticated;
 
 -- ---------------------------------------------------------------- Yenileme (eski dönem değişmez)
--- p_basis: 'otomatik_madde' (sözleşmedeki kendiliğinden yenileme; yeni damga vergisi kâğıdı yok) | 'yeni_imza' (yeni imzalı
--- sözleşme; taslak damga kaydı açılır). Fiyat artışı yalnız sözleşmedeki bildirim süresi (≥45 gün) kanıtlanırsa uygulanır.
+-- 'otomatik_madde': sözleşmedeki kendiliğinden yenileme. Yalnız auto_renew açık, müşterinin fesih/yenilememe bildirimi yok,
+--   süre 12 ay ve bedel AYNI ise; yeni damga vergisi kâğıdı doğmaz. Fiyat artışı sözleşmedeki formül ve 45 gün önce bildirim
+--   doğrulanana kadar bu yoldan yapılmaz (Tur 4); artış "yeni_imza" ile yeni sözleşmeyle yapılır.
+-- 'yeni_imza': yeni imzalı sözleşme; taslak damga kaydı açılır. Yıllık dönemlerde süre 12 ay; yıllıkta yeni dönem faturası açılır.
 create or replace function public.renew_contract(p_contract uuid, p_basis text, p_price numeric, p_price_notice_at date default null, p_months integer default 12)
 returns jsonb language plpgsql security invoker set search_path = public, pg_catalog as $$
-declare old public.contracts; k_id uuid; i_id uuid; s_id uuid; v_start date; v_end date; cu public.customers;
+declare old public.contracts; cu public.customers; k_id uuid; i_id uuid; s_id uuid; v_start date; v_end date; v_periods numeric;
 begin
   if not public.is_staff() then raise exception 'Yetkisiz' using errcode = '42501'; end if;
+  if p_basis is null or p_basis not in ('otomatik_madde','yeni_imza') then raise exception 'Geçerli yenileme dayanağı zorunlu'; end if;
   select * into old from public.contracts where id = p_contract for update;
   if not found then raise exception 'Sözleşme bulunamadı'; end if;
   if exists (select 1 from public.contracts where previous_contract_id = p_contract) then raise exception 'Bu dönem zaten yenilenmiş'; end if;
-  if p_basis not in ('otomatik_madde','yeni_imza') then raise exception 'Yenileme dayanağı otomatik_madde ya da yeni_imza olmalı'; end if;
   if p_price is null or p_price <= 0 then raise exception 'Yeni dönem bedeli zorunlu'; end if;
   if p_months is null or p_months < 1 or p_months > 60 then raise exception 'Süre 1-60 ay olmalı'; end if;
-  if p_basis = 'otomatik_madde' and p_price > old.price and (p_price_notice_at is null or p_price_notice_at > old.end_date - 45) then
-    raise exception 'Otomatik yenilemede fiyat artışı için en az 45 gün önce yapılmış bildirim tarihi gerekli';
+  if old.billing_period = 'yıllık' and p_months <> 12 then raise exception 'Yıllık faturalı sözleşme 12 ay yenilenir'; end if;
+  select * into cu from public.customers where id = old.customer_id;
+  if p_basis = 'otomatik_madde' then
+    if not old.auto_renew then raise exception 'Sözleşmede kendiliğinden yenileme açık değil; yeni imzalı sözleşme gerekir'; end if;
+    if cu.termination_notice_at is not null then raise exception 'Müşterinin fesih/yenilememe bildirimi kayıtlı'; end if;
+    if p_months <> 12 then raise exception 'Kendiliğinden yenileme 12 aydır'; end if;
+    if p_price <> old.price then raise exception 'Kendiliğinden yenilemede bedel değişmez; fiyat değişikliği yeni imzalı sözleşmeyle yapılır'; end if;
   end if;
   v_start := old.end_date + 1;
   v_end := public.term_end(v_start, p_months);
@@ -296,15 +393,14 @@ begin
   -- Eski dönem dokunulmadan kalır (bitiş tarihinde kendiliğinden sona erer); yenilendiği previous_contract_id'den anlaşılır.
   if old.billing_period = 'yıllık' then
     insert into public.invoices(customer_id, contract_id, amount, issue_date, due_date, status, note, service_period_start, service_period_end)
-    values (old.customer_id, k_id, p_price, v_start, v_start + 7, 'bekliyor', old.package || ' · yenileme · ' || to_char(v_start, 'YYYY-MM'),
-            v_start, least(v_end, public.term_end(v_start, 12)))
+    values (old.customer_id, k_id, p_price, v_start, v_start + 7, 'bekliyor', old.package || ' · yenileme · ' || to_char(v_start, 'YYYY-MM'), v_start, v_end)
     returning id into i_id;
   end if;
   if p_basis = 'yeni_imza' then
-    select * into cu from public.customers where id = old.customer_id;
+    v_periods := case when old.billing_period = 'aylık' then p_months else p_months / 12.0 end;
     insert into public.stamp_taxes(customer_id, contract_id, party_title, party_tax_id, kind, paper_status, period_start, period_end, base, payer)
     values (old.customer_id, k_id, cu.title, coalesce(nullif(cu.tax_no, ''), nullif(cu.tc, '')), 'yenileme', 'taslak', v_start, v_end,
-            round(p_price * (case when old.billing_period = 'aylık' then p_months else p_months / 12.0 end) / 1.2, 2), 'müşteri')
+            round(p_price * v_periods / 1.2, 2), 'müşteri')
     returning id into s_id;
   end if;
   return jsonb_build_object('contract_id', k_id, 'invoice_id', i_id, 'stamp_tax_id', s_id);
@@ -313,19 +409,24 @@ revoke all on function public.renew_contract(uuid, text, numeric, date, integer)
 grant execute on function public.renew_contract(uuid, text, numeric, date, integer) to authenticated;
 
 -- ---------------------------------------------------------------- Aylık faturaları hazırla (yerel kayıt; e-belge kesmez)
--- Seçilen ay içinde başlayan aylık hizmet dönemleri için bekleyen fatura kaydı açar; tekrar çalışınca mevcut satırı korur.
-create or replace function public.prepare_monthly_invoices(p_month date) returns integer
+-- Dönemler billing_anchor ile kurulur (her takvim ayına tek başlangıç); son dönem sözleşme bitişinde kapanır. Seçilen ayda
+-- başlayan dönemler için bekleyen fatura açılır; tekrar çalışınca mevcut satır korunur.
+create or replace function public.prepare_monthly_invoices(p_month date, p_contract uuid default null) returns integer
 language plpgsql security invoker set search_path = public, pg_catalog as $$
-declare c public.contracts; m_start date := date_trunc('month', p_month)::date; m_end date; k integer; ps date; pe date; n integer := 0; added integer;
+declare c public.contracts; m_start date := date_trunc('month', p_month)::date; m_end date; k integer; n_months integer;
+        ps date; pe date; n integer := 0; added integer;
 begin
   if not public.is_staff() then raise exception 'Yetkisiz' using errcode = '42501'; end if;
+  if p_month is null then raise exception 'Ay zorunlu'; end if;
   m_end := (m_start + interval '1 month' - interval '1 day')::date;
-  for c in select * from public.contracts where billing_period = 'aylık' and status = 'aktif' and start_date <= m_end and end_date >= m_start loop
-    for k in 0..60 loop
-      ps := case when k = 0 then c.start_date else public.term_end(c.start_date, k) + 1 end;
+  for c in select * from public.contracts where billing_period = 'aylık' and status = 'aktif' and start_date <= m_end and end_date >= m_start
+             and (p_contract is null or id = p_contract) loop
+    n_months := public.term_months(c.start_date, c.end_date);
+    for k in 0..(n_months - 1) loop
+      ps := public.billing_anchor(c.start_date, k);
       exit when ps > c.end_date or ps > m_end;
       continue when ps < m_start;
-      pe := least(public.term_end(c.start_date, k + 1), c.end_date);
+      pe := case when k = n_months - 1 then c.end_date else least(public.billing_anchor(c.start_date, k + 1) - 1, c.end_date) end;
       insert into public.invoices(customer_id, contract_id, amount, issue_date, due_date, status, note, service_period_start, service_period_end)
       values (c.customer_id, c.id, c.price, ps, ps + 7, 'bekliyor', c.package || ' · ' || to_char(ps, 'YYYY-MM') || ' dönemi', ps, pe)
       on conflict (contract_id, service_period_start) where service_period_start is not null do nothing;
@@ -334,5 +435,5 @@ begin
   end loop;
   return n;
 end $$;
-revoke all on function public.prepare_monthly_invoices(date) from public, anon;
-grant execute on function public.prepare_monthly_invoices(date) to authenticated;
+revoke all on function public.prepare_monthly_invoices(date, uuid) from public, anon;
+grant execute on function public.prepare_monthly_invoices(date, uuid) to authenticated;

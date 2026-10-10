@@ -34,7 +34,7 @@ migrations=(
   0004_prod_gate 0005_rbac_auth_storage 0006_customer_portal_auth
   0007_purchase_flow 0008_pos_reconciliation 0009_legal_consent_evidence
   0010_panel_operations 0011_einvoice_parasut 0012_paytr_link 0013_audit_log
-  0014_quotes_stamp_tax
+  0014_quotes_stamp_tax 0015_audit_fixes
 )
 for n in "${migrations[@]}"; do
   if [ -f "$ROOT/supabase/migrations/${n}.sql" ]; then
@@ -45,10 +45,10 @@ for n in "${migrations[@]}"; do
 done
 migration_count="$(find "$ROOT/supabase/migrations" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
 down_in_migrations="$(find "$ROOT/supabase/migrations" -maxdepth 1 -type f -name '*.down.sql' | wc -l | tr -d ' ')"
-if [ "$migration_count" = 15 ] && [ "$down_in_migrations" = 0 ]; then
-  pass 'migrations dizini yalnız 0000-0014 UP SQL içeriyor'
+if [ "$migration_count" = 16 ] && [ "$down_in_migrations" = 0 ]; then
+  pass 'migrations dizini yalnız 0000-0015 UP SQL içeriyor'
 else
-  block 'migrations dizini exact UP-only 0000-0014 değil'
+  block 'migrations dizini exact UP-only 0000-0015 değil'
 fi
 if cmp -s "$ROOT/supabase-schema.sql" "$ROOT/supabase/migrations/0000_base_schema.sql"; then
   pass '0000 base schema canonical dosyayla byte-exact'
@@ -60,13 +60,13 @@ rollbacks=(
   0004_prod_gate 0005_rbac_auth_storage 0006_customer_portal_auth
   0007_purchase_flow 0008_pos_reconciliation 0009_legal_consent_evidence
   0010_panel_operations 0011_einvoice_parasut 0012_paytr_link 0013_audit_log
-  0014_quotes_stamp_tax
+  0014_quotes_stamp_tax 0015_audit_fixes
 )
 for n in "${rollbacks[@]}"; do
   if [ -f "$ROOT/supabase/rollbacks/${n}.down.sql" ]; then pass "rollback ${n} var"; else block "rollback ${n} eksik"; fi
 done
 rollback_count="$(find "$ROOT/supabase/rollbacks" -maxdepth 1 -type f -name '*.down.sql' | wc -l | tr -d ' ')"
-if [ "$rollback_count" = 14 ]; then pass 'rollbacks dizini exact 0001-0014'; else block 'rollbacks dizini exact 14 down SQL değil'; fi
+if [ "$rollback_count" = 15 ]; then pass 'rollbacks dizini exact 0001-0015'; else block 'rollbacks dizini exact 15 down SQL değil'; fi
 
 functions=(pos-payment purchase-flow admin-gate get-file send-notification issue-einvoice paytr-link)
 for fn in "${functions[@]}"; do
@@ -91,7 +91,7 @@ tests=(
   staging_0008_pos_reconciliation_tests.sql staging_0009_legal_consent_tests.sql
   staging_0010_panel_operations_tests.sql staging_0011_einvoice_parasut_tests.sql
   staging_0012_paytr_link_tests.sql staging_0013_audit_log_tests.sql
-  staging_0014_quotes_stamp_tax_tests.sql
+  staging_0014_quotes_stamp_tax_tests.sql staging_0015_audit_fixes_tests.sql
 )
 for test_file in "${tests[@]}"; do
   if [ -f "$ROOT/supabase/tests/$test_file" ]; then
