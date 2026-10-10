@@ -165,7 +165,7 @@
 
 ## MADDE 17 — UYUŞMAZLIKLARIN ÇÖZÜMÜ
 
-**17.1.** Taraflar uyuşmazlıkları öncelikle iyi niyetle çözmeye çalışır. Sözleşme'ye Türk hukuku uygulanır; uyuşmazlıklarda İstanbul (Çağlayan) Mahkemeleri ve İcra Daireleri yetkilidir.
+**17.1.** Taraflar uyuşmazlıkları öncelikle iyi niyetle çözmeye çalışır. Sözleşme'ye Türk hukuku uygulanır; uyuşmazlıklarda İstanbul Anadolu Mahkemeleri ve İcra Daireleri yetkilidir.
 
 ---
 

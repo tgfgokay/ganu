@@ -79,7 +79,7 @@ export const CLAUSES = [
     "Doğal afet, salgın, savaş, resmî makam kararları ve altyapı kesintileri gibi tarafların kontrolü dışındaki hâller mücbir sebep sayılır; bu süre boyunca etkilenen yükümlülükler askıya alınır. 30 günü aşan mücbir sebepte taraflar Sözleşme'yi feshedebilir.",
   ] },
   { title: 'Uyuşmazlıkların çözümü', paras: [
-    'Taraflar uyuşmazlıkları öncelikle iyi niyetle çözmeye çalışır. Sözleşme\'ye Türk hukuku uygulanır; uyuşmazlıklarda İstanbul (Çağlayan) Mahkemeleri ve İcra Daireleri yetkilidir.',
+    'Taraflar uyuşmazlıkları öncelikle iyi niyetle çözmeye çalışır. Sözleşme\'ye Türk hukuku uygulanır; uyuşmazlıklarda İstanbul Anadolu Mahkemeleri ve İcra Daireleri yetkilidir.',
   ] },
   { title: 'Yürürlük, ekler ve nüsha', paras: [
     "Ekler Sözleşme'nin ayrılmaz parçasıdır: EK-1 Hizmet paketi, bedel ve ödeme bilgileri; EK-2 Adres tahsis / muvafakat belgesi; EK-3 Kişisel verilerin korunması aydınlatma metni; EK-4 Gerçek faydalanıcı beyanı; varsa EK-5 Posta açma ve tarama onayı.",
