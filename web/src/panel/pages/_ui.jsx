@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { daysLeft } from '../lib/store.js'
 
-export function Modal({ title, onClose, children, footer }) {
+export function Modal({ title, onClose, children, footer, wide = false }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', onKey)
@@ -9,7 +9,7 @@ export function Modal({ title, onClose, children, footer }) {
   }, [onClose])
   return (
     <div className="pl-modal-bg" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="pl-modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`pl-modal${wide ? ' pl-modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="pl-modal-h">
           <h2>{title}</h2>
           <button className="pl-x" aria-label="Kapat" onClick={onClose}>×</button>

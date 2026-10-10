@@ -213,6 +213,7 @@ table.pl-table { width: 100%; border-collapse: collapse; }
 /* ---------- FORM / MODAL ---------- */
 .pl-modal-bg { position: fixed; inset: 0; background: rgba(10,37,64,.5); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 20px; z-index: 60; }
 .pl-modal { background: #fff; border-radius: 18px; width: 100%; max-width: 560px; max-height: 90vh; overflow: auto; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+.pl-modal-wide { max-width: 900px; }
 .pl-modal-h { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; }
 .pl-modal-h h2 { font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--navy); }
 .pl-x { background: none; border: 0; cursor: pointer; color: var(--muted); font-size: 26px; line-height: 1; padding: 0 4px; }
