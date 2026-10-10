@@ -178,7 +178,11 @@ begin
  delete from public.stamp_taxes where customer_id in (cid,cx,cm) or party_title like 'TEST_0015%';
  delete from public.quotes where title like 'TEST_0015%';
  delete from public.customers where id in (cid,cx,cm);
- delete from storage.objects where bucket_id='secure-docs' and name like 'customers/%/0015-%' and (name like 'customers/'||cid||'/%' or name like 'customers/'||cx||'/%' or name like 'customers/'||cm||'/%');
+ -- Supabase Storage doğrudan silmeyi engelleyebilir (storage.protect_delete); temizlik testin sonucunu değiştirmez.
+ begin
+   delete from storage.objects where bucket_id='secure-docs' and name like 'customers/%/0015-%' and (name like 'customers/'||cid||'/%' or name like 'customers/'||cx||'/%' or name like 'customers/'||cm||'/%');
+ exception when others then raise notice 'storage temizliği atlandı: %', sqlerrm;
+ end;
 end $$;
 
 do $$ declare f text; n int;
