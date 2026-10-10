@@ -3,7 +3,8 @@ import { Link,useNavigate } from 'react-router-dom'
 import { quotes,customers,convertQuote,bniDiscountPct,loadCatalog,PACKAGES,PACKAGE_PRICES,PACKAGE_MONTHLY,QUOTE_STATUS } from '../lib/operations-store.js'
 import { customerPayload,validateCustomer } from './OperationsCustomerForm.jsx'
 import { CopyButton } from './OperationsInvoices.jsx'
-import { GANU_INVOICE_ADDRESS as GANU,PAYMENT_ACCOUNT } from '../lib/company.js'
+import { GANU_INVOICE_ADDRESS as GANU } from '../lib/company.js'
+import { gmailComposeUrl,quoteHtml } from '../lib/quote-document.js'
 import { legalIdentity } from '../../legal/config.js'
 import { DV_RATE_PER_MILLE,DV_PAYERS,contractTotal,customerShare,discounted,quoteNo,stampTaxAmount,stampTaxBase } from '../lib/stamp-tax.js'
 import { addDaysISO,localISO,termEndISO } from '../lib/dates.js'
@@ -36,34 +37,19 @@ export function quoteMessage(q){
   ].join('\n')
 }
 
-const esc=(s)=>String(s??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
-// Yazdırılabilir teklif belgesi (panel içinde önizlenir; yazdırma penceresinden "PDF olarak kaydet").
-export function quoteHtml(q){
-  const total=contractTotal(q.price,q.billing_period,q.term_months),dv=dvOf(q),firm=legalIdentity.tradeName||'GANU Ofis Hizmetleri Ltd. Şti.'
-  const row=(k,v)=>`<tr><th>${esc(k)}</th><td>${v}</td></tr>`
-  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${esc(quoteNo(q))} · ${esc(q.title)}</title><style>
-body{font:14px/1.5 -apple-system,Segoe UI,Arial,sans-serif;color:#0A2540;margin:24px;max-width:760px}h1{font-size:22px;margin:0}
-.muted{color:#64748b}table{border-collapse:collapse;width:100%;margin:18px 0}th,td{border-bottom:1px solid #e2e8f0;padding:8px 6px;text-align:left;vertical-align:top}
-th{width:42%;color:#475569;font-weight:600}.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0A2540;padding-bottom:12px}
-.note{font-size:12.5px;color:#475569}@media print{body{margin:16mm}button{display:none}}</style></head><body>
-<div class="top"><div><h1>Fiyat Teklifi</h1><div class="muted">${esc(quoteNo(q))} · ${esc(fmtDate(q.created_at?.slice(0,10)||today()))}</div></div>
-<div style="text-align:right"><b>${esc(firm)}</b><br><span class="muted">${esc(legalIdentity.address||`${GANU.address}, ${GANU.district}/${GANU.city}`)}<br>${esc(legalIdentity.phone||'0537 974 62 90')} · ${esc(legalIdentity.email||'info@ganu.com.tr')}</span></div></div>
-<p>Sayın <b>${esc(q.title)}</b>${q.contact?` (${esc(q.contact)})`:''},<br>talebiniz üzerine sanal ofis hizmet teklifimiz aşağıdadır.</p>
-<table>${row('Hizmet',`Sanal ofis · ${esc(q.package)} paketi`)}${row('Faturalama',`${esc(q.billing_period)} · sözleşme süresi ${esc(q.term_months)} ay`)}
-${Number(q.discount_pct)>0?row('Liste fiyatı',`${tl(q.list_price)} TL / ${per(q.billing_period)} · %${esc(Number(q.discount_pct))} indirim`):''}
-${row('Teklif fiyatı',`<b>${tl(q.price)} TL / ${per(q.billing_period)}</b> (KDV dahil)`)}${row('Sözleşme toplamı',`${tl(total)} TL (KDV dahil)`)}
-${row('Damga vergisi',`yaklaşık ${tl(dv)} TL (binde ${String(DV_RATE_PER_MILLE).replace('.',',')}; sözleşme imzasında müşteri tarafından ödenir)`)}
-${q.valid_until?row('Geçerlilik',esc(fmtDate(q.valid_until))):''}${row('Ödeme',`Havale/EFT: ${esc(PAYMENT_ACCOUNT.bank)} · ${esc(PAYMENT_ACCOUNT.holder)} · ${esc(PAYMENT_ACCOUNT.iban)} ya da kartla ödeme linki`)}</table>
-${q.notes?`<p>${esc(q.notes).replace(/\n/g,'<br>')}</p>`:''}
-<p class="note">Hizmet kapsamı ve koşulları hizmet sözleşmesinde yer alır. Kabul halinde sözleşme ve ilk fatura düzenlenir; fatura Paraşüt üzerinden e-Arşiv/e-Fatura olarak gönderilir.</p>
-</body></html>`
+// Açılır pencere engelinden etkilenmez: belge panel içinde iframe'de gösterilir, yazdırma iframe'den açılır.
+// info@ganu.com.tr Gmail'inde alıcı, konu ve metni hazır yeni ileti açar (bağlantı olduğu için açılır pencere engeline
+// takılmaz); PDF'i personel ekleyip gönderir.
+function MailLink({q,onSent,className}){
+  const click=(e)=>{if(!q.email&&!confirm('Teklifte e-posta adresi yok. Alıcısız ileti açılsın mı?')){e.preventDefault();return}onSent?.(q)}
+  return <a className={className} href={gmailComposeUrl(q)} target="_blank" rel="noopener noreferrer" onClick={click}>E-postayla gönder</a>
 }
 
-// Açılır pencere engelinden etkilenmez: belge panel içinde iframe'de gösterilir, yazdırma iframe'den açılır.
-function QuotePreview({q,onClose}){
+function QuotePreview({q,onClose,onMail}){
   const ref=useRef(null)
-  return <Modal wide title={`${quoteNo(q)} · ${q.title}`} onClose={onClose} footer={<><button className="pl-btn pl-btn-ghost" onClick={onClose}>Kapat</button><button className="pl-btn pl-btn-solid" onClick={()=>ref.current?.contentWindow?.print()}>Yazdır / PDF</button></>}>
-    <iframe ref={ref} title="Teklif önizleme" srcDoc={quoteHtml(q)} style={{width:'100%',height:'65vh',border:'1px solid #e2e8f0',borderRadius:8,background:'#fff'}}/>
+  return <Modal wide title={`${quoteNo(q)} · ${q.title}`} onClose={onClose} footer={<><button className="pl-btn pl-btn-ghost" onClick={onClose}>Kapat</button><MailLink q={q} onSent={onMail} className="pl-btn pl-btn-ghost"/><button className="pl-btn pl-btn-solid" onClick={()=>ref.current?.contentWindow?.print()}>Yazdır / PDF</button></>}>
+    <p className="sub" style={{margin:'0 0 8px'}}>PDF için "Yazdır / PDF" → hedef "PDF olarak kaydet". E-postada PDF'i ekleyip gönderin.</p>
+    <iframe ref={ref} title="Teklif belgesi" srcDoc={quoteHtml(q)} style={{width:'100%',height:'70vh',border:'1px solid #e2e8f0',borderRadius:8,background:'#eef1f5'}}/>
   </Modal>
 }
 
@@ -166,13 +152,14 @@ export default function OperationsQuotes(){
           :q.status==='red'?<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(q)}>Sil</button>
           :<><span onClickCapture={()=>markSent(q)}><CopyButton text={quoteMessage(q)} label="Mesajı kopyala"/></span>
             <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>{setModal({kind:'print',data:q});markSent(q)}}>Teklif belgesi</button>
+            <MailLink q={q} onSent={markSent} className="pl-btn pl-btn-ghost pl-btn-sm"/>
             <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({kind:'form',data:{...q,_bniPct:bniPct}})}>Düzenle</button>
             <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={()=>setModal({kind:'convert',data:q})}>Kabul → müşteri</button>
             <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>reject(q)}>Red</button></>}
         </div></div>)}
     </div></div>
     {modal?.kind==='form'&&<QuoteForm initial={modal.data} onClose={()=>setModal(null)} onSave={save}/>}
-    {modal?.kind==='print'&&<QuotePreview q={modal.data} onClose={()=>setModal(null)}/>}
+    {modal?.kind==='print'&&<QuotePreview q={modal.data} onClose={()=>setModal(null)} onMail={markSent}/>}
     {modal?.kind==='convert'&&<ConvertForm q={modal.data} custs={custs} onClose={()=>setModal(null)} onDone={done}/>}
   </div>
 }
