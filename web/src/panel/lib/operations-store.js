@@ -11,7 +11,7 @@ function collection(table){return {
   async remove(id){requireCloud();const {error}=await supabase.from(table).delete().eq('id',id);if(error)throw error;return true},
 }}
 
-export const customers=collection('customers'),contracts=collection('contracts'),mail=collection('mail_items'),documents=collection('documents'),requests=collection('requests'),inspections=collection('inspections'),bookings=collection('bookings'),notifications=collection('notifications'),invoices=collection('invoices'),expenses=collection('expenses'),partners=collection('partners'),commissionPayments=collection('commission_payments')
+export const customers=collection('customers'),contracts=collection('contracts'),mail=collection('mail_items'),documents=collection('documents'),requests=collection('requests'),inspections=collection('inspections'),bookings=collection('bookings'),notifications=collection('notifications'),invoices=collection('invoices'),expenses=collection('expenses'),partners=collection('partners'),commissionPayments=collection('commission_payments'),quotes=collection('quotes'),stampTaxes=collection('stamp_taxes')
 export async function withCustomerNames(rows){const list=await customers.list(),byId=Object.fromEntries(list.map((x)=>[x.id,x]));return rows.map((row)=>({...row,customer:byId[row.customer_id]||null}))}
 export function daysLeft(endDate){const end=new Date(`${endDate}T00:00:00`),today=new Date();today.setHours(0,0,0,0);return Math.round((end-today)/86400000)}
 
@@ -36,6 +36,11 @@ export async function notifyEvent(eventKey,customer,vars={}){return notification
 // Gönderi durumu (Kargo + müşteri sayfası ortak; lib/store.js ile aynı sözleşme): teslim/yönlendirmede tarih dolar,
 // "bildirildi" ve "teslim" müşteriye bildirim kaydı düşer.
 export async function setMailStatus(row,status,customer){const patch={status};if((status==='teslim'||status==='yönlendirildi')&&!row.delivered_at)patch.delivered_at=localISO();await mail.update(row.id,patch);if(!customer)return;if(status==='bildirildi')await notifyEvent(row.type==='tebligat'?'tebligat_arrived':'mail_arrived',customer,{tur:row.type,gonderen:row.sender||'—'});else if(status==='teslim')await notifyEvent('delivered',customer,{tarih:patch.delivered_at||''})}
+export const QUOTE_STATUS=['taslak','gönderildi','kabul','red']
+// Teklifi tek işlemde müşteri + sözleşme (+ ilk fatura, + damga vergisi kaydı) yapar; biri başarısız olursa hiçbiri yazılmaz (0014).
+export async function convertQuote(quoteId,{customer,contract,invoice=null,stamp=null}){requireCloud();const {data,error}=await supabase.rpc('convert_quote',{p_quote:quoteId,p_customer:customer,p_contract:contract,p_invoice:invoice,p_stamp:stamp});if(error)throw new Error(error.message||'Teklif dönüştürülemedi.');return data}
+// BNI Nişantaşı indirimi (gizli kod tablosundan; okunamazsa %10).
+export async function bniDiscountPct(){if(!usingSupabase)return 10;const {data}=await supabase.from('discount_codes').select('pct').eq('code','BNINISANTASI').eq('active',true).maybeSingle();return Number(data?.pct)||10}
 export const INVOICE_STATUS=['bekliyor','ödendi','gecikti']
 export const EXPENSE_CATEGORIES=['kira','personel','kargo','ofis','vergi','diğer']
 export const PARTNER_STATUS=['başvuru','aktif','pasif']

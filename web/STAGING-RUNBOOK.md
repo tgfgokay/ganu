@@ -27,6 +27,8 @@ migration veya testlerin geçtiği anlamına gelmez.
 11. `supabase/migrations/0010_panel_operations.sql` — müşteri adres/il/ilçe, sözleşme faturalama dönemi, fatura↔sözleşme bağı
 12. `supabase/migrations/0011_einvoice_parasut.sql` — Paraşüt e-Belge iş durumu, tek sahiplik `einvoice_claim` (service-role)
 13. `supabase/migrations/0012_paytr_link.sql` — PayTR link/ödeme referansı, idempotent `paytr_mark_paid` (service-role)
+14. `supabase/migrations/0013_audit_log.sql` — değiştirilemez işlem kaydı (`audit_log` + `audit_row` tetikleyicileri)
+15. `supabase/migrations/0014_quotes_stamp_tax.sql` — teklifler, damga vergisi defteri, tek işlemde `convert_quote` (personel, RLS)
 
 ```bash
 set -euo pipefail
@@ -43,8 +45,10 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0009_legal_consent_evid
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0010_panel_operations.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0011_einvoice_parasut.sql
 psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0012_paytr_link.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0013_audit_log.sql
+psql "$DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/0014_quotes_stamp_tax.sql
 ```
-`supabase db push` artık boş hedefte 0000→0012 sırasını eksiksiz görür. `0000`,
+`supabase db push` artık boş hedefte 0000→0014 sırasını eksiksiz görür. `0000`,
 canonical `supabase-schema.sql` dosyasının byte-exact kopyasıdır; `scripts/staging-readiness.sh`
 iki dosyanın ayrışmasını fail-closed engeller. Şema değişikliğinde ikisi aynı committe güncellenmelidir.
 
@@ -186,6 +190,8 @@ edilir. (İsteğe bağlı ek gözlem: PayTR panel/log'unda ilgili zaman dilimind
 
 ```bash
 # TERS SIRA (uygulanan son migration önce geri alınır):
+psql "$DB_URL" -f supabase/rollbacks/0014_quotes_stamp_tax.down.sql
+psql "$DB_URL" -f supabase/rollbacks/0013_audit_log.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0012_paytr_link.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0011_einvoice_parasut.down.sql
 psql "$DB_URL" -f supabase/rollbacks/0010_panel_operations.down.sql
@@ -498,3 +504,15 @@ Free planda otomatik yedek/PITR yok. `.github/workflows/supabase-db-backup.yml` 
    `pg_restore --clean --if-exists --no-owner --no-privileges -d "<hedef veritabanı URI>" db.dump`.
    Canlı projeye geri yükleme yalnız veri kaybı doğrulandıktan sonra ve öncesinde yeni bir yedek alınarak yapılır.
 4. Ayda bir: son artifact'in varlığı; yılda en az bir kez test projesine geri yükleme denemesi.
+
+## 15) Teklif → müşteri dönüşümü ve damga vergisi defteri (0014)
+
+1. `0014_quotes_stamp_tax.sql` uygula; `supabase/tests/staging_0014_quotes_stamp_tax_tests.sql` tüm satırlarda PASS
+   (pozitif dönüştürme testi `staff_roles`'taki ilk personel UID'siyle çalışır; TEST_0014 satırlarını kendisi siler, işlem kaydı kalır).
+   SQL editöründe migration + test + FAIL-guard tek metin olarak çalıştırılır (örtük tek işlem).
+2. Panel → **Teklifler**: teklif (paket, dönem, süre, BNI indirimi, geçerlilik) → "Mesajı kopyala" / "Yazdır / PDF" teklifi
+   "gönderildi" yapar → "Kabul → müşteri" tek işlemde müşteri (yeni ya da mevcut), sözleşme, ilk fatura ve damga vergisi kaydı açar.
+3. Panel → **Kayıtlar & Yönetim → Damga Vergisi**: belge ayına göre liste, beyan son günü (izleyen ayın 26'sı), CSV, "Tahsil edildi",
+   "Ayı beyan edildi işaretle". Teklif dışında açılan sözleşmeler ve yenilemeler "kaydı olmayan sözleşme dönemleri" altında çıkar.
+4. Hesap: DV = matrah × binde 9,48 × imzalı asıl nüsha (veritabanında hesaplanır). Matrah öneri olarak sözleşme süresince
+   ödenecek KDV hariç toplamdır; KDV sözleşmede ayrıca gösterilmiyorsa KDV dahil tutar elle yazılır.
