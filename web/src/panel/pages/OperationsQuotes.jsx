@@ -1,4 +1,4 @@
-import { useEffect,useMemo,useState } from 'react'
+import { useEffect,useMemo,useRef,useState } from 'react'
 import { Link,useNavigate } from 'react-router-dom'
 import { quotes,customers,convertQuote,bniDiscountPct,loadCatalog,PACKAGES,PACKAGE_PRICES,PACKAGE_MONTHLY,QUOTE_STATUS } from '../lib/operations-store.js'
 import { customerPayload,validateCustomer } from './OperationsCustomerForm.jsx'
@@ -37,13 +37,12 @@ export function quoteMessage(q){
 }
 
 const esc=(s)=>String(s??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
-// Yazdırılabilir teklif (tarayıcıdan "PDF olarak kaydet").
-function printQuote(q){
-  const w=window.open('','_blank');if(!w){alert('Açılır pencere engellendi; tarayıcıda bu site için açılır pencerelere izin verin.');return false}
+// Yazdırılabilir teklif belgesi (panel içinde önizlenir; yazdırma penceresinden "PDF olarak kaydet").
+export function quoteHtml(q){
   const total=contractTotal(q.price,q.billing_period,q.term_months),dv=dvOf(q),firm=legalIdentity.tradeName||'GANU Ofis Hizmetleri Ltd. Şti.'
   const row=(k,v)=>`<tr><th>${esc(k)}</th><td>${v}</td></tr>`
-  w.document.write(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${esc(quoteNo(q))} · ${esc(q.title)}</title><style>
-body{font:14px/1.5 -apple-system,Segoe UI,Arial,sans-serif;color:#0A2540;margin:40px;max-width:760px}h1{font-size:22px;margin:0}
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${esc(quoteNo(q))} · ${esc(q.title)}</title><style>
+body{font:14px/1.5 -apple-system,Segoe UI,Arial,sans-serif;color:#0A2540;margin:24px;max-width:760px}h1{font-size:22px;margin:0}
 .muted{color:#64748b}table{border-collapse:collapse;width:100%;margin:18px 0}th,td{border-bottom:1px solid #e2e8f0;padding:8px 6px;text-align:left;vertical-align:top}
 th{width:42%;color:#475569;font-weight:600}.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0A2540;padding-bottom:12px}
 .note{font-size:12.5px;color:#475569}@media print{body{margin:16mm}button{display:none}}</style></head><body>
@@ -57,8 +56,15 @@ ${row('Damga vergisi',`yaklaşık ${tl(dv)} TL (binde ${String(DV_RATE_PER_MILLE
 ${q.valid_until?row('Geçerlilik',esc(fmtDate(q.valid_until))):''}${row('Ödeme',`Havale/EFT: ${esc(PAYMENT_ACCOUNT.bank)} · ${esc(PAYMENT_ACCOUNT.holder)} · ${esc(PAYMENT_ACCOUNT.iban)} ya da kartla ödeme linki`)}</table>
 ${q.notes?`<p>${esc(q.notes).replace(/\n/g,'<br>')}</p>`:''}
 <p class="note">Hizmet kapsamı ve koşulları hizmet sözleşmesinde yer alır. Kabul halinde sözleşme ve ilk fatura düzenlenir; fatura Paraşüt üzerinden e-Arşiv/e-Fatura olarak gönderilir.</p>
-<button onclick="window.print()">Yazdır / PDF</button></body></html>`)
-  w.document.close();w.focus();return true
+</body></html>`
+}
+
+// Açılır pencere engelinden etkilenmez: belge panel içinde iframe'de gösterilir, yazdırma iframe'den açılır.
+function QuotePreview({q,onClose}){
+  const ref=useRef(null)
+  return <Modal wide title={`${quoteNo(q)} · ${q.title}`} onClose={onClose} footer={<><button className="pl-btn pl-btn-ghost" onClick={onClose}>Kapat</button><button className="pl-btn pl-btn-solid" onClick={()=>ref.current?.contentWindow?.print()}>Yazdır / PDF</button></>}>
+    <iframe ref={ref} title="Teklif önizleme" srcDoc={quoteHtml(q)} style={{width:'100%',height:'65vh',border:'1px solid #e2e8f0',borderRadius:8,background:'#fff'}}/>
+  </Modal>
 }
 
 function QuoteForm({initial,onClose,onSave}){
@@ -159,13 +165,14 @@ export default function OperationsQuotes(){
           {q.status==='kabul'?(q.customer_id&&<Link className="pl-btn pl-btn-ghost pl-btn-sm" to={`/panel/musteriler/${q.customer_id}`}>Müşteriye git</Link>)
           :q.status==='red'?<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(q)}>Sil</button>
           :<><span onClickCapture={()=>markSent(q)}><CopyButton text={quoteMessage(q)} label="Mesajı kopyala"/></span>
-            <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>{if(printQuote(q))markSent(q)}}>Yazdır / PDF</button>
+            <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>{setModal({kind:'print',data:q});markSent(q)}}>Teklif belgesi</button>
             <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({kind:'form',data:{...q,_bniPct:bniPct}})}>Düzenle</button>
             <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={()=>setModal({kind:'convert',data:q})}>Kabul → müşteri</button>
             <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>reject(q)}>Red</button></>}
         </div></div>)}
     </div></div>
     {modal?.kind==='form'&&<QuoteForm initial={modal.data} onClose={()=>setModal(null)} onSave={save}/>}
+    {modal?.kind==='print'&&<QuotePreview q={modal.data} onClose={()=>setModal(null)}/>}
     {modal?.kind==='convert'&&<ConvertForm q={modal.data} custs={custs} onClose={()=>setModal(null)} onDone={done}/>}
   </div>
 }
