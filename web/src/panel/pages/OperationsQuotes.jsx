@@ -150,7 +150,7 @@ export default function OperationsQuotes(){
   const save=async(payload)=>{if(modal.data.id)await quotes.update(modal.data.id,payload);else await quotes.create(payload);setModal(null);load()}
   const markSent=async(q)=>{if(q.status==='taslak'){await quotes.update(q.id,{status:'gönderildi',sent_at:new Date().toISOString()});load()}}
   const reject=async(q)=>{if(!confirm(`${quoteNo(q)} reddedildi olarak işaretlensin mi?`))return;await quotes.update(q.id,{status:'red',decided_at:new Date().toISOString()});load()}
-  const del=async(q)=>{if(!confirm(`${quoteNo(q)} silinsin mi?`))return;await quotes.remove(q.id);load()}
+  const del=async(q)=>{if(!confirm(`${quoteNo(q)} silinsin mi?${q.status==='kabul'?'\nTeklifle açılan müşteri, sözleşme, fatura ve damga vergisi kayıtları silinmez.':''}`))return;await quotes.remove(q.id);load()}
   const done=(r)=>{setModal(null);navigate(`/panel/musteriler/${r.customer_id}`)}
   const open=rows.filter((q)=>['taslak','gönderildi'].includes(q.status)&&!expired(q))
   return <div>
@@ -162,7 +162,7 @@ export default function OperationsQuotes(){
       {shown.map((q)=><div className="pl-row" key={q.id}><div className="grow"><div className="t1">{quoteNo(q)} · {q.title} <QuoteBadge q={q}/>{q.bni&&<span className="pl-badge b-mektup" style={{marginLeft:6}}>BNI</span>}</div>
         <div className="t2">{q.package} · {q.billing_period} · {q.term_months} ay · <b>{fmtTL(q.price)}</b>/{per(q.billing_period)}{Number(q.discount_pct)>0?` (%${Number(q.discount_pct)} ind.)`:''} · DV ≈ {fmtTL(dvOf(q))}{q.valid_until?` · geçerlilik ${fmtDate(q.valid_until)}`:''}{q.contact?` · ${q.contact}`:''}{q.phone?` · ${q.phone}`:''}</div></div>
         <div className="pl-actions">
-          {q.status==='kabul'?(q.customer_id&&<Link className="pl-btn pl-btn-ghost pl-btn-sm" to={`/panel/musteriler/${q.customer_id}`}>Müşteriye git</Link>)
+          {q.status==='kabul'?<>{q.customer_id&&<Link className="pl-btn pl-btn-ghost pl-btn-sm" to={`/panel/musteriler/${q.customer_id}`}>Müşteriye git</Link>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>del(q)}>Sil</button></>
           :q.status==='red'?<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(q)}>Sil</button>
           :<><span onClickCapture={()=>markSent(q)}><CopyButton text={quoteMessage(q)} label="Mesajı kopyala"/></span>
             <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>{setModal({kind:'print',data:q});markSent(q)}}>Teklif belgesi</button>
