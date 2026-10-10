@@ -3,6 +3,7 @@ import { Link,useNavigate } from 'react-router-dom'
 import { quotes,customers,convertQuote,markQuoteSent,bniDiscountPct,loadCatalog,PACKAGES,PACKAGE_PRICES,PACKAGE_MONTHLY,QUOTE_STATUS,QUOTE_CHANNELS } from '../lib/operations-store.js'
 import { customerPayload,validateCustomer } from './OperationsCustomerForm.jsx'
 import { CopyButton } from './OperationsInvoices.jsx'
+import { ContractDocButton,ContractPreview,loadContractDoc } from './OperationsContractDoc.jsx'
 import { GANU_INVOICE_ADDRESS as GANU } from '../lib/company.js'
 import { gmailComposeUrl,quoteHtml } from '../lib/quote-document.js'
 import { legalIdentity } from '../../legal/config.js'
@@ -135,7 +136,7 @@ function ConvertForm({q,custs,onClose,onDone}){
 }
 
 export default function OperationsQuotes(){
-  const [rows,setRows]=useState([]),[custs,setCusts]=useState([]),[bniPct,setBniPct]=useState(10),[modal,setModal]=useState(null),[filter,setFilter]=useState('açık'),[error,setError]=useState(''),navigate=useNavigate()
+  const [rows,setRows]=useState([]),[custs,setCusts]=useState([]),[bniPct,setBniPct]=useState(10),[modal,setModal]=useState(null),[contractDoc,setContractDoc]=useState(null),[filter,setFilter]=useState('açık'),[error,setError]=useState(''),navigate=useNavigate()
   const load=async()=>{try{const [qs,cs,,pct]=await Promise.all([quotes.list(),customers.list(),loadCatalog(),bniDiscountPct()]);setRows(qs);setCusts(cs);setBniPct(pct)}catch{setError('Teklifler yüklenemedi.')}}
   useEffect(()=>{load()},[])
   const shown=useMemo(()=>rows.filter((q)=>filter==='tümü'||(filter==='açık'?['taslak','gönderildi'].includes(q.status)&&!q.superseded_at:q.status===filter)),[rows,filter])
@@ -143,7 +144,10 @@ export default function OperationsQuotes(){
   const revise=(q)=>{const {id,number,created_at,customer_id,contract_id,sent_at,decided_at,status,superseded_at,sent_channel,...rest}=q;setModal({kind:'form',data:{...rest,replaces_quote_id:id,valid_until:addDaysISO(today(),15),_bniPct:bniPct}})}
   const reject=async(q)=>{if(!confirm(`${quoteNo(q)} reddedildi olarak işaretlensin mi?`))return;await quotes.update(q.id,{status:'red',decided_at:new Date().toISOString()});load()}
   const del=async(q)=>{if(!confirm(`${quoteNo(q)} silinsin mi?${q.status==='kabul'?'\nTeklifle açılan müşteri, sözleşme, fatura ve damga vergisi kayıtları silinmez.':''}`))return;await quotes.remove(q.id);load()}
-  const done=(r)=>{setModal(null);navigate(`/panel/musteriler/${r.customer_id}`)}
+  // Kabul edilince hizmet sözleşmesi hemen hazırlanır (müşteri + sözleşme + teklif bilgisiyle dolu); kapatınca müşteri sayfası açılır.
+  const done=async(r)=>{const q=modal.data;setModal(null);load()
+    try{setContractDoc(await loadContractDoc({contractId:r.contract_id,quote:{...q,status:'kabul',contract_id:r.contract_id,customer_id:r.customer_id}}))}
+    catch{navigate(`/panel/musteriler/${r.customer_id}`)}}
   const open=rows.filter((q)=>['taslak','gönderildi'].includes(q.status)&&!expired(q)&&!q.superseded_at)
   return <div>
     <div className="pl-head"><div><h1>Teklifler</h1><p>Teklif → kabul → müşteri, sözleşme, ilk fatura ve damga vergisi kaydı tek adımda. Fiyatlar KDV dahil.</p></div><button className="pl-btn pl-btn-teal" onClick={()=>setModal({kind:'form',data:emptyQuote(bniPct)})}>+ Yeni teklif</button></div>
@@ -154,7 +158,7 @@ export default function OperationsQuotes(){
       {shown.map((q)=><div className="pl-row" key={q.id}><div className="grow"><div className="t1">{quoteNo(q)} · {q.title} <QuoteBadge q={q}/>{q.bni&&<span className="pl-badge b-mektup" style={{marginLeft:6}}>BNI</span>}</div>
         <div className="t2">{q.package} · {q.billing_period} · {q.term_months} ay · <b>{fmtTL(q.price)}</b>/{per(q.billing_period)}{Number(q.discount_pct)>0?` (%${Number(q.discount_pct)} ind.)`:''} · DV ≈ {fmtTL(dvOf(q))}{q.valid_until?` · geçerlilik ${fmtDate(q.valid_until)}`:''}{q.contact?` · ${q.contact}`:''}{q.phone?` · ${q.phone}`:''}</div></div>
         <div className="pl-actions">
-          {q.status==='kabul'?<>{q.customer_id&&<Link className="pl-btn pl-btn-ghost pl-btn-sm" to={`/panel/musteriler/${q.customer_id}`}>Müşteriye git</Link>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>del(q)}>Sil</button></>
+          {q.status==='kabul'?<>{q.contract_id&&<ContractDocButton contractId={q.contract_id} quote={q} label="Sözleşme"/>}{q.customer_id&&<Link className="pl-btn pl-btn-ghost pl-btn-sm" to={`/panel/musteriler/${q.customer_id}`}>Müşteriye git</Link>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>del(q)}>Sil</button></>
           :q.status==='red'?<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(q)}>Sil</button>
           :<><CopyButton text={quoteMessage(q)} label="Mesajı kopyala"/>
             <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({kind:'print',data:q})}>Teklif belgesi</button>
@@ -170,5 +174,6 @@ export default function OperationsQuotes(){
     {modal?.kind==='print'&&<QuotePreview q={modal.data} onClose={()=>setModal(null)}/>}
     {modal?.kind==='sent'&&<SentForm q={modal.data} onClose={()=>setModal(null)} onDone={()=>{setModal(null);load()}}/>}
     {modal?.kind==='convert'&&<ConvertForm q={modal.data} custs={custs} onClose={()=>setModal(null)} onDone={done}/>}
+    {contractDoc&&<ContractPreview doc={contractDoc} note={`${quoteNo(contractDoc.quote)} kabul edildi: müşteri (aday), sözleşme (imza bekliyor), ilk fatura ve damga vergisi taslağı açıldı. Hizmet sözleşmesi hazır.`} onClose={()=>{const id=contractDoc.customer.id;setContractDoc(null);navigate(`/panel/musteriler/${id}`)}}/>}
   </div>
 }

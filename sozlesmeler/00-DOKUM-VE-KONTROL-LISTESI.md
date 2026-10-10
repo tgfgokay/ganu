@@ -17,8 +17,8 @@
 | 1 | Yeni kira sözleşmesi (sanal ofis uyumlu) | [04-kira-sozlesmesi-sanal-ofis-uyumlu.md](04-kira-sozlesmesi-sanal-ofis-uyumlu.md) | ✅ Hazır (alanlar doldurulacak) |
 | 2 | Eski kira kontratı değerlendirmesi | [kira-kontrati-degerlendirme.md](kira-kontrati-degerlendirme.md) | ✅ Hazır |
 | 3 | Resmî kontroller & araştırma | [05-resmi-kontroller-ve-arastirma.md](05-resmi-kontroller-ve-arastirma.md) | ✅ Hazır |
-| 4 | **Müşteri hizmet sözleşmesi (bilingual, KANONİK)** ⭐ | [06-hizmet-sozlesmesi-bilingual.md](06-hizmet-sozlesmesi-bilingual.md) | ✅ Hazır |
-| 4b | Müşteri hizmet sözleşmesi (TR, ilk taslak) | [01-sanal-ofis-hizmet-sozlesmesi.md](01-sanal-ofis-hizmet-sozlesmesi.md) | ⚪ Yedek/referans |
+| 4 | **Müşteri hizmet sözleşmesi (TR, KANONİK, sürüm 2026-10)** ⭐ — panel teklif kabulünde bu metinle doldurulmuş sözleşme üretir | [01-sanal-ofis-hizmet-sozlesmesi.md](01-sanal-ofis-hizmet-sozlesmesi.md) | 🟡 Avukat onayı bekliyor |
+| 4b | Müşteri hizmet sözleşmesi (bilingual, önceki sürüm) — yabancı müşteri için 01'e göre güncellenmeli | [06-hizmet-sozlesmesi-bilingual.md](06-hizmet-sozlesmesi-bilingual.md) | ⚪ Referans |
 | 5 | Adres tahsis / muvafakatname | [02-adres-tahsis-muvafakatnamesi.md](02-adres-tahsis-muvafakatnamesi.md) | ✅ Hazır |
 | 6 | KVKK aydınlatma + açık rıza | [03-kvkk-aydinlatma-ve-riza.md](03-kvkk-aydinlatma-ve-riza.md) | ✅ Hazır |
 | 7 | **Tebligat + posta tarama açık rıza (TCK 132)** | [07-tebligat-posta-tarama-riza.md](07-tebligat-posta-tarama-riza.md) | ✅ Hazır |

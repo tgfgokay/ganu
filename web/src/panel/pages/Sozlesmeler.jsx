@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { contracts, customers, documents, withCustomerNames, daysLeft, renewContract, PACKAGES, PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../lib/store.js'
 import { Modal, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
 import { localISO, oneYearLaterISO } from '../lib/dates.js'
+import { ContractDocButton } from './OperationsContractDoc.jsx'
 
 const oneYearLater = oneYearLaterISO
 // 'hazırlık': imzalı sözleşme doğrulanana kadar (müşteri sayfası › İmzalı sözleşmeyi doğrula). Aylık fatura hazırlanmaz, yenilenmez.
@@ -103,6 +104,7 @@ export default function Sozlesmeler() {
                     {renewed.has(r.id)
                       ? <span className="pl-badge b-mektup">yenilendi</span>
                       : r.status === 'aktif' && <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => setRenewing(r)}>Yenile</button>}
+                    <ContractDocButton contract={r} customer={r.customer} label="Belge" />
                     <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setModal({ mode: 'edit', data: { ...r } })}>Düzenle</button>
                     <button className="pl-btn pl-btn-danger pl-btn-sm" onClick={() => del(r.id)}>Sil</button>
                   </div>
