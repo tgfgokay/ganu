@@ -10,8 +10,13 @@ const emptyForm = () => ({
   received_date: localISO(),
   status: 'geldi', shelf: '', photo_url: '',
   forward_carrier: '', forward_tracking: '', delivered_to: '', delivered_at: '', notes: '',
-  notify: true, // yeni girişte müşteriye otomatik bildirim
+  issuer: '', reference_no: '', attempted_at: '', legal_result: '', receiver_capacity: '', notify_channel: 'whatsapp',
+  notify: true, // yeni girişte müşteriye bildirildi (personel WhatsApp/telefonla haber verdi)
 })
+// Resmî tebligat imha edilemez ve bildirim kaydı olmadan teslim/yönlendirme ile kapanmaz (0015 sunucu kuralı).
+const statusOptions = (type) => MAIL_STATUS.filter((s) => !(type === 'tebligat' && s === 'imha'))
+const LEGAL_RESULTS = [['teslim_girişimi', 'Teslim girişimi (kabul yetkisi yok / doğrulanmadı)'], ['teslim_alındı', 'Hukuken teslim alındı (kabul yetkisi doğrulandı)'], ['iade', 'İade edildi'], ['diğer', 'Diğer']]
+const NOTIFY_CHANNELS = ['whatsapp', 'telefon', 'e-posta', 'sms']
 
 const isOpenTebligat = (r) => r.type === 'tebligat' && ['geldi', 'bildirildi'].includes(r.status)
 
@@ -51,7 +56,8 @@ export default function Kargo() {
   }).sort((a, b) => Number(isOpenTebligat(b)) - Number(isOpenTebligat(a))), [rows, q, fType, fStatus])
 
   const save = async (form) => {
-    const { notify, ...rest } = form
+    const { notify, ...raw } = form
+    const rest = { ...raw, attempted_at: raw.attempted_at ? new Date(raw.attempted_at).toISOString() : null, legal_result: raw.legal_result || null, notify_channel: raw.notify_channel || null }
     if (modal.mode === 'new') {
       // bildirim gidiyorsa kayıt doğrudan 'bildirildi' durumuna düşer
       const data = notify && rest.status === 'geldi' ? { ...rest, status: 'bildirildi' } : rest
@@ -68,7 +74,8 @@ export default function Kargo() {
   }
   const del = async (id) => { if (confirm('Bu gönderi silinsin mi?')) { await mail.remove(id); load() } }
 
-  const quickStatus = async (r, status) => { await setMailStatus(r, status, r.customer); load() }
+  // Tebligatın bildirimi kanal ister: hızlı seçimde düzenleme penceresi açılır.
+  const quickStatus = async (r, status) => { if (r.type === 'tebligat' && ['bildirildi', 'teslim', 'yönlendirildi'].includes(status) && !r.notify_channel) { setModal({ mode: 'edit', data: { ...r, status, notify_channel: 'whatsapp' } }); return } try { await setMailStatus(r, status, r.customer) } catch (err) { alert(err?.message || 'Durum değiştirilemedi.') } load() }
 
   return (
     <div>
@@ -131,7 +138,7 @@ export default function Kargo() {
                 <td>
                   <select className="pl-status-sel" value={r.status} onChange={(e) => quickStatus(r, e.target.value)}
                     style={{ font: 'inherit', fontSize: 13, padding: '5px 8px', border: '1.5px solid #e4e9ef', borderRadius: 8 }}>
-                    {MAIL_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
+                    {statusOptions(r.type).map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </td>
                 <td>
@@ -200,7 +207,7 @@ function KargoForm({ modal, custs, onClose, onSave }) {
           <div className="pl-field">
             <label>Durum</label>
             <select value={f.status} onChange={(e) => set('status', e.target.value)}>
-              {MAIL_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
+              {statusOptions(f.type).map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>
@@ -214,6 +221,21 @@ function KargoForm({ modal, custs, onClose, onSave }) {
             <input type="date" value={f.received_date} onChange={(e) => set('received_date', e.target.value)} />
           </div>
         </div>
+        {f.type === 'tebligat' && (
+          <div className="pl-card" style={{ padding: 12, marginBottom: 12, borderColor: '#f3c4c4' }}>
+            <p className="sub" style={{ marginTop: 0 }}>GANU çalışanı müşteri şirketin çalışanı ya da temsilcisi değildir; tebliğ mazbatasına gerçek sıfatınızı yazdırın. Kabul yetkiniz doğrulanmadıysa "Teslim girişimi" seçin ve müşteriye aynı gün haber verin.</p>
+            <div className="two">
+              <div className="pl-field"><label>Tebliği çıkaran kurum</label><input value={f.issuer || ''} onChange={(e) => set('issuer', e.target.value)} placeholder="ör. Beykoz VD, İcra Dairesi" /></div>
+              <div className="pl-field"><label>Evrak / takip no</label><input value={f.reference_no || ''} onChange={(e) => set('reference_no', e.target.value)} /></div>
+            </div>
+            <div className="two">
+              <div className="pl-field"><label>Tebliğ girişimi tarih-saati</label><input type="datetime-local" value={f.attempted_at ? String(f.attempted_at).slice(0, 16) : ''} onChange={(e) => set('attempted_at', e.target.value)} /></div>
+              <div className="pl-field"><label>Sonuç</label><select value={f.legal_result || ''} onChange={(e) => set('legal_result', e.target.value)}><option value="">Seç…</option>{LEGAL_RESULTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+            </div>
+            <div className="pl-field"><label>Teslim alan / görüşen personel ve sıfatı</label><input value={f.receiver_capacity || ''} onChange={(e) => set('receiver_capacity', e.target.value)} placeholder="ör. Ayşe Y. · GANU resepsiyon görevlisi" /></div>
+          </div>
+        )}
+
         <div className="pl-field">
           <label>Raf / dolap konumu</label>
           <input value={f.shelf || ''} onChange={(e) => set('shelf', e.target.value)} placeholder="ör. A-3, Dolap 2" />
@@ -273,8 +295,14 @@ function KargoForm({ modal, custs, onClose, onSave }) {
           <div className="pl-field">
             <label className="pl-chk" style={{ display: 'inline-flex' }}>
               <input type="checkbox" checked={!!f.notify} onChange={(e) => set('notify', e.target.checked)} />
-              Müşteriye hemen bildir (kayıt "bildirildi" durumuna geçer)
+              Müşteriye haber verdim (kayıt "bildirildi" olur, saat kaydedilir)
             </label>
+          </div>
+        )}
+        {(f.notify || f.status === 'bildirildi') && (
+          <div className="pl-field">
+            <label>Bildirim kanalı</label>
+            <select value={f.notify_channel || ''} onChange={(e) => set('notify_channel', e.target.value)}>{NOTIFY_CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}</select>
           </div>
         )}
       </form>

@@ -17,6 +17,10 @@ export const stampTaxAmount=(base,rate=DV_RATE_PER_MILLE)=>r2((Number(base)||0)*
 export const customerShare=(amount,payer)=>payer==='GANU'?0:payer==='yarı yarıya'?r2(amount/2):r2(amount)
 export const discounted=(list,pct)=>r2((Number(list)||0)*(1-(Number(pct)||0)/100))
 
+// GANU sürekli damga vergisi mükellefi değil (kullanıcı, 10.10.2026): vergi imza tarihinden itibaren 15 gün içinde
+// Damga Vergisi Beyannamesi ile beyan edilip ödenir. Sürekli mükellefiyet olursa izleyen ayın 26'sı (declarationDeadline).
+export const DV_FILING_DAYS=15
+export const filingDeadline=(docDate)=>{if(!docDate)return '';const d=new Date(`${docDate}T00:00:00`);d.setDate(d.getDate()+DV_FILING_DAYS);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 // Beyan: belge tarihinin ayı (YYYY-MM); vergi izleyen ayın 26'sına kadar beyan edilip ödenir.
 export const monthKey=(iso)=>String(iso||'').slice(0,7)
 export const declarationDeadline=(month)=>{const [y,m]=month.split('-').map(Number);const d=new Date(y,m,26);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-26`}

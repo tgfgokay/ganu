@@ -1,16 +1,18 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { contracts, customers, withCustomerNames, daysLeft, PACKAGES, PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../lib/store.js'
+import { contracts, customers, documents, withCustomerNames, daysLeft, renewContract, PACKAGES, PACKAGE_PRICES, PACKAGE_MONTHLY, loadCatalog } from '../lib/store.js'
 import { Modal, DaysBadge, fmtDate, fmtTL } from './_ui.jsx'
 import { localISO, oneYearLaterISO } from '../lib/dates.js'
+import { ContractDocButton } from './OperationsContractDoc.jsx'
 
 const oneYearLater = oneYearLaterISO
-const CONTRACT_STATUS = ['aktif', 'askıda', 'sona erdi']
+// 'hazırlık': imzalı sözleşme doğrulanana kadar (müşteri sayfası › İmzalı sözleşmeyi doğrula). Aylık fatura hazırlanmaz, yenilenmez.
+const CONTRACT_STATUS = ['hazırlık', 'aktif', 'askıda', 'sona erdi']
 // Katalog fiyatı KDV dahildir; mevcut müşterilerde anlaşılan tutar elle girilir.
 const catalogPrice = (pkg, period) => (period === 'aylık' ? PACKAGE_MONTHLY : PACKAGE_PRICES)[pkg] ?? ''
 const emptyForm = (customerId = '') => {
   const start = localISO()
-  return { customer_id: customerId, package: 'Başlangıç', billing_period: 'yıllık', start_date: start, end_date: oneYearLater(start), price: catalogPrice('Başlangıç', 'yıllık'), status: 'aktif', auto_renew: false }
+  return { customer_id: customerId, package: 'Başlangıç', billing_period: 'yıllık', start_date: start, end_date: oneYearLater(start), price: catalogPrice('Başlangıç', 'yıllık'), status: 'hazırlık', auto_renew: true }
 }
 
 export default function Sozlesmeler() {
@@ -18,6 +20,7 @@ export default function Sozlesmeler() {
   const [custs, setCusts] = useState([])
   const [modal, setModal] = useState(null)
   const [onlySoon, setOnlySoon] = useState(false)
+  const [renewing, setRenewing] = useState(null)
   const [params, setParams] = useSearchParams()
 
   const load = async () => {
@@ -31,8 +34,11 @@ export default function Sozlesmeler() {
     if (id && custs.some((c) => c.id === id)) { setModal({ mode: 'new', data: emptyForm(id) }); setParams({}, { replace: true }) }
   }, [custs])
 
-  const filtered = useMemo(() => onlySoon ? rows.filter((r) => r._days <= 30) : rows, [rows, onlySoon])
-  const soonCount = rows.filter((r) => r._days <= 30).length
+  // Yenileme eski dönemi değiştirmez: sunucu (renew_contract) yeni dönem satırı açar (0015).
+  const renewed = useMemo(() => new Set(rows.map((r) => r.previous_contract_id).filter(Boolean)), [rows])
+  const filtered = useMemo(() => onlySoon ? rows.filter((r) => r._days <= 30 && !renewed.has(r.id)) : rows, [rows, onlySoon, renewed])
+  const unverifiedCount = rows.filter((r) => r.status === 'hazırlık' || (r.status === 'aktif' && !r.signed_verified_at)).length
+  const soonCount = rows.filter((r) => r._days <= 30 && r._days >= 0 && !renewed.has(r.id)).length
 
   const save = async (form) => {
     const payload = { ...form, price: Number(form.price) || 0 }
@@ -41,11 +47,6 @@ export default function Sozlesmeler() {
     setModal(null); load()
   }
   const del = async (id) => { if (confirm('Sözleşme silinsin mi?')) { await contracts.remove(id); load() } }
-  const renew = async (r) => {
-    const newStart = r.end_date
-    await contracts.update(r.id, { start_date: newStart, end_date: oneYearLater(newStart), status: 'aktif' })
-    load()
-  }
 
   return (
     <div>
@@ -56,6 +57,12 @@ export default function Sozlesmeler() {
         </button>
       </div>
 
+      {unverifiedCount > 0 && (
+        <div className="pl-alert">
+          <span className="ic">✍</span>
+          <span className="msg"><b>{unverifiedCount} sözleşmenin</b> imzası doğrulanmadı. Bunlar için aylık fatura hazırlanmaz ve yenileme yapılmaz; müşteri sayfasında "İmzalı sözleşmeyi doğrula" ile imzalı belgeyi bağlayın.</span>
+        </div>
+      )}
       {soonCount > 0 && (
         <div className="pl-alert">
           <span className="ic">⏰</span>
@@ -83,6 +90,9 @@ export default function Sozlesmeler() {
                 <td>
                   <span className="strong">{r.customer?.title || '—'}</span>
                   {r.auto_renew && <span className="pl-badge b-ok" style={{ marginLeft: 8 }}>oto-yenile</span>}
+                  {r.status === 'hazırlık' && <span className="pl-badge b-warn" style={{ marginLeft: 8 }} title="Müşteri sayfası › İmzalı sözleşmeyi doğrula">imza bekliyor</span>}
+                  {r.status === 'aktif' && !r.signed_verified_at && <span className="pl-badge b-warn" style={{ marginLeft: 8 }} title="Müşteri sayfası › İmzalı sözleşmeyi doğrula">imza doğrulanmadı</span>}
+                  {r.status !== 'aktif' && r.status !== 'hazırlık' && <span className="pl-badge" style={{ marginLeft: 8 }}>{r.status}</span>}
                 </td>
                 <td>{r.package}</td>
                 <td className="pl-num">{fmtDate(r.start_date)}</td>
@@ -91,7 +101,10 @@ export default function Sozlesmeler() {
                 <td><DaysBadge endDate={r.end_date} /></td>
                 <td>
                   <div className="pl-actions">
-                    <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => renew(r)}>Yenile</button>
+                    {renewed.has(r.id)
+                      ? <span className="pl-badge b-mektup">yenilendi</span>
+                      : r.status === 'aktif' && <button className="pl-btn pl-btn-teal pl-btn-sm" onClick={() => setRenewing(r)}>Yenile</button>}
+                    <ContractDocButton contract={r} customer={r.customer} label="Belge" />
                     <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={() => setModal({ mode: 'edit', data: { ...r } })}>Düzenle</button>
                     <button className="pl-btn pl-btn-danger pl-btn-sm" onClick={() => del(r.id)}>Sil</button>
                   </div>
@@ -103,6 +116,7 @@ export default function Sozlesmeler() {
       </div>
 
       {modal && <SozForm modal={modal} custs={custs} onClose={() => setModal(null)} onSave={save} />}
+      {renewing && <RenewForm contract={renewing} onClose={() => setRenewing(null)} onDone={() => { setRenewing(null); load() }} />}
     </div>
   )
 }
@@ -153,9 +167,10 @@ function SozForm({ modal, custs, onClose, onSave }) {
           </div>
           <div className="pl-field">
             <label>Durum</label>
-            <select value={f.status || 'aktif'} onChange={(e) => set('status', e.target.value)}>
-              {CONTRACT_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
+            <select value={f.status || 'hazırlık'} onChange={(e) => set('status', e.target.value)}>
+              {CONTRACT_STATUS.filter((s) => !(s === 'aktif' && modal.data.status === 'hazırlık')).map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+            {modal.data.status === 'hazırlık' && <span className="sub">Aktifleştirmek için müşteri sayfasında "İmzalı sözleşmeyi doğrula".</span>}
           </div>
         </div>
         <div className="two">
@@ -174,6 +189,68 @@ function SozForm({ modal, custs, onClose, onSave }) {
             Otomatik yenileme (müşteri onaylı)
           </label>
         </div>
+      </form>
+    </Modal>
+  )
+}
+
+// Yenileme dayanağı sözleşmeye göre seçilir: "otomatik_madde" kendiliğinden uzama (yeni damga vergisi kâğıdı yok; fiyat artışı
+// yalnız ≥45 gün önce yapılmış bildirimle), "yeni_imza" yeni imzalı sözleşme (taslak damga kaydı açılır). Yıllık dönemde
+// yeni dönem faturası da açılır; aylıkta "Bu ayın aylık faturalarını hazırla" kullanılır.
+export function RenewForm({ contract, onClose, onDone }) {
+  const yearly = contract.billing_period !== 'aylık'
+  const [f, setF] = useState({ basis: 'otomatik_madde', price: String(contract.price ?? ''), notice: '', months: 12, doc: '' })
+  const [error, setError] = useState(''), [busy, setBusy] = useState(false), [docs, setDocs] = useState([])
+  useEffect(() => {
+    documents.list().then((d) => setDocs(d.filter((x) => x.customer_id === contract.customer_id && x.type === 'sozlesme' && x.file_url)
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))))).catch(() => setDocs([]))
+  }, [contract.customer_id])
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
+  const auto = f.basis === 'otomatik_madde'
+  const early = auto && localISO() < contract.end_date
+  const unverified = !contract.signed_verified_at
+  const changed = Number(f.price) !== Number(contract.price)
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true); setError('')
+    try {
+      await renewContract(contract.id, auto
+        ? { basis: 'otomatik_madde', price: Number(contract.price), months: 12 }
+        : { basis: 'yeni_imza', price: Number(f.price), priceNoticeAt: f.notice || null, months: yearly ? 12 : Number(f.months) || 12, signedDocument: f.doc || null })
+      onDone()
+    } catch (err) { setError(err?.message || 'Yenilenemedi.') } finally { setBusy(false) }
+  }
+  const blocked = unverified || (auto && (early || !contract.auto_renew)) || (!auto && !f.doc)
+  return (
+    <Modal title={`Yenile · ${contract.customer?.title || ''}`} onClose={onClose}
+      footer={<><button className="pl-btn pl-btn-ghost" onClick={onClose}>Vazgeç</button><button className="pl-btn pl-btn-solid" form="renew-form" type="submit" disabled={busy || blocked}>{busy ? 'Yenileniyor…' : 'Yeni dönemi aç'}</button></>}>
+      <form id="renew-form" className="pl-form" onSubmit={submit}>
+        {error && <div className="pl-alert" role="alert"><span className="msg">{error}</span></div>}
+        {unverified && <div className="pl-alert" role="alert"><span className="msg">Bu sözleşmenin imzası doğrulanmamış. Önce müşteri sayfasında "İmzalı sözleşmeyi doğrula" ile imzalı belgeyi bağlayın.</span></div>}
+        <p className="sub" style={{ marginTop: 0 }}>Mevcut dönem ({fmtDate(contract.start_date)} – {fmtDate(contract.end_date)}) olduğu gibi kalır; yeni dönem {fmtDate(contract.end_date)} sonrasından başlar.</p>
+        <div className="pl-field"><label>Dayanak</label>
+          <select value={f.basis} onChange={(e) => set('basis', e.target.value)}>
+            <option value="otomatik_madde">Sözleşmedeki kendiliğinden yenileme maddesi</option>
+            <option value="yeni_imza">Yeni imzalı sözleşme</option>
+          </select></div>
+        {auto ? (
+          <p className="sub">
+            Aynı bedel ({fmtTL(contract.price)}/{yearly ? 'yıl' : 'ay'}) ve 12 ay. Dönemin bittiği gün ({fmtDate(contract.end_date)}) ya da sonrasında yapılır; müşterinin fesih bildirimi kayıtlı olmamalı. Bedel değişecekse "Yeni imzalı sözleşme" seçin.
+            {!contract.auto_renew && <><br /><strong>Bu sözleşmede kendiliğinden yenileme kapalı.</strong></>}
+            {early && <><br /><strong>Henüz erken: {fmtDate(contract.end_date)} tarihinden itibaren yenilenebilir.</strong></>}
+          </p>
+        ) : (<>
+          <div className="pl-field"><label>Yeni imzalı sözleşme belgesi *</label>
+            <select value={f.doc} onChange={(e) => set('doc', e.target.value)} required>
+              <option value="">{docs.length ? 'Seç…' : 'Önce müşteri sayfası › Belgeler\'e "Sözleşme" türüyle yükleyin'}</option>
+              {docs.map((d) => <option key={d.id} value={d.id}>{d.name} · {fmtDate(String(d.created_at || '').slice(0, 10))}</option>)}
+            </select></div>
+          <div className="two">
+            <div className="pl-field"><label>Yeni dönem bedeli (₺/{yearly ? 'yıl' : 'ay'}, KDV dahil)</label><input type="number" min="0" step="0.01" value={f.price} onChange={(e) => set('price', e.target.value)} required /></div>
+            <div className="pl-field"><label>Süre (ay)</label><input type="number" min="1" max="60" value={yearly ? 12 : f.months} disabled={yearly} onChange={(e) => set('months', e.target.value)} /></div>
+          </div>
+          {changed && <div className="pl-field"><label>Bedel değişikliğinin müşteriye bildirildiği tarih</label><input type="date" value={f.notice} onChange={(e) => set('notice', e.target.value)} /></div>}
+          <p className="sub">Yeni sözleşme için damga vergisi kaydı taslak açılır; Damga Vergisi sayfasında "İmzalandı" ile kesinleşir.</p>
+        </>)}
       </form>
     </Modal>
   )

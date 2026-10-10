@@ -1,252 +1,208 @@
 # SANAL OFİS HİZMET SÖZLEŞMESİ
 
-> **NOT:** Bu metin bir şablondur. Yürürlüğe koymadan önce mutlaka bir avukat /
-> mali müşavir tarafından gözden geçirilmelidir. Köşeli parantez içindeki `[...]`
-> alanlar her müşteri için doldurulacaktır.
+> **Metin sürümü 2026-10.** Bu dosya, panelin teklif kabulünde ürettiği sözleşmeyle aynı kaynaktan
+> (`web/src/panel/lib/contract-clauses.js`) `node scripts/render-contract-template.mjs` ile üretilir; elle düzenlemeyin.
+> Köşeli parantezli alanları panel müşteri, sözleşme ve teklif kaydından doldurur.
+>
+> **NOT:** Bu sürüm, [06 numaralı iki dilli şablonun](06-hizmet-sozlesmesi-bilingual.md) süreç denetimi (10.10.2026)
+> önerileriyle yenilenmiş Türkçe metnidir. Yürürlüğe koymadan önce avukat ve mali müşavir onayı alın.
 
 ---
 
 ## MADDE 1 — TARAFLAR
 
-İşbu Sanal Ofis Hizmet Sözleşmesi ("**Sözleşme**") aşağıdaki taraflar arasında
-düzenlenmiştir:
+**HİZMET VEREN:** [Ticaret unvanı] · [Adres] · [Vergi dairesi] / [VKN] · Mersis [No] · [Telefon] · [E-posta]
 
-**HİZMET SAĞLAYICI ("FİRMA")**
-- Ünvan: [Firma Ticari Ünvanı]
-- Adres: [İstanbul Adresi]
-- Vergi Dairesi / No: [Vergi Dairesi] / [VKN]
-- Ticaret Sicil No: [Sicil No]
-- Telefon / E-posta / KEP: [...]
+**MÜŞTERİ:** [Unvan / ad soyad] · [VKN ve vergi dairesi ya da TCKN] · [Adres] · Yetkili: [Ad soyad] · [Telefon] · [E-posta]
 
-**HİZMET ALAN ("MÜŞTERİ")**
-- Ad-Soyad / Ünvan: [...]
-- T.C. Kimlik / Vergi No: [...]
-- Adres: [...]
-- Telefon / E-posta: [...]
-- Yetkili (tüzel kişi ise): [...]
-
-Taraflar bundan sonra ayrı ayrı "Taraf", birlikte "Taraflar" olarak anılacaktır.
+İşbu Sözleşme yukarıda bilgileri yazılı Hizmet Veren ile Müşteri arasında düzenlenmiştir; taraflar birlikte "Taraflar" olarak anılır.
 
 ---
 
-## MADDE 2 — TANIMLAR
+## MADDE 2 — SÖZLEŞMENİN KONUSU VE NİTELİĞİ
 
-- **Sanal Ofis:** Müşteri'ye fiziki ofis kiralamaksızın yasal iş adresi, posta
-  yönetimi ve isteğe bağlı ek hizmetlerin sunulduğu hizmet modeli.
-- **Yasal Adres:** Müşteri'nin şirket kuruluşu, ticaret sicil tescili, vergi
-  dairesi kaydı ve resmi yazışmalarında kullanabileceği Firma'ya ait adres.
-- **Hizmet Paketi:** EK-1'de tanımlanan, Müşteri'nin seçtiği hizmet kapsamı.
-- **Hizmet Bedeli:** EK-1'de belirtilen ücret.
+**2.1.** İşbu Sözleşme'nin konusu; Hizmet Veren'in, Müşteri'ye EK-1'de belirtilen hizmet paketi kapsamında yasal iş adresi kullanımı, posta ve kargo karşılama ve bildirim hizmetleri ile pakete dahil diğer hizmetleri sunması ve Müşteri'nin bunun karşılığında hizmet bedelini ödemesidir.
+
+**2.2.** Sözleşme bir hizmet sözleşmesidir; Müşteri'ye adres üzerinde zilyetlik ya da münhasır kullanım hakkı vermez. Hizmet bedeli KDV eklenerek faturalandırılır ve Müşteri bu bedelden stopaj kesintisi yapmaz. Sözleşmenin niteliğine uygulanması zorunlu emredici hükümler saklıdır.
 
 ---
 
-## MADDE 3 — SÖZLEŞMENİN KONUSU
+## MADDE 3 — HİZMET KAPSAMI
 
-İşbu Sözleşme'nin konusu; Firma'nın, EK-1'de belirtilen Hizmet Paketi
-kapsamında Müşteri'ye sanal ofis hizmeti sunması ve Müşteri'nin bu hizmet
-karşılığında Hizmet Bedeli'ni ödemesine ilişkin Tarafların hak ve
-yükümlülüklerinin düzenlenmesidir.
+**3.1.** Yasal iş adresi: Hizmet Veren, Müşteri'nin Sözleşme süresince [Hizmet Veren adresi] adresini ticaret sicili, vergi dairesi ve diğer resmî kayıtlarında iş adresi olarak göstermesine izin verir ve bunun için gerekli adres tahsis / muvafakat belgesini (EK-2) düzenler.
 
----
+**3.2.** Posta ve kargo: Hizmet Veren, Müşteri adına gelen olağan posta ve kargoyu çalışma saatleri içinde karşılar, kayıt altına alır, muhafaza eder ve EK-1'de belirtilen iletişim kanalı üzerinden teslim aldığı iş günü, en geç izleyen iş günü Müşteri'ye bildirir. Yönlendirme ve teslim işlemleri tarafların belirlediği usule göre yapılır; kargo taşıma bedeli Müşteri'ye aittir.
 
-## MADDE 4 — HİZMET KAPSAMI
+**3.3.** Resmî tebligat: Resmî tebligatların kabulü ilgili mevzuattaki yetki ve usul şartlarına tabidir; bu Sözleşme Hizmet Veren personeline kanunen sahip olmadığı tebligat kabul yetkisi vermez. Hizmet Veren'e ulaşan resmî evrak ve tebligat girişimleri kayıt altına alınır ve gecikmeksizin Müşteri'ye bildirilir.
 
-Firma, seçilen pakete göre aşağıdaki hizmetleri sunar (seçili olanlar EK-1'de
-işaretlenir):
-
-**4.1. Yasal İş Adresi**
-- Firma adresinin Müşteri tarafından şirket kuruluş, tescil ve resmi yazışma
-  adresi olarak kullanılması.
-- Müşteri ünvanının tabela/dijital listede gösterilmesi.
-
-**4.2. Posta ve Kargo Yönetimi**
-- Müşteri adına gelen posta/kargonun teslim alınması ve saklanması.
-- Gelen evrakın Müşteri'ye bildirilmesi (e-posta/SMS/WhatsApp).
-- Talep halinde yönlendirme (kargo ücreti Müşteri'ye aittir).
-
-**4.3. Telefon Karşılama (opsiyonel)**
-- Müşteri'ye tahsis edilen numaranın firma adına karşılanması ve yönlendirilmesi.
-
-**4.4. Toplantı Odası (opsiyonel)**
-- Aylık [X] saat ücretsiz, sonrası saatlik [...] TL ücretle kullanım.
-- Rezervasyon en az [24] saat önceden yapılır.
-
-**4.5. Ek Hizmetler (opsiyonel)**
-- Şirket kuruluş danışmanlığı, muhasebe yönlendirme, kurumsal kimlik, web/domain.
-  Bu hizmetler ayrı bedellendirilir ve ayrı belgeyle düzenlenir.
+**3.4.** Pakete dahil diğer hizmetler ve kullanım sınırları EK-1'de gösterilir. Posta açma ve tarama yalnız Müşteri'nin ayrıca vereceği yazılı onayla yapılır. EK-1'de yer almayan hizmetler ayrıca fiyatlandırılır ve ayrı belgeyle düzenlenir.
 
 ---
 
-## MADDE 5 — HİZMET BEDELİ VE ÖDEME
+## MADDE 4 — HİZMET BEDELİ VE ÖDEME
 
-5.1. Hizmet Bedeli, EK-1'de KDV hariç/dahil olarak belirtilmiştir.
+**4.1.** Hizmet bedeli, ödeme periyodu (aylık ya da yıllık peşin), KDV hariç tutar, KDV ve KDV dahil toplam EK-1'de gösterilir.
 
-5.2. Ödeme periyodu: [ ] Aylık [ ] 3 Aylık [ ] Yıllık (peşin).
+**4.2.** Müşteri, düzenlenen faturayı fatura tarihinden itibaren 7 gün içinde EK-1'de belirtilen banka hesabına ya da Hizmet Veren'in ilettiği ödeme bağlantısıyla öder.
 
-5.3. Ödeme, fatura tarihinden itibaren [7] gün içinde Firma'nın banka hesabına
-yapılır. Banka bilgileri EK-1'dedir.
+**4.3.** Yıllık ödeme fiyat avantajı EK-1'deki yıllık bedele dahildir; ikinci kez uygulanmaz. Müşteriye özel indirimin oranı ve geçerli olduğu dönem EK-1'de gösterilir.
 
-5.4. Yıllık ödemelerde [%X] indirim uygulanır.
+**4.4.** Depozito (güvence bedeli) yalnız EK-1'de kararlaştırılmışsa alınır; alınmışsa Sözleşme sona erdiğinde belgeli borç ve zararlar mahsup edilerek hesap mutabakatıyla iade edilir.
 
-5.5. Depozito: Müşteri, sözleşme başında [bir aylık bedel] tutarında depozito
-öder. Depozito, sözleşme sonunda borç/hasar yoksa iade edilir.
-
-5.6. Ödemenin gecikmesi halinde Firma, aylık [%X] gecikme faizi uygulama ve
-[15] günü aşan gecikmede hizmeti askıya alma hakkına sahiptir.
-
-5.7. Fiyat güncellemesi: Firma, yenileme dönemlerinde bedeli güncel
-ekonomik koşullara göre [%X] oranını aşmamak üzere artırabilir; değişiklik
-yenilemeden [30] gün önce bildirilir.
+**4.5.** Ödemenin gecikmesi hâlinde mevzuata uygun temerrüt faizi ve bildirim hükümleri uygulanır. Hizmet Veren, yazılı bildirim ve uygulanması gereken süreler sonrasında hukuken mümkün olduğu ölçüde ek hizmetleri kısıtlayabilir. Resmî tebligat işlemleri ile mevcut evrakın muhafazası ve bildirimine ilişkin yükümlülükler bu kısıtlama nedeniyle ortadan kalkmaz.
 
 ---
 
-## MADDE 6 — SÜRE VE YENİLEME
+## MADDE 5 — YENİLEME DÖNEMİNİN BEDELİ
 
-6.1. Sözleşme süresi [12] aydır ve [...] tarihinde başlar.
+**5.1.** Yenileme dönemi bedeli, EK-1'de gösterilen KDV hariç yenileme esas bedeline, yenileme tarihinde son açıklanmış TÜİK on iki aylık ortalamalara göre TÜFE değişim oranı uygulanarak ve yasal sınırlar aşılmadan hesaplanır.
 
-6.2. Taraflardan biri sürenin bitiminden en az [30] gün önce yazılı fesih
-bildirimi yapmazsa, Sözleşme aynı koşullarla [12] ay süreyle kendiliğinden
-yenilenir.
+**5.2.** Hizmet Veren yeni dönem bedelini ve hesap dayanağını dönem bitiminden en az 45 gün önce yazılı olarak bildirir; bildirim yapılmamışsa yeni dönemde önceki dönemin bedeli uygulanır. Bu yöntem dışındaki bedel ya da kapsam değişiklikleri tarafların yazılı mutabakatını gerektirir.
 
 ---
 
-## MADDE 7 — MÜŞTERİ'NİN YÜKÜMLÜLÜKLERİ
+## MADDE 6 — DAMGA VERGİSİ
 
-7.1. Müşteri, Hizmet Bedeli'ni zamanında öder.
+**6.1.** İşbu Sözleşme ve vergiye tabi eklerine ilişkin damga vergisi, tarafların kanuni yükümlülükleri ve müşterek sorumlulukları saklı kalmak üzere, aralarındaki iç ilişkide Müşteri tarafından karşılanır.
 
-7.2. Müşteri, adresi yalnızca yasal ticari faaliyet için kullanır.
-
-7.3. Müşteri, kimlik/şirket belgelerini eksiksiz ve doğru sunar; değişiklikleri
-[7] gün içinde bildirir.
-
-7.4. Müşteri, adresi MADDE 9'da sayılan yasaklı faaliyetlerde kullanamaz.
-
-7.5. Müşteri, kendisine gelen resmi tebligatları takip etmekle yükümlüdür;
-Firma'nın bildirim yapmış olması Müşteri'nin takip sorumluluğunu kaldırmaz.
-
-7.6. Müşteri, adresi başka bir şirkete/kişiye Firma'nın yazılı izni olmadan
-devredemez veya alt kullandıramaz.
+**6.2.** Hizmet Veren tarafından beyan edilip ödenen tutar, ödeme belgesiyle tevsik edilerek kâr ilavesi olmaksızın Müşteri'ye ayrıca yansıtılır; bu tutar hizmet bedeline dahil edilmez. Sözleşme tek nüsha düzenlendiğinden vergi tek nüsha üzerinden hesaplanır; tahmini tutar EK-1'de gösterilir.
 
 ---
 
-## MADDE 8 — FİRMA'NIN YÜKÜMLÜLÜKLERİ
+## MADDE 7 — SÜRE VE YENİLEME
 
-8.1. Firma, seçilen paket kapsamındaki hizmetleri özenle sunar.
+**7.1.** Sözleşme, EK-1'de gösterilen başlangıç tarihinde yürürlüğe girer ve EK-1'deki süre için geçerlidir.
 
-8.2. Firma, Müşteri adına gelen posta/kargoyu teslim alır ve makul sürede
-bildirir.
-
-8.3. Firma, Müşteri'ye ait bilgileri MADDE 10 uyarınca gizli tutar.
-
-8.4. Firma, şirket kuruluşu/tescil için gereken **adres tahsis/muvafakat
-belgesini** Müşteri'ye sağlar (EK-2).
-
-8.5. Firma, hizmette kesinti gerektiren durumları önceden bildirmeye çalışır.
+**7.2.** EK-1'de kendiliğinden yenileme öngörülmüşse, taraflardan biri dönem bitiminden en az 30 gün önce yazılı yenilememe bildiriminde bulunmadıkça Sözleşme, uygulanabilir emredici mevzuat saklı kalmak üzere 12 ay için kendiliğinden yenilenir. Yenilemede hizmet kapsamı ve diğer hükümler aynı kalır; bedel 5. maddedeki yönteme göre belirlenir.
 
 ---
 
-## MADDE 9 — YASAKLI KULLANIM
+## MADDE 8 — MÜŞTERİ'NİN YÜKÜMLÜLÜKLERİ
 
-Müşteri, Firma adresini ve hizmetlerini aşağıdaki amaçlarla kullanamaz:
+**8.1.** Müşteri hizmet bedelini zamanında öder ve adresi yalnız hukuka uygun ticari faaliyeti için kullanır.
 
-- Yasa dışı her türlü faaliyet, dolandırıcılık, kara para aklama,
-- Adresin gerçek faaliyet yokken yanıltıcı şekilde gösterilmesi,
-- Üçüncü kişileri zarara uğratacak, Firma'nın itibarını zedeleyecek işler,
-- Firma'nın yazılı izni olmadan fiziki stok/depolama, üretim faaliyeti,
-- İlgili mevzuatın yasakladığı sektörel faaliyetler.
+**8.2.** Müşteri kimlik, şirket ve iletişim bilgilerini doğru ve eksiksiz verir; değişiklikleri 7 gün içinde yazılı olarak bildirir.
 
-İhlal halinde Firma, Sözleşme'yi derhal ve tazminatsız feshedebilir; doğan
-zararlardan Müşteri sorumludur.
+**8.3.** Müşteri, adresi Hizmet Veren'in yazılı izni olmadan başka bir kişiye devredemez ya da kullandıramaz.
+
+**8.4.** Müşteri, UETS ve GİB elektronik tebligat hesaplarını bizzat ya da yetkili temsilcileri aracılığıyla takip etmekten sorumludur; Hizmet Veren bu hesapların takibini ayrıca ve açıkça üstlenmedikçe bu hizmeti vermez. Hizmet Veren'in fiziksel evraka ilişkin yükümlülükleri, hukuken geçerli teslim işlemleri ve üstlendiği bildirim hizmetinin kapsamıyla sınırlıdır.
 
 ---
 
-## MADDE 10 — KİŞİSEL VERİLERİN KORUNMASI (KVKK) VE GİZLİLİK
+## MADDE 9 — HİZMET VEREN'İN YÜKÜMLÜLÜKLERİ
 
-10.1. Taraflar, 6698 sayılı KVKK'ya uygun hareket eder.
+**9.1.** Hizmet Veren, paket kapsamındaki hizmetleri özenle sunar.
 
-10.2. Firma, Müşteri'ye ait kişisel/ticari verileri yalnızca hizmetin ifası ve
-yasal yükümlülükler için işler, üçüncü kişilerle (yasal zorunluluk hariç)
-paylaşmaz.
+**9.2.** Hizmet Veren, Müşteri'nin resmî kayıt işlemleri için gereken adres tahsis / muvafakat belgesini (EK-2) sağlar.
 
-10.3. KVKK Aydınlatma Metni ve açık rıza ayrı belge (EK-3) ile alınır.
-
-10.4. Gizlilik yükümlülüğü Sözleşme sona erse de [3] yıl devam eder.
+**9.3.** Hizmet Veren, planlı hizmet kesintilerini makul süre önceden bildirir.
 
 ---
 
-## MADDE 11 — SORUMLULUĞUN SINIRLANDIRILMASI
+## MADDE 10 — KİMLİK TESPİTİ VE YASAKLI KULLANIM
 
-11.1. Firma, posta/kargonun içeriğinden, kaybından (kendi ağır kusuru hariç) ve
-gecikmesinden sorumlu tutulamaz.
+**10.1.** Müşteri, 5549 sayılı Kanun ve ilgili mevzuat gereği kimlik ve gerçek faydalanıcı bilgilerini (EK-4) eksiksiz ve doğru verir.
 
-11.2. Firma, Müşteri'nin ticari faaliyetlerinden, vergi/SGK/resmi
-yükümlülüklerinden ve üçüncü kişilerle ilişkilerinden sorumlu değildir.
+**10.2.** Müşteri adresi ve hizmetleri; hukuka aykırı faaliyet, dolandırıcılık, suç gelirlerinin aklanması ve paravan şirket işlemleri, gerçekte faaliyet yokken yanıltıcı adres gösterimi, üçüncü kişileri zarara uğratacak işler ile Hizmet Veren'in yazılı izni olmadan stok, depolama ya da üretim için kullanamaz.
 
-11.3. Firma'nın toplam sorumluluğu, her halükârda son [3] aylık Hizmet Bedeli
-ile sınırlıdır.
+**10.3.** Bu maddeye aykırılık, gerçeğe aykırı beyan ya da mevzuat gereği şüpheli işlem değerlendirmesi gerektiren durumlarda Hizmet Veren Sözleşme'yi derhal feshedebilir; doğan zararlardan Müşteri sorumludur.
 
 ---
 
-## MADDE 12 — FESİH
+## MADDE 11 — POSTA SINIRLARI VE SAKLAMA
 
-12.1. Taraflardan biri Sözleşme'yi [30] gün önceden yazılı bildirimle feshedebilir.
+**11.1.** Hizmete dahil posta ve kargo, olağan ticari kullanımla ve azami 50×50×50 cm ebatla sınırlıdır; bunu aşan gönderiler için Hizmet Veren önceden bildirerek ek ücret uygulayabilir.
 
-12.2. Firma; ödeme yapılmaması (MADDE 5.6), yasaklı kullanım (MADDE 9) veya
-diğer esaslı ihlallerde Sözleşme'yi derhal feshedebilir.
-
-12.3. Fesih halinde Müşteri, adresi resmi kayıtlardan (ticaret sicili, vergi
-dairesi vb.) [15] gün içinde sildirmek/değiştirmekle yükümlüdür. Aksi halde
-Firma, ilgili kurumlara adresin artık kullanılmadığını bildirme hakkına sahiptir
-ve doğan zararlardan Müşteri sorumludur.
-
-12.4. Peşin ödenen dönem bedeli, Müşteri kaynaklı fesihte iade edilmez.
+**11.2.** Bildirime rağmen 30 gün içinde teslim alınmayan olağan posta ve kargo için Hizmet Veren, Müşteri'ye ek bildirimde bulunarak saklama ücreti uygulayabilir ya da gönderiyi bedeli Müşteri'ye ait olmak üzere Müşteri'nin bildirdiği adrese gönderebilir. Resmî tebligat ve resmî kurum evrakı imha edilmez.
 
 ---
 
-## MADDE 13 — MÜCBİR SEBEP
+## MADDE 12 — KİŞİSEL VERİLERİN KORUNMASI VE GİZLİLİK
 
-Doğal afet, salgın, savaş, resmi makam kararları, altyapı kesintileri gibi
-Tarafların kontrolü dışındaki haller mücbir sebep sayılır; bu süre boyunca
-yükümlülükler askıya alınır. [30] günü aşan mücbir sebepte Taraflar Sözleşme'yi
-feshedebilir.
+**12.1.** Taraflar 6698 sayılı Kişisel Verilerin Korunması Kanunu'na uygun hareket eder. Hizmet Veren verileri yalnız hizmetin ifası ve yasal yükümlülükler için işler; yasal zorunluluk dışında üçüncü kişilerle paylaşmaz.
 
----
+**12.2.** Hizmet Veren aydınlatma yükümlülüğünü EK-3'teki aydınlatma metniyle yerine getirir. Kanunda öngörülen diğer işleme şartlarına dayanan işlemler için ayrıca açık rıza istenmez; açık rıza gerektiren seçimlik işlemler varsa bunlar için ayrı ve özgür iradeye dayanan rıza alınır.
 
-## MADDE 14 — TEBLİGAT
-
-14.1. Tarafların MADDE 1'deki adres ve e-posta/KEP bilgileri tebligat adresidir.
-
-14.2. Adres değişiklikleri [7] gün içinde yazılı bildirilmedikçe, eski adrese
-yapılan tebligat geçerli sayılır.
+**12.3.** Gizlilik yükümlülüğü Sözleşme sona erse de 3 yıl devam eder.
 
 ---
 
-## MADDE 15 — UYUŞMAZLIKLARIN ÇÖZÜMÜ
+## MADDE 13 — SORUMLULUK
 
-15.1. Taraflar uyuşmazlıkları öncelikle iyiniyetle çözmeye çalışır.
+**13.1.** Hizmet Veren, posta ve kargonun içeriğinden ve taşıyıcıdan kaynaklanan kayıp ya da gecikmeden sorumlu değildir.
 
-15.2. Çözülemeyen uyuşmazlıklarda **İstanbul (Çağlayan) Mahkemeleri ve İcra
-Daireleri** yetkilidir.
+**13.2.** Müşteri'nin ticari faaliyetleri, vergi, SGK ve diğer resmî yükümlülükleri ile üçüncü kişilerle ilişkilerinden Hizmet Veren sorumlu değildir.
 
-15.3. Sözleşme'ye Türk Hukuku uygulanır.
+**13.3.** Hizmet Veren'in Sözleşme'den doğan toplam sorumluluğu, kast ve ağır kusur hâlleri ile emredici hükümler saklı kalmak üzere, zararın doğduğu tarihten önceki son 3 aylık hizmet bedeliyle sınırlıdır.
 
 ---
 
-## MADDE 16 — YÜRÜRLÜK
+## MADDE 14 — FESİH VE SONA ERME
 
-İşbu Sözleşme, [16] madde ve [3] ekten ibaret olup, [...] tarihinde iki nüsha
-olarak imzalanmış ve imza tarihinde yürürlüğe girmiştir.
+**14.1.** Dönem sonundaki yenilememe bildirimi 7. madde hükümlerine tabidir. Sözleşme süresi içindeki fesih, tarafların hukuken geçerli haklı nedenleri ve sözleşmenin niteliğine uygulanan emredici hükümler çerçevesinde değerlendirilir.
 
-| FİRMA | MÜŞTERİ |
-|-------|---------|
-| Ünvan: | Ad-Soyad/Ünvan: |
-| Yetkili: | Yetkili: |
-| İmza: | İmza: |
+**14.2.** Hizmet Veren; usulüne uygun bildirime rağmen ödenmeyen hizmet bedeli, 10. maddeye aykırılık ya da diğer esaslı ihlallerde Sözleşme'yi haklı nedenle feshedebilir.
+
+**14.3.** Sözleşmenin sona ermesi üzerine Müşteri, Hizmet Veren adresini resmî kayıtlarından değiştirmek için gerekli işlemleri gecikmeksizin başlatır ve en geç 15 gün içinde başvuru kanıtını, değişiklik tamamlandığında da doğrulama belgesini Hizmet Veren'e iletir. Adres değişikliği tamamlanmazsa Hizmet Veren hukuka uygun bildirim ve başvuru haklarını kullanabilir.
+
+**14.4.** Sözleşme sona erdiğinde peşin tahsil edilmiş hizmet bedelleri; sunulan hizmet süresi, fesih sebebi ve Sözleşme hükümleri dikkate alınarak hesap mutabakatına konu edilir. Tarafların emredici mevzuattan doğan iade, zarar ve tazminat hakları saklıdır.
+
+---
+
+## MADDE 15 — BİLDİRİMLER VE TEBLİGAT
+
+**15.1.** Tarafların iletişim bilgileri 1. madde ve EK-1'de gösterilir; değişiklikler gecikmeksizin karşı tarafa bildirilir.
+
+**15.2.** Temerrüt, fesih ya da sözleşmeden dönmeye ilişkin ihbar ve ihtarlar Türk Ticaret Kanunu 18/3'te belirtilen usullerle yapılır; günlük operasyon bildirimleri için EK-1'deki e-posta ve mesaj kanalları kullanılır. Resmî kurumların tebligatları ilgili tebligat mevzuatına tabidir; bu madde sıradan e-postayı ya da KEP adresini UETS yerine geçirmez.
+
+---
+
+## MADDE 16 — MÜCBİR SEBEP
+
+**16.1.** Doğal afet, salgın, savaş, resmî makam kararları ve altyapı kesintileri gibi tarafların kontrolü dışındaki hâller mücbir sebep sayılır; bu süre boyunca etkilenen yükümlülükler askıya alınır. 30 günü aşan mücbir sebepte taraflar Sözleşme'yi feshedebilir.
+
+---
+
+## MADDE 17 — UYUŞMAZLIKLARIN ÇÖZÜMÜ
+
+**17.1.** Taraflar uyuşmazlıkları öncelikle iyi niyetle çözmeye çalışır. Sözleşme'ye Türk hukuku uygulanır; uyuşmazlıklarda İstanbul Anadolu Mahkemeleri ve İcra Daireleri yetkilidir.
+
+---
+
+## MADDE 18 — YÜRÜRLÜK, EKLER VE NÜSHA
+
+**18.1.** Ekler Sözleşme'nin ayrılmaz parçasıdır: EK-1 Hizmet paketi, bedel ve ödeme bilgileri; EK-2 Adres tahsis / muvafakat belgesi; EK-3 Kişisel verilerin korunması aydınlatma metni; EK-4 Gerçek faydalanıcı beyanı; varsa EK-5 Posta açma ve tarama onayı.
+
+**18.2.** Sözleşme tek nüsha olarak düzenlenip imzalanmıştır; asıl nüsha Hizmet Veren'de saklanır, imzalı suretinin elektronik kopyası Müşteri'ye verilir.
+
+---
+
+| HİZMET VEREN | MÜŞTERİ |
+|---|---|
+| [Ticaret unvanı] | [Unvan / ad soyad] |
+| Yetkili ad soyad: | Yetkili ad soyad: |
 | Tarih: | Tarih: |
+| İmza / kaşe: | İmza / kaşe: |
 
 ---
 
-### EKLER
-- **EK-1:** Hizmet Paketi, fiyat ve ödeme detayları
-- **EK-2:** Adres Tahsis / Muvafakat Belgesi
-- **EK-3:** KVKK Aydınlatma Metni ve Açık Rıza Beyanı
+## EK-1 — HİZMET PAKETİ, BEDEL VE ÖDEME BİLGİLERİ
+
+| Alan | Değer |
+|---|---|
+| Paket ve kapsamı | [Başlangıç / Pro / Kurumsal] · sitedeki paket listesi |
+| Hizmet adresi | [Hizmet Veren adresi] |
+| Ödeme periyodu | [Aylık / Yıllık peşin] |
+| Liste bedeli ve indirim | [Varsa: liste bedeli, indirim oranı] |
+| Dönem bedeli | [KDV hariç] + KDV %20 = [KDV dahil] |
+| Sözleşme toplamı | [Süre boyunca KDV dahil toplam] |
+| Yenileme esas bedeli (KDV hariç) | [Dönem bedeli, KDV hariç] · Madde 5 uyarınca güncellenir |
+| Depozito | Alınmaz |
+| Başlangıç / bitiş | [Tarih] – [Tarih] ([Ay] ay) |
+| Kendiliğinden yenileme | [Var: Madde 7.2 / Yok] |
+| Ödeme vadesi | Fatura tarihinden itibaren 7 gün |
+| Banka hesabı | [Banka] · [Hesap sahibi] · [IBAN] |
+| Damga vergisi | Matrah: KDV hariç sözleşme toplamı · binde 9,48 · tek nüsha · Müşteri karşılar; imzadan itibaren 15 gün içinde beyan |
+| İletişim ve bildirim kanalları | Müşteri: [e-posta, telefon / WhatsApp] · Hizmet Veren: [e-posta, telefon / WhatsApp] |
+
+Madde sayısı: 18.
