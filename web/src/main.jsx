@@ -12,8 +12,14 @@ const tree=(
     </BrowserRouter>
   </React.StrictMode>
 )
-if(root.hasChildNodes()){
+// GitHub Pages derin bağlantısı (404.html → /?/yol) kökteki ana sayfa HTML'iyle açılır; başka bir sayfanın
+// HTML'ini hidrasyonla sahiplenmek React #418/#423 uyuşmazlığı verir, bu durumda kök temizlenip yeniden çizilir.
+const redirected=window.__ganuSpaRedirect===true
+if(root.hasChildNodes()&&!redirected){
   ReactDOM.hydrateRoot(root,tree)
   requestAnimationFrame(()=>root.removeAttribute('data-prerendered'))
 }
-else ReactDOM.createRoot(root).render(tree)
+else{
+  if(redirected){root.textContent='';root.removeAttribute('data-prerendered')}
+  ReactDOM.createRoot(root).render(tree)
+}
