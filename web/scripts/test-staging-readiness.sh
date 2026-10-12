@@ -15,7 +15,8 @@ printf '%s\n' 'project_id = "fixture"' \
   '[functions.get-file]' 'verify_jwt = true' \
   '[functions.send-notification]' 'verify_jwt = true' \
   '[functions.issue-einvoice]' 'verify_jwt = true' \
-  '[functions.paytr-link]' 'verify_jwt = false' > "$fixture/supabase/config.toml"
+  '[functions.paytr-link]' 'verify_jwt = false' \
+  '[functions.auto-einvoice]' 'verify_jwt = true' > "$fixture/supabase/config.toml"
 printf '%s\n' 'fixture-project-ref' > "$fixture/supabase/.temp/project-ref"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$fixture/bin/supabase"
 chmod +x "$fixture/bin/supabase"
@@ -39,8 +40,10 @@ done
 : > "$fixture/supabase/rollbacks/0014_quotes_stamp_tax.down.sql"
 : > "$fixture/supabase/migrations/0015_audit_fixes.sql"
 : > "$fixture/supabase/rollbacks/0015_audit_fixes.down.sql"
-for fn in pos-payment admin-gate get-file send-notification issue-einvoice paytr-link; do mkdir -p "$fixture/supabase/functions/$fn"; : > "$fixture/supabase/functions/$fn/index.ts"; done
-for t in staging_section2_tests.sql staging_0005_rbac_tests.sql staging_0006_customer_portal_tests.sql staging_0007_purchase_flow_tests.sql staging_0008_pos_reconciliation_tests.sql staging_0010_panel_operations_tests.sql staging_0011_einvoice_parasut_tests.sql staging_0012_paytr_link_tests.sql staging_0013_audit_log_tests.sql staging_0014_quotes_stamp_tax_tests.sql staging_0015_audit_fixes_tests.sql; do
+: > "$fixture/supabase/migrations/0016_einvoice_auto.sql"
+: > "$fixture/supabase/rollbacks/0016_einvoice_auto.down.sql"
+for fn in pos-payment admin-gate get-file send-notification issue-einvoice paytr-link auto-einvoice; do mkdir -p "$fixture/supabase/functions/$fn"; : > "$fixture/supabase/functions/$fn/index.ts"; done
+for t in staging_section2_tests.sql staging_0005_rbac_tests.sql staging_0006_customer_portal_tests.sql staging_0007_purchase_flow_tests.sql staging_0008_pos_reconciliation_tests.sql staging_0010_panel_operations_tests.sql staging_0011_einvoice_parasut_tests.sql staging_0012_paytr_link_tests.sql staging_0013_audit_log_tests.sql staging_0014_quotes_stamp_tax_tests.sql staging_0015_audit_fixes_tests.sql staging_0016_einvoice_auto_tests.sql; do
   : > "$fixture/supabase/tests/$t"
 done
 : > "$fixture/STAGING-RUNBOOK.md"; : > "$fixture/supabase/prod_readiness_gate.sql"; : > "$fixture/scripts/prod-gate.sh"
