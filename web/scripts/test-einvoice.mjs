@@ -6,7 +6,7 @@ const env = { clientId: 'cid', clientSecret: 'sec', username: 'api@ganu.com.tr',
 const customer = (over = {}) => ({ id: 'c1', title: 'Aydın Yazılım Ltd. Şti.', email: 'muhasebe@aydin.test', tax_no: '1234567890', tc: '', tax_office: 'Beykoz', address: 'Kavacık Mah. Ekinciler Cad. No:19', city: 'İstanbul', district: 'Beykoz', parasut_contact_id: null, ...over })
 const invoice = (over = {}) => ({ id: '0b1c2d3e-0000-4000-8000-000000000001', customer_id: 'c1', amount: 1199, issue_date: '2026-09-29', due_date: '2026-10-04', status: 'ödendi', paid_date: '2026-09-29', note: 'Ekim 2026', payment_method: 'havale', parasut_invoice_id: null, parasut_payment_at: null, einvoice_kind: null, einvoice_job_id: null, einvoice_status: 'işleniyor', ...over })
 
-function fakeParasut({ inbox = null, grossDelta = 0, jobPendingPolls = 1, pdf204 = 1, rateLimitOnce = false, activeDocFromStart = false, postLostOnce = false, existing = [], paidInParasut = false } = {}) {
+function fakeParasut({ inbox = null, grossDelta = 0, jobPendingPolls = 1, pdf204 = 1, rateLimitOnce = false, activeDocFromStart = false, postLostOnce = false, existing = [], paidInParasut = false, existingContact = null, contactPutFails = false } = {}) {
   const calls = [], state = { contacts: 0, invoices: 0, jobs: 0, deleted: [], jobPolls: 0, pdfPolls: 0, doc: activeDocFromStart ? { id: 'ea1', type: 'e_archives' } : null, limited: false, bodies: {}, list: [...existing], lost: false }
   const ok = (body, status = 200) => new Response(body === null ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   async function fetch(url, init = {}) {
@@ -17,7 +17,8 @@ function fakeParasut({ inbox = null, grossDelta = 0, jobPendingPolls = 1, pdf204
     assert.equal(init.headers.Authorization, 'Bearer tok')
     const body = init.body ? JSON.parse(init.body) : null
     if (rateLimitOnce && !state.limited) { state.limited = true; return ok({ errors: [{ title: 'Too Many Requests' }] }, 429) }
-    if (method === 'GET' && u.pathname.endsWith('/contacts')) return ok({ data: [] })
+    if (method === 'GET' && u.pathname.endsWith('/contacts')) return ok({ data: existingContact ? [{ id: 'k1', type: 'contacts', attributes: existingContact }] : [] })
+    if (method === 'PUT' && u.pathname.endsWith('/contacts/k1')) { state.bodies.contactPut = body; return contactPutFails ? ok({ errors: [{ title: 'hata' }] }, 500) : ok({ data: { id: 'k1', type: 'contacts' } }) }
     if (method === 'POST' && u.pathname.endsWith('/contacts')) { state.contacts++; state.bodies.contact = body; return ok({ data: { id: 'k1', type: 'contacts' } }, 201) }
     if (method === 'GET' && u.pathname.endsWith('/sales_invoices')) {
       assert.equal(u.searchParams.get('filter[contact_id]'), 'k1'); assert.equal(u.searchParams.get('filter[issue_date]'), '2026-09-29')
@@ -213,5 +214,21 @@ await run('bağlantı testi: Cloudflare HTML 403 → JSON olmayan yanıt + güve
   assert.equal(r.state, 'hata'); assert.equal(r.step, 'oturum')
   assert.match(r.message, /\(403, JSON olmayan yanıt: text\/html — Cloudflare\/güvenlik duvarı engeli olası, cf-ray abc123-SIN\)/)
   assert.doesNotMatch(r.message, /pw|sec/)
+})
+await run('kayıtlı cari kartında e-posta yoksa fatura e-postası yazılır (e-Arşiv müşteriye gitsin)', async () => {
+  const f = fakeParasut({ existingContact: { name: 'Aydın Yazılım Ltd. Şti.', email: '' } }), s = fakeStore()
+  const r = await processInvoice(invoice(), customer(), deps(f, s))
+  assert.equal(r.state, 'kesildi'); assert.equal(f.state.contacts, 0)
+  assert.equal(f.state.bodies.contactPut.data.attributes.email, 'muhasebe@aydin.test')
+})
+await run('cari kartındaki e-posta aynıysa güncelleme yapılmaz', async () => {
+  const f = fakeParasut({ existingContact: { name: 'Aydın', email: 'Muhasebe@Aydin.test' } }), s = fakeStore()
+  const r = await processInvoice(invoice(), customer(), deps(f, s))
+  assert.equal(r.state, 'kesildi'); assert.equal(f.state.bodies.contactPut, undefined)
+})
+await run('cari e-postası güncellenemezse fatura yine kesilir', async () => {
+  const f = fakeParasut({ existingContact: { name: 'Aydın', email: 'eski@aydin.test' }, contactPutFails: true }), s = fakeStore()
+  const r = await processInvoice(invoice(), customer(), deps(f, s))
+  assert.equal(r.state, 'kesildi'); assert.ok(f.calls.includes('PUT /contacts/k1'))
 })
 console.log('einvoice parasut flow tests PASS')

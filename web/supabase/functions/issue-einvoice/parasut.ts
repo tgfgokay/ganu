@@ -143,7 +143,16 @@ export async function checkConnection(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'
 async function findOrCreateContact(p: Client, c: CustomerRow): Promise<string> {
   const taxId = digits(c.tax_no) || digits(c.tc)
   const found = await p.call('GET', `/contacts?filter[tax_number]=${taxId}&page[size]=1`)
-  if (found.json?.data?.length) return String(found.json.data[0].id)
+  if (found.json?.data?.length) {
+    const row = found.json.data[0], id = String(row.id), email = c.email?.trim()
+    // e-Arşiv faturayı Paraşüt cari kartındaki e-postaya gönderir; kartta yoksa ya da paneldeki fatura e-postasından
+    // farklıysa güncellenir. Güncelleme başarısız olursa fatura kesimi durmaz (e-posta sonra elle paylaşılabilir).
+    if (email && String(row.attributes?.email || '').trim().toLowerCase() !== email.toLowerCase()) {
+      try { await p.call('PUT', `/contacts/${id}`, { data: { id, type: 'contacts', attributes: { name: row.attributes?.name || c.title.trim(), email } } }) }
+      catch { /* e-posta güncellenemedi; belge yine kesilir */ }
+    }
+    return id
+  }
   const created = await p.call('POST', '/contacts', { data: { type: 'contacts', attributes: {
     name: c.title.trim(), account_type: 'customer', contact_type: digits(c.tax_no).length === 10 ? 'company' : 'person',
     tax_number: taxId, tax_office: c.tax_office?.trim() || undefined, email: c.email?.trim() || undefined,
