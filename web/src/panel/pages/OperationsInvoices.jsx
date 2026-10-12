@@ -1,6 +1,6 @@
 import { useEffect,useMemo,useState } from 'react'
 import { Link } from 'react-router-dom'
-import { invoices,customers,contracts,invStatus,issueEInvoice,createPaymentLink,checkParasut,markInvoicePaidManual,registerManualEinvoice,prepareMonthlyInvoices,fileToStoredUrl,MANUAL_PAY_METHODS } from '../lib/operations-store.js'
+import { invoices,customers,contracts,invStatus,issueEInvoice,createPaymentLink,checkParasut,syncParasut,markInvoicePaidManual,registerManualEinvoice,prepareMonthlyInvoices,fileToStoredUrl,MANUAL_PAY_METHODS } from '../lib/operations-store.js'
 import { SecureLink } from '../components/SecureAsset.jsx'
 import { PAYMENT_ACCOUNT,paymentMessage } from '../lib/company.js'
 import { Modal,fmtDate,fmtTL } from './_ui.jsx'
@@ -61,7 +61,7 @@ function ManualEDoc({row,onDone}){
     </Modal>}</>
 }
 // Ödenmiş faturada ödemenin kaynağı: PayTR bildirimi (otomatik) mi, personelin elle işaretlemesi mi.
-export const paidSource=(row)=>invStatus(row)!=='ödendi'?'':row.paytr_merchant_oid?'PayTR kartla · otomatik':`elle işaretlendi${row.payment_method?` · ${row.payment_method}`:''}`
+export const paidSource=(row)=>invStatus(row)!=='ödendi'?'':row.paytr_merchant_oid?'PayTR kartla · otomatik':String(row.payment_reference||'').startsWith('Paraşüt tahsilat')?`Paraşüt'ten · ${row.payment_method==='kart'?'iyzico kartla':row.payment_method||'tahsilat'}`:`elle işaretlendi${row.payment_method?` · ${row.payment_method}`:''}`
 
 export function CopyButton({text,label}){const [done,setDone]=useState(false);const copy=async()=>{try{await navigator.clipboard.writeText(text);setDone(true);setTimeout(()=>setDone(false),1800)}catch{prompt('Kopyalayın:',text)}};return <button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" onClick={copy}>{done?'✓ Kopyalandı':label}</button>}
 export const PaymentMessageButton=({row,customer})=><CopyButton text={paymentMessage(row,customer)} label="Ödeme mesajı"/>
@@ -101,11 +101,23 @@ export function InvoiceForm({title,initial,custs,cts,lockCustomer=false,onClose,
   </Modal>
 }
 
-function ParasutCheck(){
-  const [busy,setBusy]=useState(false),[r,setR]=useState(null),ok=r?.state==='bağlı'
-  const run=async()=>{setBusy(true);try{setR(await checkParasut())}finally{setBusy(false)}}
+// Eşitleme özeti: sayılar + işlem gerektiren (atlanan/hatalı) satırlar.
+export function syncSummary(r){
+  if(!r||r.error||r.state==='kapalı')return {ok:false,line:`✗ ${r?.error||r?.message||'Eşitleme yapılamadı.'}`,notes:[]}
+  const parts=[r.imported&&`${r.imported} fatura bağlandı`,r.paid&&`${r.paid} fatura ödendi`,r.pushed&&`${r.pushed} tahsilat Paraşüt'e girildi`].filter(Boolean)
+  const notes=(r.items||[]).filter((i)=>i.action==='atlandı'||i.action==='hata').map((i)=>`${i.invoice_no||`Paraşüt #${i.parasut_id}`}: ${i.reason||i.action}`)
+  return {ok:!r.errors,line:`${r.errors?'✗':'✓'} ${parts.length?parts.join(' · '):'Değişiklik yok'} · ${r.scanned} Paraşüt faturası tarandı${r.errors?` · ${r.errors} hata`:''}`,notes}
+}
+
+function ParasutCheck({onSynced}){
+  const [busy,setBusy]=useState(''),[r,setR]=useState(null),[sync,setSync]=useState(null),ok=r?.state==='bağlı'
+  const run=async()=>{setBusy('test');try{setR(await checkParasut())}finally{setBusy('')}}
+  const runSync=async()=>{setBusy('sync');try{setSync(syncSummary(await syncParasut()));onSynced?.()}finally{setBusy('')}}
   const line=!r?'Fatura kesmeden yalnız okur: oturum, şirket, ürün ve tahsilat hesabı.':ok?`✓ Bağlı · ${[r.company,r.product,r.account].filter(Boolean).join(' · ')}`:`✗ ${r.step?`${r.step}: `:''}${r.message||'Test başarısız.'}`
-  return <div className="pl-card" style={{marginBottom:20}}><div className="pl-card-b"><div className="pl-row"><div className="grow"><div className="t1">Paraşüt bağlantısı</div><div className="t2" style={r?{color:ok?'#0f766e':'#b45309'}:undefined}>{line}</div></div><button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" disabled={busy} onClick={run}>{busy?'Deneniyor…':'Bağlantıyı test et'}</button></div></div></div>
+  return <div className="pl-card" style={{marginBottom:20}}><div className="pl-card-b"><div className="pl-row"><div className="grow"><div className="t1">Paraşüt bağlantısı</div><div className="t2" style={r?{color:ok?'#0f766e':'#b45309'}:undefined}>{line}</div></div><button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" disabled={!!busy} onClick={run}>{busy==='test'?'Deneniyor…':'Bağlantıyı test et'}</button></div>
+    <div className="pl-row" style={{marginTop:12}}><div className="grow"><div className="t1">Paraşüt'ten eşitle</div><div className="t2" style={sync?{color:sync.ok?'#0f766e':'#b45309'}:undefined}>{sync?sync.line:"Paraşüt'te kesilen belgeleri vergi numarasıyla müşteriye bağlar; Paraşüt'te kapanan faturayı (iyzico kart ya da havale) ödendi yapar. Her sabah kendiliğinden de çalışır."}</div>
+      {sync?.notes?.length>0&&<ul className="sub" style={{margin:'6px 0 0',paddingLeft:18}}>{sync.notes.map((n)=><li key={n}>{n}</li>)}</ul>}</div>
+      <button type="button" className="pl-btn pl-btn-ghost pl-btn-sm" disabled={!!busy} onClick={runSync}>{busy==='sync'?'Eşitleniyor…':"Paraşüt'ten eşitle"}</button></div></div></div>
 }
 
 export default function OperationsInvoices(){
@@ -121,15 +133,15 @@ export default function OperationsInvoices(){
   // Aylık sözleşmelerde bu ay başlayan hizmet dönemleri için bekleyen fatura kaydı açar; tekrar basmak çift kayıt üretmez.
   const prepare=async()=>{try{const n=await prepareMonthlyInvoices(today());alert(n?`${n} aylık fatura kaydı hazırlandı.`:'Bu ay için hazırlanacak yeni aylık fatura yok.');load()}catch(err){alert(err?.message||'Hazırlanamadı.')}}
   return <div>
-    <div className="pl-head"><div><h1>Faturalar & Gelir</h1><p>Tutarlar KDV dahil. "e-Belge kes" Paraşüt'te resmî fatura keser; Paraşüt arayüzünde kesilen belge "Elle kesildi" ile numara, ETTN ve PDF'iyle bağlanır. Ödeme banka referansıyla kapatılır.</p></div><div className="pl-actions"><button className="pl-btn pl-btn-ghost" onClick={prepare}>Bu ayın aylık faturalarını hazırla</button><button className="pl-btn pl-btn-teal" disabled={!custs.length} onClick={()=>setModal({mode:'new',data:emptyInvoice()})}>+ Fatura kaydı</button></div></div>
+    <div className="pl-head"><div><h1>Faturalar & Gelir</h1><p>Tutarlar KDV dahil. "e-Belge kes" Paraşüt'te resmî fatura keser; Paraşüt arayüzünde kesilen belge "Paraşüt'ten eşitle" ile kendiliğinden bağlanır (gerekirse "Elle kesildi"). Ödeme banka referansıyla ya da Paraşüt tahsilatıyla kapanır.</p></div><div className="pl-actions"><button className="pl-btn pl-btn-ghost" onClick={prepare}>Bu ayın aylık faturalarını hazırla</button><button className="pl-btn pl-btn-teal" disabled={!custs.length} onClick={()=>setModal({mode:'new',data:emptyInvoice()})}>+ Fatura kaydı</button></div></div>
     {error&&<div className="pl-alert" role="alert"><span className="msg">{error}</span></div>}
     <div className="pl-stats"><div className="pl-stat"><div className="lab">Tahsil edilen</div><div className="val teal">{fmtTL(sum(paid))}</div></div><div className="pl-stat"><div className="lab">Bekleyen</div><div className="val">{fmtTL(sum(open))}</div></div><div className="pl-stat"><div className="lab">Geciken</div><div className={`val${late.length?' warn':''}`}>{late.length}</div></div></div>
     <div className="pl-card" style={{marginBottom:20}}><div className="pl-card-b"><div className="pl-row"><div className="grow"><div className="t1">Ödeme hesabı · {PAYMENT_ACCOUNT.bank}</div><div className="t2">{PAYMENT_ACCOUNT.holder} · <code>{PAYMENT_ACCOUNT.iban}</code></div></div><CopyButton text={PAYMENT_ACCOUNT.iban.replace(/\s/g,'')} label="IBAN kopyala"/></div></div></div>
-    <ParasutCheck/>
+    <ParasutCheck onSynced={load}/>
     <div className="pl-tablewrap"><div className="pl-toolbar"><input type="search" value={q} onChange={(e)=>setQ(e.target.value)} placeholder="Müşteri ara…"/><select value={filter} onChange={(e)=>setFilter(e.target.value)}>{['tümü','bekliyor','gecikti','ödendi'].map((s)=><option key={s}>{s}</option>)}</select><span className="spacer"/><span style={{fontSize:13,color:'#64748b'}}>{shown.length} kayıt</span></div>
       <table className="pl-table"><thead><tr><th>Müşteri</th><th>Tutar</th><th>Fatura tarihi</th><th>Son ödeme</th><th>Durum</th><th>e-Belge</th><th>İşlem</th></tr></thead><tbody>
         {shown.length===0&&<tr><td colSpan={7}><div className="pl-empty">Kayıt yok.</div></td></tr>}
-        {shown.map((r)=><tr key={r.id}><td>{byId[r.customer_id]?<Link to={`/panel/musteriler/${r.customer_id}`} className="strong">{byId[r.customer_id].title}</Link>:'—'}{r.note&&<div className="sub">{r.note}</div>}{r.payment_link&&invStatus(r)!=='ödendi'&&<div className="sub">kart linki eklendi</div>}<ReviewNote row={r}/></td><td className="pl-num">{fmtTL(r.amount)}</td><td className="pl-num">{fmtDate(r.issue_date)}</td><td className="pl-num">{fmtDate(r.due_date)}</td><td><InvoiceBadge row={r}/>{r.paid_date&&<div className="sub">{fmtDate(r.paid_date)}</div>}{paidSource(r)&&<div className="sub">{paidSource(r)}</div>}</td><td><EDocCell row={r} onDone={load}/></td><td><div className="pl-actions">{invStatus(r)!=='ödendi'&&<><PaymentLinkButton row={r} onDone={load}/><PaymentMessageButton row={r} customer={byId[r.customer_id]}/><PaidButton row={r} customer={byId[r.customer_id]} onDone={load}/></>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({mode:'edit',data:{...r}})}>Düzenle</button>{!r.parasut_invoice_id&&<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(r)}>Sil</button>}</div></td></tr>)}
+        {shown.map((r)=><tr key={r.id}><td>{byId[r.customer_id]?<Link to={`/panel/musteriler/${r.customer_id}`} className="strong">{byId[r.customer_id].title}</Link>:'—'}{r.note&&<div className="sub">{r.note}</div>}{r.source==='paraşüt'&&!r.note&&<div className="sub">Paraşüt'te kesildi</div>}{r.payment_link&&invStatus(r)!=='ödendi'&&<div className="sub">kart linki eklendi</div>}<ReviewNote row={r}/></td><td className="pl-num">{fmtTL(r.amount)}</td><td className="pl-num">{fmtDate(r.issue_date)}</td><td className="pl-num">{fmtDate(r.due_date)}</td><td><InvoiceBadge row={r}/>{r.paid_date&&<div className="sub">{fmtDate(r.paid_date)}</div>}{paidSource(r)&&<div className="sub">{paidSource(r)}</div>}</td><td><EDocCell row={r} onDone={load}/></td><td><div className="pl-actions">{invStatus(r)!=='ödendi'&&<><PaymentLinkButton row={r} onDone={load}/><PaymentMessageButton row={r} customer={byId[r.customer_id]}/><PaidButton row={r} customer={byId[r.customer_id]} onDone={load}/></>}<button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({mode:'edit',data:{...r}})}>Düzenle</button>{!r.parasut_invoice_id&&<button className="pl-btn pl-btn-danger pl-btn-sm" onClick={()=>del(r)}>Sil</button>}</div></td></tr>)}
       </tbody></table></div>
     {modal&&<InvoiceForm title={modal.mode==='new'?'Yeni fatura kaydı':'Fatura kaydını düzenle'} initial={modal.data} custs={custs} cts={cts} onClose={()=>setModal(null)} onSave={save}/>}
   </div>

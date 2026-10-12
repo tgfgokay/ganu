@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.auto-einvoice]
 verify_jwt = true
+
+[functions.parasut-sync]
+verify_jwt = true

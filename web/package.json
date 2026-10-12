@@ -15,6 +15,7 @@
     "test:marketing-build": "export GANU_MARKETING_ONLY=true GANU_SITE_URL=https://ganu.com.tr GANU_BASE=/; npm run build && node scripts/check-marketing-only.mjs",
     "test:staff-panel-build": "export GANU_MARKETING_ONLY=true GANU_STAFF_PANEL=true GANU_SITE_URL=https://staging.example.invalid GANU_BASE=/ VITE_SUPABASE_URL=https://example.supabase.co VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiJ9.test.signature; npm run build && node scripts/check-staff-panel.mjs && node scripts/render-contract-template.mjs --check",
     "test:einvoice": "node --experimental-strip-types scripts/test-einvoice.mjs",
+    "test:parasut-sync": "node --experimental-strip-types scripts/test-parasut-sync.mjs",
     "test:paytr": "node --experimental-strip-types scripts/test-paytr-link.mjs"
   },
   "dependencies": {

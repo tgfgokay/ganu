@@ -8,6 +8,8 @@ run-name: Günlük otomatik e-Belge (${{ inputs.mode || 'kesim' }})
 # Gerekli: repository secret EINVOICE_CRON_SECRET (Supabase'deki aynı değer). Tanımlı değilse koşu uyarıyla atlanır.
 # Repo herkese açık: kayıtta müşteri adı/tutar yok, yalnız sayılar, fatura kimliği ve e-belge numarası.
 # Başarısız kesim olursa iş kırmızı biter (GitHub e-posta bildirimi); panelde fatura "başarısız" görünür.
+# Önce parasut-sync (0017): Paraşüt'te kesilen belgeler panele bağlanır, Paraşüt'te kapanan faturalar (iyzico kart /
+# havale) panelde ödendi olur, panelde ödenip Paraşüt'te açık kalanlara tahsilat girilir. dry_run'da hiçbir şey yazılmaz.
 
 on:
   schedule:
@@ -15,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: dry_run = yalnız adayları say · kesim = belgeleri kes
+        description: dry_run = yalnız raporla (yazma yok) · kesim = eşitle ve belgeleri kes
         required: true
         default: dry_run
         type: choice
@@ -50,8 +52,27 @@ jobs:
             echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Call auto-einvoice
+      - name: Call parasut-sync
         if: steps.guard.outputs.skip != '1'
+        run: |
+          set -euo pipefail
+          dry=false; [ "$MODE" = "dry_run" ] && dry=true
+          out=$(curl -sS --max-time 600 -w '\n%{http_code}' -X POST "$SUPABASE_URL/functions/v1/parasut-sync" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" \
+            -d "{\"dry_run\": $dry}")
+          code=$(printf '%s' "$out" | tail -n1); body=$(printf '%s' "$out" | sed '$d')
+          echo "HTTP $code"
+          printf '%s' "$body" | jq -c '{dry_run, scanned, imported, paid, pushed, skipped, errors, error, message, items: (.items // [] | map({parasut_id, invoice_no, action, method, reason}))}' || printf '%s\n' "${body:0:300}"
+          case "$code" in
+            200) ;;
+            207) echo "::error::Paraşüt eşitlemesinde hata olan faturalar var; rapordaki 'hata' satırlarına bakın."; exit 1 ;;
+            *) echo "::error::parasut-sync HTTP $code"; exit 1 ;;
+          esac
+
+      # Eşitleme hata verse de ödenmiş faturaların kesimi yapılır; iş yine kırmızı biter.
+      - name: Call auto-einvoice
+        if: ${{ !cancelled() && steps.guard.outputs.skip != '1' }}
         run: |
           set -euo pipefail
           dry=false; [ "$MODE" = "dry_run" ] && dry=true

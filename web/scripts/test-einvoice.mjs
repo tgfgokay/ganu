@@ -215,6 +215,14 @@ await run('bağlantı testi: Cloudflare HTML 403 → JSON olmayan yanıt + güve
   assert.match(r.message, /\(403, JSON olmayan yanıt: text\/html — Cloudflare\/güvenlik duvarı engeli olası, cf-ray abc123-SIN\)/)
   assert.doesNotMatch(r.message, /pw|sec/)
 })
+await run('kesilmiş belgenin PDF\'i alınırken müşteri bilgisi eksikse belge başarısız\'a düşmez', async () => {
+  const f = fakeParasut({ activeDocFromStart: true, pdf204: 0 }), s = fakeStore()
+  const r = await processInvoice(invoice({ status: 'bekliyor', einvoice_status: 'kesildi', parasut_invoice_id: 's1' }), customer({ address: '', parasut_contact_id: 'k1' }), deps(f, s))
+  assert.equal(r.state, 'kesildi'); assert.ok(r.pdf)
+  assert.ok(!s.patches.some((p) => p.patch.einvoice_status === 'başarısız'))
+  assert.ok(!f.calls.some((c) => c.startsWith('POST') && c !== 'POST /oauth/token'), f.calls.join(' '))
+})
+
 await run('kayıtlı cari kartında e-posta yoksa fatura e-postası yazılır (e-Arşiv müşteriye gitsin)', async () => {
   const f = fakeParasut({ existingContact: { name: 'Aydın Yazılım Ltd. Şti.', email: '' } }), s = fakeStore()
   const r = await processInvoice(invoice(), customer(), deps(f, s))

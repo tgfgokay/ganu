@@ -31,7 +31,7 @@ export type Store = {
 export type Deps = { fetch: typeof fetch; sleep: (ms: number) => Promise<void>; store: Store; env: Env }
 export type Result = { state: 'kesildi' | 'işleniyor' | 'başarısız'; einvoice_no?: string; kind?: string; pdf?: string | null; message?: string }
 
-type Doc = { id: string; type: string; kind: 'e-arşiv' | 'e-fatura'; uuid: string; number: string }
+export type Doc = { id: string; type: string; kind: 'e-arşiv' | 'e-fatura'; uuid: string; number: string }
 type Json = { data?: any; included?: any[]; errors?: { title?: string; detail?: string }[] } | null
 
 export class ParasutError extends Error {
@@ -116,7 +116,7 @@ export function client(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>) {
   }
   return { call, auth }
 }
-type Client = ReturnType<typeof client>
+export type Client = ReturnType<typeof client>
 
 // Bağlantı testi: fatura kesmeden yalnız okuma (GET) — oturum, şirket erişimi, ürün ve tahsilat hesabı.
 export type CheckResult = { state: 'bağlı' | 'hata'; step?: string; message: string; company?: string; product?: string; account?: string }
@@ -197,13 +197,20 @@ async function createSalesInvoice(p: Client, inv: InvoiceRow, contactId: string,
   return id
 }
 
+// Satış faturasının resmî belgesi (include=active_e_document yanıtından). e_invoices'ta numara alanı yoktur; numara
+// satış faturasının invoice_no alanından alınır (Paraşüt listesindeki "Fatura no").
+// deno-lint-ignore no-explicit-any
+export function docFrom(data: any, included: any[] = []): Doc | null {
+  const ref = data?.relationships?.active_e_document?.data
+  if (!ref?.id) return null
+  const item = included.find((x: any) => String(x.id) === String(ref.id) && x.type === ref.type)
+  const a = item?.attributes || {}
+  return { id: String(ref.id), type: ref.type, kind: ref.type === 'e_invoices' ? 'e-fatura' : 'e-arşiv', uuid: a.uuid || '', number: a.invoice_number || data?.attributes?.invoice_no || '' }
+}
+
 async function activeDoc(p: Client, invoiceId: string): Promise<Doc | null> {
   const r = await p.call('GET', `/sales_invoices/${invoiceId}?include=active_e_document`)
-  const ref = r.json?.data?.relationships?.active_e_document?.data
-  if (!ref?.id) return null
-  const item = (r.json?.included || []).find((x: any) => String(x.id) === String(ref.id) && x.type === ref.type)
-  const a = item?.attributes || {}
-  return { id: String(ref.id), type: ref.type, kind: ref.type === 'e_invoices' ? 'e-fatura' : 'e-arşiv', uuid: a.uuid || '', number: a.invoice_number || '' }
+  return docFrom(r.json?.data, r.json?.included || [])
 }
 
 async function createEDocument(p: Client, inv: InvoiceRow, c: CustomerRow, invoiceId: string, env: Env) {
@@ -236,7 +243,7 @@ async function waitJob(p: Client, deps: Deps, job: string): Promise<'done' | 'pe
   return 'pending'
 }
 
-async function pdfBytes(p: Client, deps: Deps, doc: Doc): Promise<Uint8Array | null> {
+export async function pdfBytes(p: Client, deps: Pick<Deps, 'fetch' | 'sleep'>, doc: Doc): Promise<Uint8Array | null> {
   for (let i = 0; i < PDF_POLLS; i++) {
     const r = await p.call('GET', `/${doc.type}/${doc.id}/pdf`)
     const url = r.status === 204 ? '' : r.json?.data?.attributes?.url
@@ -254,7 +261,8 @@ async function pdfBytes(p: Client, deps: Deps, doc: Doc): Promise<Uint8Array | n
 
 export async function processInvoice(inv: InvoiceRow, customer: CustomerRow, deps: Deps): Promise<Result> {
   const { store, env } = deps
-  const missing = missingFields(customer)
+  // Kesilmiş belgenin yalnız PDF'i alınıyorsa eksik müşteri bilgisi belgeyi 'başarısız'a düşürmez.
+  const missing = inv.einvoice_status === 'kesildi' && inv.parasut_invoice_id ? [] : missingFields(customer)
   if (missing.length) {
     const message = `Müşteri bilgisi eksik: ${missing.join(', ')}.`
     await store.patchInvoice(inv.id, { einvoice_status: 'başarısız', einvoice_error: message })
