@@ -15,7 +15,8 @@ printf '%s\n' 'project_id = "fixture"' \
   '[functions.get-file]' 'verify_jwt = true' \
   '[functions.send-notification]' 'verify_jwt = true' \
   '[functions.issue-einvoice]' 'verify_jwt = true' \
-  '[functions.paytr-link]' 'verify_jwt = false' > "$fixture/supabase/config.toml"
+  '[functions.paytr-link]' 'verify_jwt = false' \
+  '[functions.auto-einvoice]' 'verify_jwt = true' > "$fixture/supabase/config.toml"
 printf '%s\n' 'fixture-project-ref' > "$fixture/supabase/.temp/project-ref"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$fixture/bin/supabase"
 chmod +x "$fixture/bin/supabase"
