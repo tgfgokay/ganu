@@ -24,6 +24,8 @@
             return s.replace(/~and~/g, '&');
           }).join('?');
           window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash);
+          // Kökteki hazır HTML ana sayfaya ait; main.jsx hidrasyon yerine temiz render yapar.
+          window.__ganuSpaRedirect = true;
         }
       })();
     </script>
