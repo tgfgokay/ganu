@@ -185,7 +185,9 @@ async function createSalesInvoice(p: Client, inv: InvoiceRow, contactId: string,
   const detail: Record<string, unknown> = { type: 'sales_invoice_details', attributes: { quantity: 1, unit_price: net, vat_rate: VAT_RATE, description: text } }
   if (env.productId) detail.relationships = { product: { data: { id: env.productId, type: 'products' } } }
   const created = await p.call('POST', '/sales_invoices', { data: { type: 'sales_invoices',
-    attributes: { item_type: 'invoice', issue_date: inv.issue_date, due_date: inv.due_date || inv.issue_date, currency: 'TRL', description: text },
+    attributes: { item_type: 'invoice', issue_date: inv.issue_date, due_date: inv.due_date || inv.issue_date, currency: 'TRL', description: text,
+      // Tahsilat hesabının IBAN'ı e-Belge PDF'ine basılır (Paraşüt "IBAN Bilgisi Ekle").
+      ...(env.accountId ? { e_document_accounts: [Number(env.accountId)] } : {}) },
     relationships: { contact: { data: { id: contactId, type: 'contacts' } }, details: { data: [detail] } } } })
   const id = String(created.json?.data?.id || '')
   const total = Number(created.json?.data?.attributes?.gross_total)

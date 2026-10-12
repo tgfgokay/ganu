@@ -72,6 +72,7 @@ await run('e-Arşiv mutlu yol: cari → fatura (KDV hariç birim) → tahsilat �
   assert.equal(r.state, 'kesildi'); assert.equal(r.einvoice_no, 'GAN2026000000001'); assert.equal(r.kind, 'e-arşiv')
   assert.equal(r.pdf, 'secure:customers/c1/efatura-0b1c2d3e-0000-4000-8000-000000000001.pdf')
   const inv = f.state.bodies.invoice.data, det = inv.relationships.details.data[0]
+  assert.deepEqual(inv.attributes.e_document_accounts, [9])
   assert.equal(inv.attributes.currency, 'TRL'); assert.equal(det.attributes.unit_price, 999.17); assert.equal(det.attributes.vat_rate, 20)
   assert.deepEqual(det.relationships.product.data, { id: '55', type: 'products' })
   assert.match(inv.attributes.description, /GANU 0b1c2d3e/)
