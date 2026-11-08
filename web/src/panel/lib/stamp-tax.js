@@ -11,7 +11,7 @@ export const periodsInTerm=(billing,months)=>billing==='aylık'?Number(months)||
 export const contractTotal=(price,billing,months)=>r2((Number(price)||0)*periodsInTerm(billing,months))
 export const netOfVat=(gross,vat=VAT_RATE)=>r2((Number(gross)||0)/(1+vat/100))
 export const stampTaxBase=(price,billing,months)=>netOfVat(contractTotal(price,billing,months))
-// Tek nüsha üzerinden hesaplanır (kullanıcı kararı 10.10.2026).
+// Sözleşme iki nüsha; nispi damga vergisi hesabı tek nüsha üzerinden yapılır (DVK m.5).
 export const stampTaxAmount=(base,rate=DV_RATE_PER_MILLE)=>r2((Number(base)||0)*(Number(rate)||0)/1000)
 // Müşterinin payı: 'yarı yarıya'da yarısı, 'GANU'da sıfır.
 export const customerShare=(amount,payer)=>payer==='GANU'?0:payer==='yarı yarıya'?r2(amount/2):r2(amount)

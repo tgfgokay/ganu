@@ -16,11 +16,20 @@
     "test:staff-panel-build": "export GANU_MARKETING_ONLY=true GANU_STAFF_PANEL=true GANU_SITE_URL=https://staging.example.invalid GANU_BASE=/ VITE_SUPABASE_URL=https://example.supabase.co VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiJ9.test.signature; npm run build && node scripts/check-staff-panel.mjs && node scripts/render-contract-template.mjs --check",
     "test:einvoice": "node --experimental-strip-types scripts/test-einvoice.mjs",
     "test:parasut-sync": "node --experimental-strip-types scripts/test-parasut-sync.mjs",
-    "test:paytr": "node --experimental-strip-types scripts/test-paytr-link.mjs"
+    "test:paytr": "node --experimental-strip-types scripts/test-paytr-link.mjs",
+    "test:parasut-oauth": "node --experimental-strip-types scripts/test-parasut-oauth.mjs",
+    "test:operations": "node --experimental-strip-types scripts/test-operations.mjs",
+    "test:parasut-oauth-sql": "node --experimental-strip-types scripts/test-parasut-oauth-sql.mjs",
+    "test:operations-db": "bash scripts/test-operations-db.sh",
+    "test:contract-documents": "node --experimental-strip-types scripts/test-contract-documents.mjs",
+    "test:operations-ui": "node scripts/test-operations-ui.mjs",
+    "test:operations-e2e": "deno run --allow-env=DB_URL --allow-run=psql --allow-net=127.0.0.1 scripts/test-operations-e2e.ts"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "1.1.1",
     "@supabase/supabase-js": "^2.45.0",
     "framer-motion": "^11.3.0",
+    "pdf-lib": "1.17.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router": "7.18.2",
@@ -28,7 +37,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "6.0.5",
-    "markdown-it": "^14.3.2",
-    "vite": "8.2.1"
+    "markdown-it": "14.3.3",
+    "playwright": "1.65.0",
+    "vite": "8.3.6"
   }
 }

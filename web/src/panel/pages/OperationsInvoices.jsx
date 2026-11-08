@@ -1,6 +1,7 @@
 import { useEffect,useMemo,useState } from 'react'
 import { Link } from 'react-router-dom'
 import { invoices,customers,contracts,invStatus,issueEInvoice,createPaymentLink,checkParasut,syncParasut,markInvoicePaidManual,registerManualEinvoice,prepareMonthlyInvoices,fileToStoredUrl,MANUAL_PAY_METHODS } from '../lib/operations-store.js'
+import ParasutConnectionCard from '../components/ParasutConnectionCard.jsx'
 import { SecureLink } from '../components/SecureAsset.jsx'
 import { PAYMENT_ACCOUNT,paymentMessage } from '../lib/company.js'
 import { Modal,fmtDate,fmtTL } from './_ui.jsx'
@@ -133,6 +134,7 @@ export default function OperationsInvoices(){
   // Aylık sözleşmelerde bu ay başlayan hizmet dönemleri için bekleyen fatura kaydı açar; tekrar basmak çift kayıt üretmez.
   const prepare=async()=>{try{const n=await prepareMonthlyInvoices(today());alert(n?`${n} aylık fatura kaydı hazırlandı.`:'Bu ay için hazırlanacak yeni aylık fatura yok.');load()}catch(err){alert(err?.message||'Hazırlanamadı.')}}
   return <div>
+    <ParasutConnectionCard/>
     <div className="pl-head"><div><h1>Faturalar & Gelir</h1><p>Tutarlar KDV dahil. "e-Belge kes" Paraşüt'te resmî fatura keser; Paraşüt arayüzünde kesilen belge "Paraşüt'ten eşitle" ile kendiliğinden bağlanır (gerekirse "Elle kesildi"). Ödeme banka referansıyla ya da Paraşüt tahsilatıyla kapanır.</p></div><div className="pl-actions"><button className="pl-btn pl-btn-ghost" onClick={prepare}>Bu ayın aylık faturalarını hazırla</button><button className="pl-btn pl-btn-teal" disabled={!custs.length} onClick={()=>setModal({mode:'new',data:emptyInvoice()})}>+ Fatura kaydı</button></div></div>
     {error&&<div className="pl-alert" role="alert"><span className="msg">{error}</span></div>}
     <div className="pl-stats"><div className="pl-stat"><div className="lab">Tahsil edilen</div><div className="val teal">{fmtTL(sum(paid))}</div></div><div className="pl-stat"><div className="lab">Bekleyen</div><div className="val">{fmtTL(sum(open))}</div></div><div className="pl-stat"><div className="lab">Geciken</div><div className={`val${late.length?' warn':''}`}>{late.length}</div></div></div>

@@ -24,3 +24,26 @@ tarafında yetkili kullanıcı tarafından düzeltilmeden bu workflow deploy etm
 
 GitHub `github-pages` environment protection kuralında yalnız bu workflow/deploy
 job'ına izin verilmesi ve production branch protection uygulanması ayrıca zorunludur.
+
+
+## 0018 — Ortak Paraşüt tahsilat sahipliği
+
+`0018_parasut_payment_claim.sql` önce migration olarak uygulanmalı; ardından `issue-einvoice`, `paytr-link`,
+`auto-einvoice` ve `parasut-sync` aynı kaynak sürümünden dağıtılmalı. Eski çalışan çağrıların tamamlanması beklenmeli;
+karma eski/yeni sürümde eski kod bu korumaya katılmaz. `staging_0018_payment_claim_tests.sql` yalnız izole test/staging
+veritabanında transaction/rollback ile doğrulanır. RPC eksikse yeni kod tahsilat POST etmeden hata verir.
+
+Tahsilat POST'u başladıktan sonra yanıt ya da DB kaydı doğrulanamazsa `parasut_payment_claim_token` kalır.
+Süre aşımıyla kilit otomatik açılmaz. Operatör Paraşüt'teki gerçek tahsilatları ve panel faturasını karşılaştırır:
+
+- Tahsilat gerçekleşmişse mevcut token ile service-role `parasut_payment_complete` çağrılır.
+- Gerçekleşmediği kesinleşmişse ve önceki çağrının artık çalışmadığı doğrulanmışsa mevcut token ile
+  `parasut_payment_release` çağrılır; sonraki normal akış taze kalan tutarı okuyarak yeniden dener.
+- Sonuç belirsizse token korunur. Canlı müşteri verisi herkese açık issue/log'a yazılmaz.
+
+Claim, panelin güncel ödendi durumu, tutarı, Paraşüt fatura bağlantısı ve ödeme incelemesiyle atomik olarak alınır.
+Tamamlama/bırakma yalnız aynı token ile mümkündür; anon ve personel JWT'lerine bu RPC'ler kapalıdır.
+
+## 0019–0020 — OAuth ve tek kişi operasyonu
+
+Paraşüt bağlantısı için [PARASUT-OAUTH-MIGRATION.md](PARASUT-OAUTH-MIGRATION.md), kabul/kargo/gönderim kurulumu için [SINGLE-OPERATOR-RUNBOOK.md](SINGLE-OPERATOR-RUNBOOK.md) izlenir. Yeni migration sayısı21 (0000–0020), rollback20 (0001–0020). Worker, sözleşme endpoint'i ve personel frontend'i birlikte dağıtılır. Yerel fake/izole test başarısı canlı e-posta/e-belge/ödeme kanıtı değildir; gerçek alıcı ve finansal test verisi seçilmeden dış işlem yapılmaz.

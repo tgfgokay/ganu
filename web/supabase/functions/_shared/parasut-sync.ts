@@ -7,7 +7,7 @@
 // 3) Panelde ödendi olup Paraşüt'te açık kalan, e-Belgesi kesilmiş faturaya tahsilat Paraşüt'e girilir (tek seferlik).
 // Kısmi tahsilat, tutar farkı, eşleşmeyen cari ve panelin kendi kestiği belge otomatik işlenmez; rapora yazılır.
 // Rapor herkese açık GitHub kaydına düşebilir: müşteri adı ve tutar yazılmaz, yalnız Paraşüt no/belge no ve gerekçe.
-import { client, docFrom, pdfBytes, type Client, type Doc, type Env } from '../issue-einvoice/parasut.ts'
+import { client, docFrom, pdfBytes, pushPaymentOnce, type PaymentStore, type Client, type Doc, type Env } from '../issue-einvoice/parasut.ts'
 
 export type LinkedInvoice = {
   id: string; customer_id: string; amount: number | string; status: string; paid_date?: string | null; payment_method?: string | null
@@ -18,7 +18,7 @@ export type ImportArgs = {
   customer_id: string; parasut_id: string; amount: number; issue_date: string; due_date: string | null
   kind: 'e-arşiv' | 'e-fatura'; no: string; uuid: string; note: string
 }
-export type SyncStore = {
+export type SyncStore = PaymentStore & {
   linked(): Promise<LinkedInvoice[]>
   customers(): Promise<PanelCustomer[]>
   importInvoice(a: ImportArgs): Promise<string | null>
@@ -58,7 +58,6 @@ export function methodFor(accounts: Account[]): 'kart' | 'havale' | 'diğer' {
 export async function syncFromParasut(deps: SyncDeps): Promise<SyncResult> {
   const { store, env } = deps
   const dry = deps.dryRun === true
-  const now = deps.now || (() => new Date().toISOString())
   const since = addDays(deps.today, -(deps.days ?? 120))
   const out: SyncResult = { dry_run: dry, scanned: 0, imported: 0, paid: 0, pushed: 0, skipped: 0, errors: 0, items: [] }
   const add = (item: SyncItem) => {
@@ -184,17 +183,16 @@ export async function syncFromParasut(deps: SyncDeps): Promise<SyncResult> {
         if (!dry) await store.markPaid(inv.id, { paid_date: paidDate > deps.today ? deps.today : paidDate, method, amount, reference })
         add({ parasut_id: pid, invoice_no: no, action: 'ödendi', method, ...(dry ? { reason: 'deneme: ödendi yapılacak' } : {}) })
       } else if (!inv.parasut_payment_at && inv.einvoice_status === 'kesildi') {
-        if (Number.isFinite(remaining) && remaining <= 0.01) { if (!dry) await store.patchInvoice(inv.id, { parasut_payment_at: now() }); continue }
-        if (!env.accountId || !(Math.abs(remaining - amount) <= 0.02)) {
-          add({ parasut_id: pid, invoice_no: no, action: 'atlandı', reason: 'Panelde ödendi; Paraşüt\'te kalan tutar farklı ya da tahsilat hesabı yok — elle kontrol edin.' })
-          continue
+        if (dry) {
+          if (Number.isFinite(remaining) && remaining <= 0.01) continue
+          if (!env.accountId || !(Math.abs(remaining - amount) <= 0.02)) {
+            add({ parasut_id: pid, invoice_no: no, action: 'atlandı', reason: 'Panelde ödendi; Paraşüt kalan tutarı farklı ya da tahsilat hesabı yok — elle kontrol edin.' })
+            continue
+          }
+          add({ parasut_id: pid, invoice_no: no, action: 'paraşüte_tahsilat', reason: "deneme: Paraşüt'e tahsilat girilecek" })
+        } else if (await pushPaymentOnce(p, { ...inv, issue_date: inv.paid_date || deps.today }, pid, store, env)) {
+          add({ parasut_id: pid, invoice_no: no, action: 'paraşüte_tahsilat' })
         }
-        if (!dry) {
-          await p.call('POST', `/sales_invoices/${pid}/payments`, { data: { type: 'payments', attributes: {
-            account_id: Number(env.accountId), date: inv.paid_date || deps.today, amount, description: `GANU tahsilat ${inv.payment_method || ''}`.trim() } } })
-          await store.patchInvoice(inv.id, { parasut_payment_at: now() })
-        }
-        add({ parasut_id: pid, invoice_no: no, action: 'paraşüte_tahsilat', ...(dry ? { reason: 'deneme: Paraşüt\'e tahsilat girilecek' } : {}) })
       }
     } catch (e) {
       add({ parasut_id: pid, invoice_no: no, action: 'hata', reason: String((e as Error)?.message || e).slice(0, 300) })

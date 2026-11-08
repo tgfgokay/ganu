@@ -500,7 +500,7 @@ Free planda otomatik yedek/PITR yok. `.github/workflows/supabase-db-backup.yml` 
 1. Kurulum (bir kez) — repository secret'ları:
    - `SUPABASE_DB_URL`: Supabase → Project Settings → Database → Connection string → **Session pooler** URI (şifre dahil). Doğrudan bağlantı IPv6'dır, GitHub runner'ından ulaşılmaz.
    - `BACKUP_PASSPHRASE`: en az 32 karakter rastgele parola; parola kasasında saklanır. Kaybolursa yedek açılamaz.
-   İkisi de yoksa iş uyarı verip atlar; biri eksikse ya da parola kısaysa başarısız olur.
+   Secret’lardan biri eksikse veya parola 32 karakterden kısaysa iş açık hata vererek başarısız olur; yedek alınmadan başarılı sonuç göstermez.
 2. İlk deneme: Actions → supabase-db-backup → Run workflow → artifact `ganu-db-YYYY-MM-DD` oluşmalı.
 3. Geri yükleme (önce boş bir test projesine):
    `gpg -d ganu-db-YYYY-MM-DD.dump.gpg > db.dump` → `pg_restore --list db.dump` ile içeriği kontrol et →

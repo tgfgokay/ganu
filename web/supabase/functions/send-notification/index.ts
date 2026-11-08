@@ -1,128 +1,38 @@
-// ============================================================
-
+// Product notification worker. Inputs identify a durable job, never arbitrary recipients/message bodies.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-// GANU Panel · Bildirim gönderme Edge Function (Deno)
-// ------------------------------------------------------------
-// Kanallar: SMS (Netgsm), WhatsApp (Netgsm/BSP), E-posta (Resend).
-// Gizli anahtarlar ASLA istemciye konmaz — Supabase secrets'ta durur:
-//
-//   supabase secrets set NETGSM_USER=... NETGSM_PASS=... NETGSM_HEADER=...
-//   supabase secrets set RESEND_API_KEY=... MAIL_FROM="GANU <info@ganu.com.tr>"
-//   supabase secrets set WHATSAPP_TOKEN=... WHATSAPP_FROM=...
-//
-// Dağıtım:
-//   supabase functions deploy send-notification
-//
-// İstek gövdesi (JSON):
-//   { "channel": "sms" | "whatsapp" | "email",
-//     "to": "+9053...", "message": "metin", "subject": "(email için)" }
-//
-// Yalnızca giriş yapmış (authenticated) personel çağırabilir; RLS
-// yerine burada Authorization header doğrulanır (Supabase otomatik).
-// ============================================================
-
-const SITE = Deno.env.get('SITE_URL') || ''
-let ALLOW_ORIGIN = ''
-try { ALLOW_ORIGIN = SITE ? new URL(SITE).origin : '' } catch { ALLOW_ORIGIN = '' }
-const cors = {
-  ...(ALLOW_ORIGIN ? { 'Access-Control-Allow-Origin': ALLOW_ORIGIN } : {}),
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
-
-async function isStaffRequest(req: Request): Promise<boolean> {
-  const url = Deno.env.get('SUPABASE_URL') || ''
-  const anon = Deno.env.get('SUPABASE_ANON_KEY') || ''
-  const authorization = req.headers.get('Authorization') || ''
-  if (!url || !anon || !authorization.toLowerCase().startsWith('bearer ')) return false
-  const client = createClient(url, anon, {
-    global: { headers: { Authorization: authorization } }, auth: { persistSession: false },
-  })
-  const { data, error } = await client.rpc('is_staff')
-  return !error && data === true
-}
-
-// ---- SMS: Netgsm ----
-async function sendSms(to: string, message: string) {
-  const user = Deno.env.get('NETGSM_USER')
-  const pass = Deno.env.get('NETGSM_PASS')
-  const header = Deno.env.get('NETGSM_HEADER') // onaylı başlık
-  if (!user || !pass || !header) throw new Error('Netgsm secrets eksik (NETGSM_USER/PASS/HEADER).')
-
-  const params = new URLSearchParams({
-    usercode: user, password: pass, gsmno: to.replace(/\D/g, ''),
-    message, msgheader: header, dil: 'TR',
-  })
-  const res = await fetch('https://api.netgsm.com.tr/sms/send/get/?' + params.toString())
-  const text = await res.text()
-  // Netgsm başarıda "00 <bulkid>" veya "01/02..." döner; 00/01/02 = kabul
-  const ok = /^0[0-2]/.test(text.trim())
-  if (!ok) throw new Error('Netgsm hata: ' + text)
-  return { provider: 'netgsm', raw: text.trim() }
-}
-
-// ---- WhatsApp: Netgsm/BSP (basit metin) ----
-async function sendWhatsapp(to: string, message: string) {
-  const token = Deno.env.get('WHATSAPP_TOKEN')
-  const from = Deno.env.get('WHATSAPP_FROM')
-  if (!token || !from) throw new Error('WhatsApp secrets eksik (WHATSAPP_TOKEN/FROM).')
-  // Meta Cloud API biçimi (BSP'ye göre uyarlanır)
-  const res = await fetch(`https://graph.facebook.com/v19.0/${from}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: to.replace(/\D/g, ''),
-      type: 'text',
-      text: { body: message },
-    }),
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error('WhatsApp hata: ' + JSON.stringify(data))
-  return { provider: 'whatsapp', raw: data }
-}
-
-// ---- E-posta: Resend ----
-async function sendEmail(to: string, subject: string, message: string) {
-  const key = Deno.env.get('RESEND_API_KEY')
-  const from = Deno.env.get('MAIL_FROM') || 'GANU <onboarding@resend.dev>'
-  if (!key) throw new Error('RESEND_API_KEY eksik.')
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from, to: [to], subject: subject || 'GANU Bilgilendirme',
-      text: message,
-    }),
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error('E-posta hata: ' + JSON.stringify(data))
-  return { provider: 'resend', raw: data }
-}
-
-Deno.serve(async (req) => {
-  if (!ALLOW_ORIGIN) return json({ error: 'SITE_URL yapılandırılmadı' }, 500)
-  const requestOrigin = req.headers.get('origin') || ''
-  if (requestOrigin && requestOrigin !== ALLOW_ORIGIN) return json({ error: 'Origin izinli değil' }, 403)
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
-  if (req.method !== 'POST') return json({ error: 'POST kullanın' }, 405)
-  if (!(await isStaffRequest(req))) return json({ error: 'Personel yetkisi gerekli' }, 403)
-
-  try {
-    const { channel, to, message, subject } = await req.json()
-    if (!channel || !to || !message) return json({ error: 'channel, to, message zorunlu' }, 400)
-
-    let result
-    if (channel === 'sms') result = await sendSms(to, message)
-    else if (channel === 'whatsapp') result = await sendWhatsapp(to, message)
-    else if (channel === 'email') result = await sendEmail(to, subject, message)
-    else return json({ error: 'geçersiz channel' }, 400)
-
-    return json({ status: 'gönderildi', ...result })
-  } catch (e) {
-    return json({ status: 'başarısız', error: String((e as Error).message || e) }, 500)
-  }
+import { contractProfiles,resolveContractInput } from '../_shared/contract-runtime-config.ts'
+import { createContractPdf } from '../_shared/contract-pdf.ts'
+import { runOperation } from '../_shared/operations-worker.ts'
+import { parasutEnv,runEInvoice } from '../_shared/einvoice-run.ts'
+const get=(key:string)=>(Deno.env.get(key)||'').trim()
+let origin='';try{origin=new URL(get('SITE_URL')).origin}catch{/* fail closed */}
+const cors={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type, x-worker-secret','Access-Control-Allow-Methods':'POST, OPTIONS'}
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json'}})
+const configJson=(key:string)=>{try{return JSON.parse(get(key)||'null')}catch{return null}}
+const equal=(a:string,b:string)=>{if(a.length!==b.length)return false;let n=0;for(let i=0;i<a.length;i++)n|=a.charCodeAt(i)^b.charCodeAt(i);return n===0}
+Deno.serve(async(req)=>{
+ if(!origin)return json({error:'SITE_URL yapılandırılmalı'},503)
+ if(req.headers.get('origin')&&req.headers.get('origin')!==origin)return json({error:'Origin izinli değil'},403)
+ if(req.method==='OPTIONS')return new Response('ok',{headers:cors})
+ if(req.method!=='POST')return json({error:'POST kullanın'},405)
+ const authorization=req.headers.get('Authorization')||'',url=get('SUPABASE_URL'),key=get('SUPABASE_SERVICE_ROLE_KEY')
+ if(!url||!key)return json({error:'Sunucu bağlantısı eksik'},503)
+ const worker=get('NOTIFICATION_WORKER_SECRET'),scheduled=worker.length>=32&&equal(req.headers.get('x-worker-secret')||'',worker)
+ if(!scheduled){const user=createClient(url,get('SUPABASE_ANON_KEY'),{global:{headers:{Authorization:authorization}},auth:{persistSession:false}});const r=await user.rpc('is_staff');if(r.error||r.data!==true)return json({error:'Personel yetkisi gerekli'},403)}
+ const body=await req.json().catch(()=>({})),id=body?.job_id
+ if(id&&!/^[0-9a-f-]{36}$/i.test(id))return json({error:'İş kimliği geçersiz'},400)
+ const db=createClient(url,key,{auth:{persistSession:false}})
+ const rpc=async(name:string,args:Record<string,unknown>)=>{const r=await db.rpc(name,args);if(r.error)throw new Error('operation_store_failed');return r.data}
+ const result=await runOperation({
+  claim:async(jobId)=>{const r=await rpc('operation_claim',{p_id:jobId||null});return r?.[0]||null},
+  read:async(table,recordId)=>{const query=table==='quote_for_contract'?db.from('quotes').select('*').eq('contract_id',recordId):db.from(table).select('*').eq('id',recordId);const r=await query.maybeSingle();if(r.error||!r.data&&table!=='quote_for_contract')throw new Error('operation_record_missing');return r.data},
+  defer:(j,error,seconds)=>rpc('operation_defer',{p_id:j.id,p_token:j.claim_token,p_error:error,p_seconds:seconds}),
+  prepare:(j,p)=>rpc('operation_prepare',{p_id:j.id,p_token:j.claim_token,p_prepared:p}),begin:(j,hash)=>rpc('operation_begin_send',{p_id:j.id,p_token:j.claim_token,p_content_hash:hash}),
+  finish:(j,state,error,missing=[],provider)=>rpc('operation_finish',{p_id:j.id,p_token:j.claim_token,p_state:state,p_error:error||null,p_missing:missing,p_provider:provider||null}),
+  save:async(path,bytes)=>{const r=await db.storage.from('secure-docs').upload(path,bytes,{contentType:'application/pdf',upsert:false});if(r.error&&r.error.statusCode!=='409')throw new Error('pdf_storage_failed')},
+  download:async(path)=>{const r=await db.storage.from('secure-docs').download(path);if(r.error||!r.data)throw new Error('attachment_missing');return new Uint8Array(await r.data.arrayBuffer())},
+  pdf:(input)=>createContractPdf(resolveContractInput(input,contractProfiles(get))),issue:async(invoiceId)=>{const env=parasutEnv(origin);if(!env||get('EINVOICE_AUTO')!=='true')return {state:'kapalı'};const r=await runEInvoice(db,invoiceId,env);return r.body},fetch,
+  config:{apiKey:get('NOTIFICATION_PROVIDER')==='resend'?get('RESEND_API_KEY'):'',from:get('NOTIFICATION_FROM_EMAIL')||get('MAIL_FROM'),replyTo:get('NOTIFICATION_REPLY_TO_EMAIL'),company:configJson('GANU_CONTRACT_COMPANY_JSON'),documentSettings:configJson('GANU_CONTRACT_DOCUMENT_SETTINGS_JSON'),privacyNotice:configJson('GANU_CUSTOMER_PRIVACY_NOTICE_JSON')},
+ },id)
+ return json(result)
 })

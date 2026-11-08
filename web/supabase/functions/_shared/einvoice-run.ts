@@ -1,19 +1,31 @@
 // issue-einvoice (personel düğmesi) ve paytr-link (ödeme bildirimi) aynı e-Belge akışını buradan çalıştırır.
 // Fatura einvoice_claim ile tek sahiplikle alınır; tutar, müşteri ve adres veritabanından okunur.
+import { paymentStore } from './parasut-payment-store.ts'
+import { authMode, legacyAllowed, oauthConfig, serverRpc, tokenProvider } from './parasut-auth.ts'
 import { processInvoice, type CustomerRow, type Env, type InvoiceRow, type Result } from '../issue-einvoice/parasut.ts'
 
 // GANU'nun Paraşüt kayıtları (gizli değil; 30.09.2026'da Paraşüt arayüzünden alındı). Secret verilirse o geçerlidir.
 export const GANU_PARASUT = Object.freeze({ companyId: '852734', productId: '1077554069', accountId: '1000681581' })
 
-// Fail-closed: EINVOICE_ENABLED=true ve OAuth secret'ları (client + kullanıcı) yoksa null (hiçbir dış çağrı yapılmaz).
+// Explicit transition mode preserves legacy before 10 December; oauth never falls back to password.
+// Fail-closed: EINVOICE_ENABLED/config absent means null, with no external request.
 export function parasutEnv(siteUrl: string): Env | null {
   const get = (k: string) => (Deno.env.get(k) || '').trim()
+  const mode = authMode(get)
   const env: Env = {
     clientId: get('PARASUT_CLIENT_ID'), clientSecret: get('PARASUT_CLIENT_SECRET'), companyId: get('PARASUT_COMPANY_ID') || GANU_PARASUT.companyId,
     username: get('PARASUT_EMAIL'), password: get('PARASUT_PASSWORD'),
     productId: get('PARASUT_PRODUCT_ID') || GANU_PARASUT.productId, accountId: get('PARASUT_ACCOUNT_ID') || GANU_PARASUT.accountId, siteUrl,
   }
-  if (get('EINVOICE_ENABLED') !== 'true' || !env.clientId || !env.clientSecret || !env.companyId || !env.username || !env.password) return null
+  if (get('EINVOICE_ENABLED') !== 'true' || mode === 'invalid') return null
+  env.authMode = mode
+  if (mode === 'oauth') {
+    const c = oauthConfig(get, get('SITE_URL') || siteUrl)
+    if (!c || !get('SUPABASE_URL') || !get('SUPABASE_SERVICE_ROLE_KEY')) return null
+    const provider = tokenProvider(c, { fetch, rpc: serverRpc(get) })
+    env.accessToken = provider.accessToken
+    env.authRejected = provider.rejected
+  } else if (!legacyAllowed() || !env.clientId || !env.clientSecret || !env.companyId || !env.username || !env.password) return null
   return env
 }
 
@@ -35,6 +47,7 @@ export async function runEInvoice(db: any, invoiceId: string, env: Env): Promise
     return { status: 422, body: { state: 'başarısız', message: 'Müşteri bulunamadı.' } }
   }
   const store = {
+    ...paymentStore(db),
     async patchInvoice(id: string, patch: Record<string, unknown>) {
       const { error } = await db.from('invoices').update(patch).eq('id', id); if (error) throw new Error(`Fatura kaydı güncellenemedi: ${error.message}`)
     },
