@@ -1,6 +1,6 @@
 import { useEffect,useMemo,useRef,useState } from 'react'
 import { Link,useNavigate } from 'react-router-dom'
-import { quotes,customers,convertQuote,markQuoteSent,bniDiscountPct,loadCatalog,PACKAGES,PACKAGE_PRICES,PACKAGE_MONTHLY,QUOTE_STATUS,QUOTE_CHANNELS } from '../lib/operations-store.js'
+import { quotes,customers,convertQuote,acceptQuote,processOperation,markQuoteSent,bniDiscountPct,loadCatalog,PACKAGES,PACKAGE_PRICES,PACKAGE_MONTHLY,QUOTE_STATUS,QUOTE_CHANNELS } from '../lib/operations-store.js'
 import { customerPayload,validateCustomer } from './OperationsCustomerForm.jsx'
 import { CopyButton } from './OperationsInvoices.jsx'
 import { ContractDocButton,ContractPreview,loadContractDoc } from './OperationsContractDoc.jsx'
@@ -100,43 +100,15 @@ function SentForm({q,onClose,onDone}){
 
 // Kabul: müşteri (yeni ya da mevcut), sözleşme, ilk fatura ve damga vergisi kaydı tek seferde açılır.
 function ConvertForm({q,custs,onClose,onDone}){
-  const start0=today()
-  const [f,setF]=useState({existing:'',title:q.title||'',contact:q.contact||'',email:q.email||'',phone:q.phone||'',tax_no:q.tax_no||'',tc:q.tc||'',tax_office:q.tax_office||GANU.taxOffice,
-    start_date:start0,withStamp:true}),[error,setError]=useState(''),[busy,setBusy]=useState(false)
-  const set=(k,v)=>setF((s)=>({...s,[k]:v}))
-  const dv=stampTaxAmount(stampTaxBase(q.price,q.billing_period,q.term_months))
-  const end=termEndISO(f.start_date,q.term_months)
-  const submit=async(e)=>{e.preventDefault();setError('')
-    let customer
-    if(f.existing)customer={id:f.existing}
-    else{const form={title:f.title,contact:f.contact,email:f.email,phone:f.phone,tax_no:f.tax_no,tc:f.tc,tax_office:f.tax_office,address:GANU.address,city:GANU.city,district:GANU.district,status:'aday',partner_id:'',bni:!!q.bni,notes:`Teklif ${quoteNo(q)}`};const msg=validateCustomer(form,custs);if(msg)return setError(msg);customer=customerPayload(form)}
-    if(!f.start_date)return setError('Sözleşme başlangıç tarihi zorunlu.')
-    setBusy(true)
-    try{const r=await convertQuote(q.id,{customer,
-      contract:{start_date:f.start_date},
-      invoice:{note:`${q.package} · ${f.start_date.slice(0,7)} dönemi · ${quoteNo(q)}`},
-      stamp:f.withStamp?{payer:'müşteri',notes:quoteNo(q)}:null})
-      onDone(r)}catch(err){setError(err?.message||'Dönüştürülemedi.')}finally{setBusy(false)}}
-  return <Modal title={`${quoteNo(q)} kabul edildi · müşteriye dönüştür`} onClose={onClose} footer={<><button className="pl-btn pl-btn-ghost" onClick={onClose}>Vazgeç</button><button className="pl-btn pl-btn-solid" form="conv-form" type="submit" disabled={busy}>{busy?'Açılıyor…':'Müşteri + sözleşme aç'}</button></>}>
-    <form id="conv-form" className="pl-form" onSubmit={submit}>
-      {error&&<div className="pl-alert" role="alert"><span className="msg">{error}</span></div>}
-      <div className="pl-field"><label>Müşteri</label><select value={f.existing} onChange={(e)=>set('existing',e.target.value)}><option value="">Yeni müşteri aç</option>{custs.map((c)=><option key={c.id} value={c.id}>Mevcut: {c.title}</option>)}</select></div>
-      {!f.existing&&<><div className="pl-field"><label>Ünvan / ad soyad *</label><input value={f.title} onChange={(e)=>set('title',e.target.value)} required/></div>
-        <div className="two"><div className="pl-field"><label>Vergi no</label><input value={f.tax_no} onChange={(e)=>set('tax_no',e.target.value)} inputMode="numeric" placeholder="10 hane"/></div><div className="pl-field"><label>ya da TC (şahıs)</label><input value={f.tc} onChange={(e)=>set('tc',e.target.value)} inputMode="numeric" placeholder="11 hane"/></div></div>
-        <div className="two"><div className="pl-field"><label>Vergi dairesi</label><input value={f.tax_office} onChange={(e)=>set('tax_office',e.target.value)}/></div><div className="pl-field"><label>E-posta (fatura)</label><input type="email" value={f.email} onChange={(e)=>set('email',e.target.value)}/></div></div>
-        <p className="sub" style={{margin:0}}>Fatura adresi GANU ofisi ({GANU.address}, {GANU.district}/{GANU.city}). Müşteri <b>aday</b> açılır; imzalı sözleşme yüklenince müşteri sayfasından adres aktifleştirilir.</p></>}
-      <h3 style={{fontSize:15,margin:'14px 0 4px'}}>Sözleşme · {q.package} · {q.billing_period}</h3>
-      <div className="two"><div className="pl-field"><label>Başlangıç</label><input type="date" value={f.start_date} onChange={(e)=>set('start_date',e.target.value)}/></div><div className="pl-field"><label>Bitiş ({q.term_months} ay)</label><input value={fmtDate(end)} disabled/></div></div>
-      <p className="sub" style={{margin:'0 0 6px'}}>Ücret teklifteki gibi: <b>{fmtTL(q.price)}</b>/{per(q.billing_period)} (KDV dahil). Değişiklik gerekiyorsa teklifi revize edin.</p>
-      <p className="sub" style={{margin:'10px 0 0'}}><b>İlk fatura kaydı</b> açılır: {fmtTL(q.price)} (KDV dahil), fatura tarihi başlangıç günü, vade 7 gün sonra.</p>
-      <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginTop:10}}><input type="checkbox" checked={f.withStamp} onChange={(e)=>set('withStamp',e.target.checked)}/><b>Damga vergisi kaydını aç (taslak)</b></label>
-      {f.withStamp&&<><p className="sub" style={{margin:'0 0 6px'}}>Taslak açılır: matrah {fmtTL(stampTaxBase(q.price,q.billing_period,q.term_months))} (KDV hariç sözleşme toplamı), damga vergisi ≈ {fmtTL(dv)}. İmzalı sözleşme yüklenince Damga Vergisi sayfasında "İmzalandı" ile kesinleşir; beyan imzadan itibaren 15 gün içinde.</p></>}
-    </form>
+  const [customerId,setCustomerId]=useState(''),[startDate,setStartDate]=useState(today()),[busy,setBusy]=useState(false),[error,setError]=useState('')
+  const submit=async(e)=>{e.preventDefault();if(busy)return;setBusy(true);setError('');try{onDone(await acceptQuote(q.id,{customer:customerId?{id:customerId}:{address:GANU.address,city:GANU.city,district:GANU.district},startDate}))}catch(e){setError(e?.message||'Kabul kaydedilemedi.')}finally{setBusy(false)}}
+  return <Modal title={`${quoteNo(q)} · müşteri / başlangıç seç`} onClose={onClose} footer={<><button className="pl-btn pl-btn-ghost" onClick={onClose}>Vazgeç</button><button className="pl-btn pl-btn-solid" type="submit" form="accept-options" disabled={busy}>{busy?'Kaydediliyor…':'Kabul et ve hazırla'}</button></>}>
+    <form id="accept-options" className="pl-form" onSubmit={submit}>{error&&<div className="pl-alert" role="alert">{error}</div>}<p className="sub">Ünvan, iletişim, paket ve ücret mevcut kayıtlardan alınır. Teklif kabulü imza değildir; belgeler ve peşin ödeme ayrıca doğrulanır.</p><div className="pl-field"><label>Müşteri kaydı</label><select value={customerId} onChange={(e)=>setCustomerId(e.target.value)}><option value="">Kimlik bilgisine göre eşleştir / yeni aday aç</option>{custs.map((c)=><option key={c.id} value={c.id}>{c.title}</option>)}</select></div><div className="pl-field"><label>Hizmet başlangıcı</label><input type="date" value={startDate} onChange={(e)=>setStartDate(e.target.value)} required/></div></form>
   </Modal>
 }
 
 export default function OperationsQuotes(){
-  const [rows,setRows]=useState([]),[custs,setCusts]=useState([]),[bniPct,setBniPct]=useState(10),[modal,setModal]=useState(null),[contractDoc,setContractDoc]=useState(null),[filter,setFilter]=useState('açık'),[error,setError]=useState(''),navigate=useNavigate()
+  const [rows,setRows]=useState([]),[custs,setCusts]=useState([]),[bniPct,setBniPct]=useState(10),[modal,setModal]=useState(null),[contractDoc,setContractDoc]=useState(null),[accepting,setAccepting]=useState(''),[filter,setFilter]=useState('açık'),[error,setError]=useState(''),navigate=useNavigate()
   const load=async()=>{try{const [qs,cs,,pct]=await Promise.all([quotes.list(),customers.list(),loadCatalog(),bniDiscountPct()]);setRows(qs);setCusts(cs);setBniPct(pct)}catch{setError('Teklifler yüklenemedi.')}}
   useEffect(()=>{load()},[])
   const shown=useMemo(()=>rows.filter((q)=>filter==='tümü'||(filter==='açık'?['taslak','gönderildi'].includes(q.status)&&!q.superseded_at:q.status===filter)),[rows,filter])
@@ -145,12 +117,11 @@ export default function OperationsQuotes(){
   const reject=async(q)=>{if(!confirm(`${quoteNo(q)} reddedildi olarak işaretlensin mi?`))return;await quotes.update(q.id,{status:'red',decided_at:new Date().toISOString()});load()}
   const del=async(q)=>{if(!confirm(`${quoteNo(q)} silinsin mi?${q.status==='kabul'?'\nTeklifle açılan müşteri, sözleşme, fatura ve damga vergisi kayıtları silinmez.':''}`))return;await quotes.remove(q.id);load()}
   // Kabul edilince hizmet sözleşmesi hemen hazırlanır (müşteri + sözleşme + teklif bilgisiyle dolu); kapatınca müşteri sayfası açılır.
-  const done=async(r)=>{const q=modal.data;setModal(null);load()
-    try{setContractDoc(await loadContractDoc({contractId:r.contract_id,quote:{...q,status:'kabul',contract_id:r.contract_id,customer_id:r.customer_id}}))}
-    catch{navigate(`/panel/musteriler/${r.customer_id}`)}}
+  const done=async(r)=>{setModal(null);load();if(r.job_id)processOperation(r.job_id).catch(()=>{});navigate(`/panel/musteriler/${r.customer_id}`)}
+  const accept=async(q)=>{if(accepting)return;setAccepting(q.id);setError('');try{const result=await acceptQuote(q.id,{customer:{address:GANU.address,city:GANU.city,district:GANU.district}});if(result.job_id)processOperation(result.job_id).catch(()=>{});navigate(`/panel/musteriler/${result.customer_id}`)}catch(err){setError(err?.message||'Kabul kaydedilemedi.')}finally{setAccepting('')}}
   const open=rows.filter((q)=>['taslak','gönderildi'].includes(q.status)&&!expired(q)&&!q.superseded_at)
   return <div>
-    <div className="pl-head"><div><h1>Teklifler</h1><p>Teklif → kabul → müşteri, sözleşme, ilk fatura ve damga vergisi kaydı tek adımda. Fiyatlar KDV dahil.</p></div><button className="pl-btn pl-btn-teal" onClick={()=>setModal({kind:'form',data:emptyQuote(bniPct)})}>+ Yeni teklif</button></div>
+    <div className="pl-head"><div><h1>Teklifler</h1><p>Müşteri kabulünü kaydedin; kayıtlar ve sözleşme gönderimi hazırlanır. Kabul, imza yerine geçmez. Fiyatlar KDV dahil.</p></div><button className="pl-btn pl-btn-teal" onClick={()=>setModal({kind:'form',data:emptyQuote(bniPct)})}>+ Yeni teklif</button></div>
     {error&&<div className="pl-alert" role="alert"><span className="msg">{error}</span></div>}
     <div className="pl-stats"><div className="pl-stat"><div className="lab">Yanıt bekleyen</div><div className="val">{open.length}</div></div><div className="pl-stat"><div className="lab">Bekleyen tutar (yıllık eşdeğer)</div><div className="val">{fmtTL(open.reduce((n,q)=>n+contractTotal(q.price,q.billing_period,12),0))}</div></div><div className="pl-stat"><div className="lab">Kabul edilen</div><div className="val teal">{rows.filter((q)=>q.status==='kabul').length}</div></div></div>
     <div className="pl-toolbar"><select value={filter} onChange={(e)=>setFilter(e.target.value)}><option value="açık">Açık (taslak + gönderildi)</option>{QUOTE_STATUS.map((s)=><option key={s} value={s}>{s}</option>)}<option value="tümü">tümü</option></select></div>
@@ -165,7 +136,7 @@ export default function OperationsQuotes(){
             <MailLink q={q} className="pl-btn pl-btn-ghost pl-btn-sm"/>
             {q.status==='taslak'&&<><button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>setModal({kind:'form',data:{...q,_bniPct:bniPct}})}>Düzenle</button>
               <button className="pl-btn pl-btn-teal pl-btn-sm" disabled={expired(q)} title={expired(q)?'Geçerlilik tarihi geçti; düzenleyip uzatın':''} onClick={()=>setModal({kind:'sent',data:q})}>Gönderildi</button></>}
-            {q.status==='gönderildi'&&!q.superseded_at&&<>{!expired(q)&&<button className="pl-btn pl-btn-teal pl-btn-sm" onClick={()=>setModal({kind:'convert',data:q})}>Kabul → müşteri</button>}
+            {q.status==='gönderildi'&&!q.superseded_at&&<>{!expired(q)&&<button className="pl-btn pl-btn-teal pl-btn-sm" disabled={!!accepting} onClick={()=>accept(q)}>{accepting===q.id?'Kaydediliyor…':'Kabul et ve hazırla'}</button>}<button className="pl-btn pl-btn-ghost pl-btn-sm" disabled={!!accepting} onClick={()=>setModal({kind:'convert',data:q})}>Müşteri / tarih seç</button>
               <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>revise(q)}>Revize et</button></>}
             <button className="pl-btn pl-btn-ghost pl-btn-sm" onClick={()=>reject(q)}>Red</button></>}
         </div></div>)}

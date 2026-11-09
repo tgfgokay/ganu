@@ -1,22 +1,22 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { mail, customers, withCustomerNames, notifyEvent, setMailStatus, fileToStoredUrl, trackingUrl, MAIL_TYPES, MAIL_STATUS, CARRIERS } from '../lib/store.js'
+import { mail, customers, withCustomerNames, receiveMail, processOperation, setMailStatus, fileToStoredUrl, trackingUrl, MAIL_TYPES, MAIL_STATUS, CARRIERS } from '../lib/operations-store.js'
+import OperationJobs from '../components/OperationJobs.jsx'
 import { SecureImage } from '../components/SecureAsset.jsx'
 import { Modal, StatusBadge, TypeBadge, fmtDate } from './_ui.jsx'
 import { localISO } from '../lib/dates.js'
 
 const emptyForm = () => ({
-  customer_id: '', type: 'kargo', sender: '',
+  intake_key: crypto.randomUUID(), customer_id: '', type: 'kargo', sender: '', tracking_no: '',
   received_date: localISO(),
   status: 'geldi', shelf: '', photo_url: '',
   forward_carrier: '', forward_tracking: '', delivered_to: '', delivered_at: '', notes: '',
   issuer: '', reference_no: '', attempted_at: '', legal_result: '', receiver_capacity: '', notify_channel: 'whatsapp',
-  notify: true, // yeni girişte müşteriye bildirildi (personel WhatsApp/telefonla haber verdi)
+  notify: false, // Kayıt gönderim kuyruğunu oluşturur; sağlayıcı kabul edince bildirildi olur.
 })
 // Resmî tebligat imha edilemez ve bildirim kaydı olmadan teslim/yönlendirme ile kapanmaz (0015 sunucu kuralı).
 const statusOptions = (type) => MAIL_STATUS.filter((s) => !(type === 'tebligat' && s === 'imha'))
 const LEGAL_RESULTS = [['teslim_girişimi', 'Teslim girişimi (kabul yetkisi yok / doğrulanmadı)'], ['teslim_alındı', 'Hukuken teslim alındı (kabul yetkisi doğrulandı)'], ['iade', 'İade edildi'], ['diğer', 'Diğer']]
-const NOTIFY_CHANNELS = ['whatsapp', 'telefon', 'e-posta', 'sms']
 
 const isOpenTebligat = (r) => r.type === 'tebligat' && ['geldi', 'bildirildi'].includes(r.status)
 
@@ -59,17 +59,9 @@ export default function Kargo() {
     const { notify, ...raw } = form
     const rest = { ...raw, attempted_at: raw.attempted_at ? new Date(raw.attempted_at).toISOString() : null, legal_result: raw.legal_result || null, notify_channel: raw.notify_channel || null }
     if (modal.mode === 'new') {
-      // bildirim gidiyorsa kayıt doğrudan 'bildirildi' durumuna düşer
-      const data = notify && rest.status === 'geldi' ? { ...rest, status: 'bildirildi' } : rest
-      await mail.create(data)
-      if (notify) {
-        const cust = custs.find((c) => c.id === data.customer_id)
-        if (cust) {
-          const ev = data.type === 'tebligat' ? 'tebligat_arrived' : 'mail_arrived'
-          await notifyEvent(ev, cust, { tur: data.type, gonderen: data.sender || '—' })
-        }
-      }
-    } else await mail.update(modal.data.id, rest)
+      const result=await receiveMail(rest.intake_key,rest.customer_id,rest.type,rest)
+      if(result.job_id)processOperation(result.job_id).catch(()=>{})
+    } else {if(rest.status==='bildirildi'&&modal.data.status!=='bildirildi')throw new Error('Bildirim durumunu yalnız gönderim sonucu belirler.');await mail.update(modal.data.id, rest)}
     setModal(null); load()
   }
   const del = async (id) => { if (confirm('Bu gönderi silinsin mi?')) { await mail.remove(id); load() } }
@@ -80,7 +72,7 @@ export default function Kargo() {
   return (
     <div>
       <div className="pl-head">
-        <div><h1>Kargo & Posta</h1><p>Gelen tüm gönderileri kaydet, fotoğrafla, durumunu takip et.</p></div>
+        <div><h1>Kargo & Posta</h1><p>Müşteriyi seçin, kaydedin; bildirim ve teslim durumunu takip edin.</p></div>
         <button className="pl-btn pl-btn-teal" onClick={() => setModal({ mode: 'new', data: emptyForm() })} disabled={!custs.length}>
           + Yeni giriş
         </button>
@@ -138,7 +130,7 @@ export default function Kargo() {
                 <td>
                   <select className="pl-status-sel" value={r.status} onChange={(e) => quickStatus(r, e.target.value)}
                     style={{ font: 'inherit', fontSize: 13, padding: '5px 8px', border: '1.5px solid #e4e9ef', borderRadius: 8 }}>
-                    {statusOptions(r.type).map((s) => <option key={s} value={s}>{s}</option>)}
+                    {statusOptions(r.type).map((s) => <option key={s} value={s} disabled={s==='bildirildi'}>{s}</option>)}
                   </select>
                 </td>
                 <td>
@@ -153,6 +145,7 @@ export default function Kargo() {
         </table>
       </div>
 
+      <OperationJobs compact kind="mail_arrived"/>
       {modal && <KargoForm modal={modal} custs={custs} onClose={() => setModal(null)} onSave={save} />}
       {lightbox && (
         <div className="pl-lightbox" onClick={() => setLightbox(null)}>
@@ -166,8 +159,9 @@ export default function Kargo() {
 function KargoForm({ modal, custs, onClose, onSave }) {
   const [f, setF] = useState(modal.data)
   const [busy, setBusy] = useState(false)
+  const [error,setError]=useState('')
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
-  const submit = (e) => { e.preventDefault(); if (!f.customer_id) return; onSave(f) }
+  const submit = async(e) => { e.preventDefault(); if (!f.customer_id||busy) return;setBusy(true);setError('');try{await onSave(f)}catch(e){setError(e?.message||'Kaydedilemedi. Aynı formdan tekrar deneyebilirsiniz.')}finally{setBusy(false)} }
 
   const onPhoto = async (e) => {
     const file = e.target.files?.[0]
@@ -190,9 +184,11 @@ function KargoForm({ modal, custs, onClose, onSave }) {
         <button className="pl-btn pl-btn-solid" form="kargo-form" type="submit" disabled={busy}>{busy ? 'Yükleniyor…' : 'Kaydet'}</button>
       </>}>
       <form id="kargo-form" className="pl-form" onSubmit={submit}>
+        {error&&<div className="pl-alert" role="alert">{error}</div>}
+        {modal.mode==='new'&&<p className="sub">Müşteriyi seçip kaydedin. Tarih bugün, durum geldi. Bildirim otomatik hazırlanır; eksik e-posta açık iş olarak görünür.</p>}
         <div className="pl-field">
           <label>Müşteri *</label>
-          <select value={f.customer_id} onChange={(e) => set('customer_id', e.target.value)} required>
+          <select value={f.customer_id} disabled={modal.mode==='edit'} onChange={(e) => set('customer_id', e.target.value)} required>
             <option value="">Seç…</option>
             {custs.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select>
@@ -205,9 +201,9 @@ function KargoForm({ modal, custs, onClose, onSave }) {
             </select>
           </div>
           <div className="pl-field">
-            <label>Durum</label>
-            <select value={f.status} onChange={(e) => set('status', e.target.value)}>
-              {statusOptions(f.type).map((s) => <option key={s} value={s}>{s}</option>)}
+            <label>{modal.mode==='new'?'Başlangıç durumu':'Durum'}</label>
+            <select value={f.status} disabled={modal.mode==='new'} onChange={(e) => set('status', e.target.value)}>
+              {statusOptions(f.type).map((s) => <option key={s} value={s} disabled={s==='bildirildi'}>{s}</option>)}
             </select>
           </div>
         </div>
@@ -221,6 +217,7 @@ function KargoForm({ modal, custs, onClose, onSave }) {
             <input type="date" value={f.received_date} onChange={(e) => set('received_date', e.target.value)} />
           </div>
         </div>
+        <div className="pl-field"><label>Barkod / takip no (isteğe bağlı)</label><input value={f.tracking_no||''} onChange={(e)=>set('tracking_no',e.target.value)}/></div>
         {f.type === 'tebligat' && (
           <div className="pl-card" style={{ padding: 12, marginBottom: 12, borderColor: '#f3c4c4' }}>
             <p className="sub" style={{ marginTop: 0 }}>GANU çalışanı müşteri şirketin çalışanı ya da temsilcisi değildir; tebliğ mazbatasına gerçek sıfatınızı yazdırın. Kabul yetkiniz doğrulanmadıysa "Teslim girişimi" seçin ve müşteriye aynı gün haber verin.</p>
@@ -291,20 +288,7 @@ function KargoForm({ modal, custs, onClose, onSave }) {
           <label>Not</label>
           <textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="ör. Yönlendirme adresi, aciliyet…" />
         </div>
-        {modal.mode === 'new' && (
-          <div className="pl-field">
-            <label className="pl-chk" style={{ display: 'inline-flex' }}>
-              <input type="checkbox" checked={!!f.notify} onChange={(e) => set('notify', e.target.checked)} />
-              Müşteriye haber verdim (kayıt "bildirildi" olur, saat kaydedilir)
-            </label>
-          </div>
-        )}
-        {(f.notify || f.status === 'bildirildi') && (
-          <div className="pl-field">
-            <label>Bildirim kanalı</label>
-            <select value={f.notify_channel || ''} onChange={(e) => set('notify_channel', e.target.value)}>{NOTIFY_CHANNELS.map((c) => <option key={c} value={c}>{c}</option>)}</select>
-          </div>
-        )}
+
       </form>
     </Modal>
   )

@@ -26,3 +26,9 @@ verify_jwt = true
 
 [functions.parasut-sync]
 verify_jwt = true
+
+[functions.parasut-oauth]
+verify_jwt = true
+
+[functions.contract-document]
+verify_jwt = true

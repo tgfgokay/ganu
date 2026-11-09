@@ -4,6 +4,8 @@
 // Kaynak: https://apidocs.parasut.com/swagger.json (2026-02-26). Her adım sonucu hemen kaydedilir;
 // iş yarıda kalırsa kaldığı yerden devam eder, ikinci satış faturası ya da ikinci e-Belge açmaz.
 
+import { legacyAllowed } from '../_shared/parasut-auth.ts'
+
 export const PARASUT_API = 'https://api.parasut.com'
 export const VAT_RATE = 20 // sanal ofis hizmeti genel oran; fatura tutarı KDV dahildir
 const JOB_POLLS = 10, JOB_POLL_MS = 2500, PDF_POLLS = 3, PDF_POLL_MS = 3000, MIN_GAP_MS = 1000
@@ -11,6 +13,9 @@ const JOB_POLLS = 10, JOB_POLL_MS = 2500, PDF_POLLS = 3, PDF_POLL_MS = 3000, MIN
 export type Env = {
   clientId: string; clientSecret: string; username: string; password: string; companyId: string
   productId?: string; accountId?: string; siteUrl: string
+  authMode?: 'transition' | 'oauth'
+  accessToken?: () => Promise<string>
+  authRejected?: () => Promise<void>
 }
 export type InvoiceRow = {
   id: string; customer_id: string; amount: number | string; issue_date: string; due_date?: string | null
@@ -23,7 +28,12 @@ export type CustomerRow = {
   tax_office?: string | null; address?: string | null; city?: string | null; district?: string | null
   parasut_contact_id?: string | null
 }
-export type Store = {
+export type PaymentStore = {
+  claimPayment(id: string, parasutId: string, amount: number): Promise<string | null>
+  completePayment(id: string, token: string): Promise<void>
+  releasePayment(id: string, token: string): Promise<void>
+}
+export type Store = PaymentStore & {
   patchInvoice(id: string, patch: Record<string, unknown>): Promise<void>
   setContact(customerId: string, contactId: string): Promise<void>
   savePdf(customerId: string, invoiceId: string, bytes: Uint8Array): Promise<string>
@@ -60,17 +70,16 @@ type TokenJson = { access_token?: string; error?: unknown; error_description?: u
 // (şifre, client secret) asla yazılmaz; açıklama 160 karakterle sınırlı.
 export function authFailure(status: number, headers: Headers, json: TokenJson, raw: string): string {
   const parts = [String(status)]
-  const code = typeof json?.error === 'string' ? json.error : ''
+  const code = typeof json?.error === 'string' && ['invalid_client', 'invalid_grant', 'unauthorized_client', 'temporarily_unavailable'].includes(json.error) ? json.error : ''
   if (code) parts.push(code)
-  const desc = String(json?.error_description || json?.errors?.[0]?.detail || json?.errors?.[0]?.title || '').slice(0, 160)
-  if (desc) parts.push(desc)
+  // Provider descriptions may echo credentials. Never return their contents to the panel or logs.
   if (!json) {
     const ctype = (headers.get('content-type') || 'içerik türü yok').split(';')[0]
     const firewall = Boolean(headers.get('cf-mitigated')) || /cloudflare|attention required|you have been blocked/i.test(raw)
     parts.push(`JSON olmayan yanıt: ${ctype}${firewall ? ' — Cloudflare/güvenlik duvarı engeli olası' : ''}`)
   }
   const ray = headers.get('cf-ray')
-  if (ray) parts.push(`cf-ray ${ray}`)
+  if (ray && /^[a-z0-9-]{1,80}$/i.test(ray)) parts.push(`cf-ray ${ray}`)
   const why = code === 'invalid_client' ? ' — Client ID/Secret hatalı' : code === 'invalid_grant' ? ' — e-posta/şifre hatalı ya da iki adımlı doğrulama açık' : ''
   return parts.join(', ') + why
 }
@@ -80,12 +89,19 @@ export function client(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>) {
   const pace = async () => { const wait = last + MIN_GAP_MS - Date.now(); if (wait > 0) await deps.sleep(wait); last = Date.now() }
   async function auth() {
     if (token) return token
+    if (deps.env.authMode === 'oauth') {
+      if (!deps.env.accessToken) throw new ParasutError(503, 'Paraşüt OAuth kurulumu eksik.')
+      token = await deps.env.accessToken()
+      return token
+    }
+    if (!legacyAllowed()) throw new ParasutError(503, 'Eski Paraşüt giriş yöntemi kapandı. Yeni OAuth hesabını bağlayın.')
     await pace()
     const body = new URLSearchParams({
       grant_type: 'password', client_id: deps.env.clientId, client_secret: deps.env.clientSecret,
       username: deps.env.username, password: deps.env.password, redirect_uri: 'urn:ietf:wg:oauth:2.0:oob',
     })
     const res = await deps.fetch(`${PARASUT_API}/oauth/token`, {
+      redirect: 'error', signal: AbortSignal.timeout(15_000),
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': USER_AGENT }, body,
     })
     const raw = await res.text().catch(() => '')
@@ -101,6 +117,7 @@ export function client(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>) {
       const bearer = await auth()
       await pace()
       const res = await deps.fetch(`${PARASUT_API}/v4${root ? '' : `/${deps.env.companyId}`}${path}`, {
+        redirect: 'error', signal: AbortSignal.timeout(20_000),
         method, headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': USER_AGENT },
         body: body === undefined ? undefined : JSON.stringify(body),
       })
@@ -108,7 +125,14 @@ export function client(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'>) {
       if (res.status === 204) return { status: 204, json: null }
       const json: Json = await res.json().catch(() => null)
       if (!res.ok) {
-        const detail = json?.errors?.map((e) => e.detail || e.title).filter(Boolean).join('; ') || res.statusText || 'hata'
+        // Do not replay writes on 401/403. A stale generation cannot revoke a newer consent/refresh.
+        if (res.status === 401) {
+          await deps.env.authRejected?.().catch(() => undefined)
+          throw new ParasutError(401, 'Paraşüt oturumu reddedildi. Bağlantıyı yeniden yetkilendirin.')
+        }
+        if (res.status === 403) throw new ParasutError(403, 'Paraşüt kullanıcısının bu işlem için yetkisi yok. Hesap ve şirket izinlerini kontrol edin.')
+        let detail = json?.errors?.map((e) => e.detail || e.title).filter(Boolean).join('; ') || res.statusText || 'hata'
+        for (const secret of [bearer, deps.env.clientSecret, deps.env.password].filter(Boolean)) detail = detail.split(secret).join('[gizlendi]')
         throw new ParasutError(res.status, `Paraşüt ${method} ${path.split('?')[0]} → ${res.status}: ${detail}`)
       }
       return { status: res.status, json }
@@ -142,9 +166,10 @@ export async function checkConnection(deps: Pick<Deps, 'fetch' | 'sleep' | 'env'
 
 async function findOrCreateContact(p: Client, c: CustomerRow): Promise<string> {
   const taxId = digits(c.tax_no) || digits(c.tc)
-  const found = await p.call('GET', `/contacts?filter[tax_number]=${taxId}&page[size]=1`)
-  if (found.json?.data?.length) {
-    const row = found.json.data[0], id = String(row.id), email = c.email?.trim()
+  const found = await p.call('GET', c.parasut_contact_id ? `/contacts/${c.parasut_contact_id}` : `/contacts?filter[tax_number]=${taxId}&page[size]=1`)
+  const row = c.parasut_contact_id ? found.json?.data : found.json?.data?.[0]
+  if (row?.id) {
+    const id = String(row.id), email = c.email?.trim()
     // e-Arşiv faturayı Paraşüt cari kartındaki e-postaya gönderir; kartta yoksa ya da paneldeki fatura e-postasından
     // farklıysa güncellenir. Güncelleme başarısız olursa fatura kesimi durmaz (e-posta sonra elle paylaşılabilir).
     if (email && String(row.attributes?.email || '').trim().toLowerCase() !== email.toLowerCase()) {
@@ -261,6 +286,36 @@ export async function pdfBytes(p: Client, deps: Pick<Deps, 'fetch' | 'sleep'>, d
   return null
 }
 
+// Kalıcı DB sahipliği iki Edge isteğinin (eşitleme / e-Belge) aynı tahsilatı göndermesini engeller.
+// POST yanıtı belirsizse sahiplik bırakılmaz: Paraşüt'te insan kontrolü yapılmadan yeniden POST edilmez.
+export async function pushPaymentOnce(p: Client, inv: InvoiceRow, invoiceId: string, store: PaymentStore, env: Env): Promise<boolean> {
+  const amount = round2(Number(inv.amount))
+  const token = await store.claimPayment(inv.id, invoiceId, amount)
+  if (!token) throw new Error('Tahsilat başka bir işlemde, tamamlandı ya da kontrol bekliyor; Paraşüt kaydını kontrol edin.')
+  let postStarted = false
+  try {
+    // Liste/snapshot eski olabilir; sahipliği aldıktan sonra kalan tutarı yeniden oku.
+    const current = await p.call('GET', `/sales_invoices/${invoiceId}`)
+    const rawRemaining = current.json?.data?.attributes?.remaining
+    const remaining = (typeof rawRemaining === 'number' || (typeof rawRemaining === 'string' && rawRemaining.trim() !== '')) ? Number(rawRemaining) : NaN
+    if (!Number.isFinite(remaining)) throw new Error('Paraşüt kalan tutarı okunamadı; tahsilat gönderilmedi.')
+    if (remaining > 0.01) {
+      if (!env.accountId || !(amount > 0) || Math.abs(remaining - amount) > 0.02) throw new Error('Paraşüt kalan tutarı panel tutarını tutmuyor ya da tahsilat hesabı yok; elle kontrol edin.')
+      postStarted = true
+      await p.call('POST', `/sales_invoices/${invoiceId}/payments`, { data: { type: 'payments', attributes: {
+        account_id: Number(env.accountId), date: inv.paid_date || inv.issue_date, amount,
+        description: `GANU tahsilat ${inv.payment_method || ''}`.trim() } } })
+    }
+    await store.completePayment(inv.id, token)
+    return postStarted
+  } catch (e) {
+    // Dışarıya POST başlamadıysa yeniden denemek güvenlidir. Başladıysa token kalıcı kontrol işaretidir.
+    if (!postStarted) await store.releasePayment(inv.id, token)
+    if (postStarted) throw new Error('Tahsilat sonucu doğrulanamadı; tekrar gönderim kilitlendi. Paraşüt kaydını kontrol edin.')
+    throw e
+  }
+}
+
 export async function processInvoice(inv: InvoiceRow, customer: CustomerRow, deps: Deps): Promise<Result> {
   const { store, env } = deps
   // Kesilmiş belgenin yalnız PDF'i alınıyorsa eksik müşteri bilgisi belgeyi 'başarısız'a düşürmez.
@@ -273,23 +328,18 @@ export async function processInvoice(inv: InvoiceRow, customer: CustomerRow, dep
   let issued = inv.einvoice_status === 'kesildi'
   try {
     const p = client(deps)
-    let contactId = customer.parasut_contact_id || ''
-    if (!contactId) { contactId = await findOrCreateContact(p, customer); await store.setContact(customer.id, contactId) }
     let invoiceId = inv.parasut_invoice_id || ''
+    let contactId = customer.parasut_contact_id || ''
+    if (!(issued && invoiceId)) {
+      contactId = await findOrCreateContact(p, customer)
+      if (!customer.parasut_contact_id) await store.setContact(customer.id, contactId)
+    }
     if (!invoiceId) {
       invoiceId = (await findSalesInvoice(p, inv, contactId)) || (await createSalesInvoice(p, inv, contactId, env))
       await store.patchInvoice(inv.id, { parasut_invoice_id: invoiceId })
     }
     if (inv.status === 'ödendi' && !inv.parasut_payment_at && env.accountId) {
-      // Tahsilat isteğinin yanıtı kaybolduysa ikinci tahsilat girilmez: Paraşüt'te ödenmemiş tutar kalmadıysa yalnız kayıt güncellenir.
-      const current = await p.call('GET', `/sales_invoices/${invoiceId}`)
-      const remaining = Number(current.json?.data?.attributes?.remaining)
-      if (!(Number.isFinite(remaining) && remaining <= 0.01)) {
-        await p.call('POST', `/sales_invoices/${invoiceId}/payments`, { data: { type: 'payments', attributes: {
-          account_id: Number(env.accountId), date: inv.paid_date || inv.issue_date, amount: round2(Number(inv.amount)),
-          description: `GANU tahsilat ${inv.payment_method || ''}`.trim() } } })
-      }
-      await store.patchInvoice(inv.id, { parasut_payment_at: new Date().toISOString() })
+      await pushPaymentOnce(p, inv, invoiceId, store, env)
     }
     let doc = await activeDoc(p, invoiceId)
     if (!doc) {

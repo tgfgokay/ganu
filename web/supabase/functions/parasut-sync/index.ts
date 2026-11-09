@@ -9,6 +9,7 @@
 // Dağıtım: supabase functions deploy parasut-sync
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { paymentStore } from '../_shared/parasut-payment-store.ts'
 import { parasutEnv } from '../_shared/einvoice-run.ts'
 import { syncFromParasut, type SyncStore } from '../_shared/parasut-sync.ts'
 
@@ -64,6 +65,7 @@ Deno.serve(async (req) => {
 
   const fail = (what: string, error: { message: string } | null) => { if (error) throw new Error(`${what}: ${error.message}`) }
   const store: SyncStore = {
+    ...paymentStore(db),
     async linked() {
       const { data, error } = await db.from('invoices')
         .select('id,customer_id,amount,status,paid_date,payment_method,parasut_invoice_id,parasut_payment_at,payment_review,einvoice_status,einvoice_pdf')

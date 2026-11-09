@@ -49,6 +49,24 @@ jobs:
       - name: PayTR payment link signing and callback decisions
         run: npm run test:paytr
 
+      - name: OAuth connection and refresh ownership
+        run: npm run test:parasut-oauth
+
+      - name: Lawyer contract package and PDF
+        run: npm run test:contract-documents
+
+      - name: Single operator queue and provider failure flow
+        run: npm run test:operations
+
+      - name: Build staff operation panel
+        run: npm run test:staff-panel-build
+
+      - name: Install Chromium for isolated UI checks
+        run: npx playwright install --with-deps chromium
+
+      - name: Single-operator UI with fake backend
+        run: npm run test:operations-ui
+
       - name: Build canonical root
         run: npm run build
 
@@ -67,12 +85,52 @@ jobs:
       - name: Type-check all Supabase Edge Functions
         run: >-
           deno check
+          supabase/functions/contract-document/index.ts
           supabase/functions/admin-gate/index.ts
           supabase/functions/auto-einvoice/index.ts
           supabase/functions/get-file/index.ts
           supabase/functions/issue-einvoice/index.ts
           supabase/functions/parasut-sync/index.ts
+          supabase/functions/parasut-oauth/index.ts
           supabase/functions/paytr-link/index.ts
           supabase/functions/pos-payment/index.ts
           supabase/functions/purchase-flow/index.ts
           supabase/functions/send-notification/index.ts
+
+  operation-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: local-test-only
+          POSTGRES_DB: ganu_test_operations
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install exact PDF test dependencies
+        working-directory: web
+        run: npm ci
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Local DB migrations, RLS, payment and concurrent operation tests
+        env:
+          DB_URL: postgresql://postgres:local-test-only@127.0.0.1:5432/ganu_test_operations
+        run: bash web/scripts/test-operations-db.sh
+
+      - name: Actual local DB to real PDF to local fake provider
+        env:
+          DB_URL: postgresql://postgres:local-test-only@127.0.0.1:5432/ganu_test_operations
+        working-directory: web
+        run: npm run test:operations-e2e

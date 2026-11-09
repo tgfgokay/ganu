@@ -35,7 +35,7 @@ export function bookingConflict(list,{date,start,end,exceptId}={}){return list.f
 export async function notifyEvent(eventKey,customer,vars={}){return notifications.create({customer_id:customer.id,channel:'panel',event:eventKey,message:JSON.stringify(vars),status:'kayıt',sent_at:new Date().toISOString()})}
 // Gönderi durumu (Kargo + müşteri sayfası ortak; lib/store.js ile aynı sözleşme): teslim/yönlendirmede tarih dolar,
 // "bildirildi" ve "teslim" müşteriye bildirim kaydı düşer.
-export async function setMailStatus(row,status,customer){const patch={status};if((status==='teslim'||status==='yönlendirildi')&&!row.delivered_at)patch.delivered_at=localISO();await mail.update(row.id,patch);if(!customer)return;if(status==='bildirildi')await notifyEvent(row.type==='tebligat'?'tebligat_arrived':'mail_arrived',customer,{tur:row.type,gonderen:row.sender||'—'});else if(status==='teslim')await notifyEvent('delivered',customer,{tarih:patch.delivered_at||''})}
+export async function setMailStatus(row,status,customer){if(status==='bildirildi')throw new Error('Bildirim durumunu gönderim sonucu belirler. Bildirimler ekranını kontrol edin.');const patch={status};if((status==='teslim'||status==='yönlendirildi')&&!row.delivered_at)patch.delivered_at=localISO();await mail.update(row.id,patch);if(!customer)return;if(status==='bildirildi')await notifyEvent(row.type==='tebligat'?'tebligat_arrived':'mail_arrived',customer,{tur:row.type,gonderen:row.sender||'—'});else if(status==='teslim')await notifyEvent('delivered',customer,{tarih:patch.delivered_at||''})}
 export const QUOTE_STATUS=['taslak','gönderildi','kabul','red']
 // Teklifi tek işlemde müşteri + sözleşme (+ ilk fatura, + damga vergisi kaydı) yapar; biri başarısız olursa hiçbiri yazılmaz (0014).
 export async function convertQuote(quoteId,{customer,contract,invoice=null,stamp=null}){requireCloud();const {data,error}=await supabase.rpc('convert_quote',{p_quote:quoteId,p_customer:customer,p_contract:contract,p_invoice:invoice,p_stamp:stamp});if(error)throw new Error(error.message||'Teklif dönüştürülemedi.');return data}
@@ -91,3 +91,10 @@ export async function resolveStoredUrl(stored){
   const {data,error}=await supabase.storage.from(BUCKET).createSignedUrl(path,300)
   return error?'':data?.signedUrl||''
 }
+
+// Durable server jobs; never report provider success from a local record alone.
+export const operationJobs=collection('operation_jobs')
+export const acceptQuote=(id,options={})=>rpc('accept_quote',{p_quote:id,p_customer:options.customer||{},p_start:options.startDate||localISO()})
+export const receiveMail=(key,customerId,type,details={})=>rpc('receive_mail',{p_key:key,p_customer:customerId,p_type:type,p_details:details})
+export const retryOperation=(id)=>rpc('retry_operation',{p_id:id})
+export async function processOperation(jobId){requireCloud();const {data,error}=await supabase.functions.invoke('send-notification',{body:{...(jobId?{job_id:jobId}:{})}});if(error)throw new Error('İşlem kuyruğa kaydedildi; gönderim servisi yanıt vermedi. Durumu Bildirimler ekranından kontrol edin.');return data}

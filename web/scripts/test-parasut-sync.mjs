@@ -1,5 +1,6 @@
 // Paraşüt → panel eşitleme: sahte Paraşüt sunucusuyla senaryolar (ağ yok).
 import assert from 'node:assert/strict'
+import { processInvoice } from '../supabase/functions/issue-einvoice/parasut.ts'
 import { syncFromParasut, methodFor } from '../supabase/functions/_shared/parasut-sync.ts'
 
 const env = { clientId: 'cid', clientSecret: 'sec', username: 'info@ganu.com.tr', password: 'pw', companyId: '777', productId: '55', accountId: '9', siteUrl: 'https://ganu.com.tr' }
@@ -22,7 +23,7 @@ const pinv = ({ id, contact = 'k1', gross = 18000, remaining = gross, status = r
 })
 const contacts = { k1: '1111111111', k2: '2222222222', k3: '3333333333' }
 
-function fakeParasut(invoices, { single = [] } = {}) {
+function fakeParasut(invoices, { single = [], paymentLost = false } = {}) {
   const calls = [], posts = []
   const ok = (body, status = 200) => new Response(body === null ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   const contactRows = Object.entries(contacts).map(([id, tax]) => ({ id, type: 'contacts', attributes: { tax_number: tax } }))
@@ -44,10 +45,10 @@ function fakeParasut(invoices, { single = [] } = {}) {
     }
     const one = u.pathname.match(/\/sales_invoices\/(\w+)$/)
     if (method === 'GET' && one) {
-      const x = single.find((s) => s.row.id === one[1]); assert.ok(x, `beklenmeyen tekil okuma ${one[1]}`)
+      const x = [...single, ...invoices].find((s) => s.row.id === one[1]); assert.ok(x, `beklenmeyen tekil okuma ${one[1]}`)
       return ok({ data: x.row, included: [...x.included, ...contactRows] })
     }
-    if (method === 'POST' && /\/sales_invoices\/\w+\/payments$/.test(u.pathname)) { posts.push({ path: u.pathname, body: JSON.parse(init.body) }); return ok({ data: { id: 'newpay', type: 'payments' } }, 201) }
+    if (method === 'POST' && /\/sales_invoices\/\w+\/payments$/.test(u.pathname)) { posts.push({ path: u.pathname, body: JSON.parse(init.body) }); if (paymentLost) throw new TypeError('fetch failed'); return ok({ data: { id: 'newpay', type: 'payments' } }, 201) }
     if (method === 'GET' && /\/(e_archives|e_invoices)\/\w+\/pdf$/.test(u.pathname)) return ok({ data: { attributes: { url: 'https://files.parasut.test/doc.pdf' } } })
     throw new Error(`beklenmeyen istek ${method} ${url}`)
   }
@@ -55,7 +56,17 @@ function fakeParasut(invoices, { single = [] } = {}) {
 }
 
 function fakeStore({ linked = [], customers = [{ id: 'c1', tax_no: '1111111111', parasut_contact_id: null }, { id: 'c2', tax_no: '2222222222', parasut_contact_id: null }], importReturns } = {}) {
-  const s = { imports: [], paid: [], patches: [], contacts: [], pdfs: [],
+  const claims = new Map(), completed = new Set()
+  const s = { claims, completed, imports: [], paid: [], patches: [], contacts: [], pdfs: [],
+    async claimPayment(id) {
+      if (claims.has(id) || completed.has(id)) return null
+      const token = `claim-${id}`; claims.set(id, token); return token
+    },
+    async completePayment(id, token) {
+      assert.equal(claims.get(id), token); claims.delete(id); completed.add(id)
+      s.patches.push({ id, patch: { parasut_payment_at: '2026-10-12T09:00:00Z' } })
+    },
+    async releasePayment(id, token) { assert.equal(claims.get(id), token); claims.delete(id) },
     async linked() { return linked },
     async customers() { return customers },
     async importInvoice(a) { s.imports.push(a); return importReturns === undefined ? `panel-${a.parasut_id}` : importReturns },
@@ -176,6 +187,51 @@ await run('ödeme yöntemi: iyzico → kart, banka → havale, kasa/bilinmeyen �
   assert.equal(methodFor([{ name: 'İş Bankası', account_type: 'bank' }]), 'havale')
   assert.equal(methodFor([{ name: 'Kasa', account_type: 'cash' }]), 'diğer')
   assert.equal(methodFor([]), 'diğer')
+})
+
+await run('iki eşzamanlı eşitleme aynı faturaya yalnız bir tahsilat POST eder', async () => {
+  const f = fakeParasut([pinv({ id: 1 })]), s = fakeStore({ linked: [linkedRow({ status: 'ödendi', paid_date: TODAY })] })
+  const results = await Promise.all([sync(f, s), sync(f, s)])
+  assert.equal(f.posts.length, 1)
+  assert.equal(results.reduce((n, r) => n + r.pushed, 0), 1)
+  assert.equal(results.reduce((n, r) => n + r.errors, 0), 1)
+})
+
+await run('eşitleme ve e-belge aynı faturanın tahsilatını eşzamanlı ikinci kez gönderemez', async () => {
+  const f = fakeParasut([pinv({ id: 1 })]), s = fakeStore({ linked: [linkedRow({ status: 'ödendi', paid_date: TODAY })] })
+  const inv = { ...linkedRow({ status: 'ödendi', paid_date: TODAY }), issue_date: TODAY }
+  await Promise.all([sync(f, s), processInvoice(inv, { id: 'c1', title: 'Test', parasut_contact_id: 'k1' }, { fetch: f.fetch, sleep: async () => {}, env, store: s })])
+  assert.equal(f.posts.length, 1); assert.equal(s.completed.size, 1)
+})
+
+await run('POST yanıtı kaybolursa claim kalır; yeniden eşitleme ikinci POST yapmaz', async () => {
+  const f = fakeParasut([pinv({ id: 1 })], { paymentLost: true }), s = fakeStore({ linked: [linkedRow({ status: 'ödendi', paid_date: TODAY })] })
+  const first = await sync(f, s), second = await sync(f, s)
+  assert.equal(first.errors, 1); assert.equal(second.errors, 1); assert.equal(f.posts.length, 1)
+  assert.equal(s.claims.size, 1); assert.equal(s.completed.size, 0)
+  assert.match(first.items[0].reason, /tekrar gönderim kilitlendi/)
+})
+
+await run('POST başarılı, DB complete hatalıysa claim kalır ve ikinci POST engellenir', async () => {
+  const f = fakeParasut([pinv({ id: 1 })]), s = fakeStore({ linked: [linkedRow({ status: 'ödendi', paid_date: TODAY })] })
+  s.completePayment = async () => { throw new Error('Sahte DB hatası') }
+  await sync(f, s); await sync(f, s)
+  assert.equal(f.posts.length, 1); assert.equal(s.claims.size, 1)
+})
+
+await run('claim sonrası taze okuma kısmi/okunamayan kalan tutarda POST yapmaz ve claim bırakılır', async () => {
+  for (const remaining of [5000, 'veri-yok', null, '', undefined]) {
+    const f = fakeParasut([pinv({ id: 1, remaining })]), s = fakeStore({ linked: [linkedRow({ status: 'ödendi', paid_date: TODAY })] })
+    // Ham API null/boş alanlarını da sınamak için String dönüşümünü atla.
+    const originalFetch = f.fetch
+    f.fetch = async (url, init) => {
+      const response = await originalFetch(url, init)
+      if (new URL(url).pathname.endsWith('/sales_invoices/1')) { const body = await response.json(); body.data.attributes.remaining = remaining; return Response.json(body) }
+      return response
+    }
+    const result = await sync(f, s)
+    assert.equal(result.errors, 1); assert.equal(f.posts.length, 0); assert.equal(s.claims.size, 0)
+  }
 })
 
 console.log('parasut sync tests PASS')

@@ -1,0 +1,34 @@
+name: Operation jobs
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: operation-jobs
+  cancel-in-progress: false
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Process pending product operations
+        env:
+          SUPABASE_URL: ${{ vars.GANU_STAFF_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.GANU_STAFF_SUPABASE_ANON_KEY }}
+          WORKER_SECRET: ${{ secrets.NOTIFICATION_WORKER_SECRET }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "tgfgokay/ganu"
+          test "$SUPABASE_URL" = "https://fhtcrvzwbqcfzceqolyz.supabase.co"
+          test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY" && test "${#WORKER_SECRET}" -ge 32 || { echo 'Operation worker setup missing'; exit 1; }
+          for attempt in $(seq 1 10); do
+            response=$(curl --silent --show-error --fail --max-time 25 --request POST "$SUPABASE_URL/functions/v1/send-notification" --header "Authorization: Bearer $SUPABASE_ANON_KEY" --header "apikey: $SUPABASE_ANON_KEY" --header "x-worker-secret: $WORKER_SECRET" --header 'Content-Type: application/json' --data '{}')
+            state=$(printf '%s' "$response" | jq -er '.state')
+            case "$state" in
+              idle) echo 'Queue drained'; break ;;
+              sent|done|blocked|failed|uncertain|ownership_lost|queued) printf 'Operation result: %s\n' "$state" ;;
+              *) echo 'Unexpected worker result'; exit 1 ;;
+            esac
+          done

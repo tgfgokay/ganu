@@ -17,6 +17,7 @@ function fakeParasut({ inbox = null, grossDelta = 0, jobPendingPolls = 1, pdf204
     assert.equal(init.headers.Authorization, 'Bearer tok')
     const body = init.body ? JSON.parse(init.body) : null
     if (rateLimitOnce && !state.limited) { state.limited = true; return ok({ errors: [{ title: 'Too Many Requests' }] }, 429) }
+    if (method === 'GET' && u.pathname.endsWith('/contacts/k1')) return ok({ data: { id: 'k1', type: 'contacts', attributes: existingContact || { name: 'Cari adı', email: 'muhasebe@aydin.test' } } })
     if (method === 'GET' && u.pathname.endsWith('/contacts')) return ok({ data: existingContact ? [{ id: 'k1', type: 'contacts', attributes: existingContact }] : [] })
     if (method === 'PUT' && u.pathname.endsWith('/contacts/k1')) { state.bodies.contactPut = body; return contactPutFails ? ok({ errors: [{ title: 'hata' }] }, 500) : ok({ data: { id: 'k1', type: 'contacts' } }) }
     if (method === 'POST' && u.pathname.endsWith('/contacts')) { state.contacts++; state.bodies.contact = body; return ok({ data: { id: 'k1', type: 'contacts' } }, 201) }
@@ -57,8 +58,12 @@ function fakeParasut({ inbox = null, grossDelta = 0, jobPendingPolls = 1, pdf204
   return { fetch, calls, state }
 }
 function fakeStore() {
-  const patches = [], contacts = [], pdfs = []
-  return { patches, contacts, pdfs, last: () => Object.assign({}, ...patches.map((p) => p.patch)),
+  const patches = [], contacts = [], pdfs = [], claims = new Map(), completed = new Set()
+  return { patches, contacts, pdfs, claims, completed,
+    async claimPayment(id) { if (claims.has(id) || completed.has(id)) return null; const token = `claim-${id}`; claims.set(id, token); return token },
+    async completePayment(id, token) { assert.equal(claims.get(id), token); claims.delete(id); completed.add(id); patches.push({ id, patch: { parasut_payment_at: new Date().toISOString() } }) },
+    async releasePayment(id, token) { assert.equal(claims.get(id), token); claims.delete(id) },
+    last: () => Object.assign({}, ...patches.map((p) => p.patch)),
     async patchInvoice(id, patch) { patches.push({ id, patch }) },
     async setContact(customerId, contactId) { contacts.push({ customerId, contactId }) },
     async savePdf(customerId, invoiceId, bytes) { pdfs.push(bytes.length); return `secure:customers/${customerId}/efatura-${invoiceId}.pdf` } }
@@ -240,4 +245,28 @@ await run('cari e-postası güncellenemezse fatura yine kesilir', async () => {
   const r = await processInvoice(invoice(), customer(), deps(f, s))
   assert.equal(r.state, 'kesildi'); assert.ok(f.calls.includes('PUT /contacts/k1'))
 })
+
+await run('kayıtlı Paraşüt cari kimliği de değişen fatura e-postasını günceller', async () => {
+  const f = fakeParasut({ existingContact: { name: 'Mevcut cari adı', email: 'eski@example.test' } }), s = fakeStore()
+  const r = await processInvoice(invoice(), customer({ parasut_contact_id: 'k1', email: 'yeni@example.test' }), deps(f, s))
+  assert.equal(r.state, 'kesildi'); assert.equal(f.state.contacts, 0)
+  assert.equal(f.state.bodies.contactPut.data.attributes.email, 'yeni@example.test')
+  assert.equal(f.state.bodies.contactPut.data.attributes.name, 'Mevcut cari adı')
+})
+
+await run('aynı faturanın eşzamanlı e-belge çağrıları ortak tahsilat sahipliğine uyar', async () => {
+  const f = fakeParasut({ activeDocFromStart: true }), s = fakeStore()
+  const runInvoice = () => processInvoice(invoice({ parasut_invoice_id: 's1' }), customer({ parasut_contact_id: 'k1' }), deps(f, s))
+  await Promise.all([runInvoice(), runInvoice()])
+  assert.equal(f.calls.filter((x) => x === 'POST /sales_invoices/s1/payments').length, 1)
+})
+
+await run('kesilmiş belgenin PDF tekrarında cari API arızası bağımlılığı yoktur', async () => {
+  const f = fakeParasut({ activeDocFromStart: true, pdf204: 0 }), s = fakeStore(), originalFetch = f.fetch
+  f.fetch = async (url, init) => { if (new URL(url).pathname.includes('/contacts')) throw new Error('Cari API kapalı'); return originalFetch(url, init) }
+  const r = await processInvoice(invoice({ parasut_invoice_id: 's1', parasut_payment_at: 'done', einvoice_status: 'kesildi' }), customer({ parasut_contact_id: 'k1', address: '' }), deps(f, s))
+  assert.equal(r.state, 'kesildi'); assert.equal(s.pdfs.length, 1)
+  assert.equal(f.calls.filter((x) => x.includes('/contacts')).length, 0)
+})
+
 console.log('einvoice parasut flow tests PASS')

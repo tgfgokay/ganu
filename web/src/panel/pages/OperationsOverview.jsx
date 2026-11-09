@@ -1,3 +1,4 @@
+import OperationJobs from '../components/OperationJobs.jsx'
 import { useEffect,useState } from 'react'
 import { Link } from 'react-router-dom'
 import { customers,mail,invoices,inspections,requests,contracts,invStatus } from '../lib/operations-store.js'
@@ -34,6 +35,7 @@ export default function OperationsOverview(){
   const busy=lists.filter(([,,rows])=>rows.length),idle=lists.filter(([,,rows])=>!rows.length).map(([t])=>t.toLocaleLowerCase('tr'))
   return <div>
     <div className="pl-head"><div><h1>Operasyon</h1><p>Tüm müşterilerde iş bekleyenler, en acil olan üstte. Satıra tıklayınca müşterinin ilgili sekmesi açılır.</p></div><Link className="pl-btn pl-btn-teal" to="/panel/kargo?yeni=1">+ Gelen posta/kargo</Link></div>
+    <OperationJobs compact/>
     {busy.map(([title,hint,rows,tab,render,urgent])=><div className="pl-card" style={{marginBottom:16}} key={title}><div className="pl-card-h"><div><h2>{title}</h2><p style={{marginTop:3,fontSize:13,color:'var(--muted)'}}>{hint}</p></div><span className="count">{rows.length}</span></div><div className="pl-card-b">
       {rows.map((x)=>{const body=<><div className="grow"><div className="t1">{name[x.customer_id]||'Müşteri bulunamadı'}</div><div className="t2">{render(x)}</div></div>{x.customer_id&&<span className="t2" aria-hidden="true">Aç →</span>}</>,cls=`pl-row${urgent(x)?' pl-row-urgent':''}`
         return x.customer_id?<Link key={x.id} to={`/panel/musteriler/${x.customer_id}?sekme=${tab}`} className={cls} style={{textDecoration:'none',color:'inherit'}}>{body}</Link>:<div key={x.id} className={cls}>{body}</div>})}
