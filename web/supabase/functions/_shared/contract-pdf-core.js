@@ -19,7 +19,12 @@ export async function createContractPdfWithLibraries(input,{allowIncomplete=fals
   const pdf=await PDFDocument.create();pdf.registerFontkit(fontkit)
   const regular=await pdf.embedFont(decodeBase64(FONT_REGULAR),{subset:true})
   const bold=await pdf.embedFont(decodeBase64(FONT_BOLD),{subset:true})
-  const form=pdf.getForm(),color=rgb(.04,.145,.25),muted=rgb(.34,.40,.48),line=rgb(.85,.88,.91),soft=rgb(.96,.97,.98)
+  const form=pdf.getForm()
+  const color=rgb(10/255,37/255,64/255)
+  const accent=rgb(0,212/255,178/255)
+  const muted=rgb(76/255,99/255,123/255)
+  const line=rgb(237/255,230/255,218/255)
+  const soft=rgb(244/255,239/255,231/255)
   pdf.setTitle(`${pkg.number} - Sanal Ofis Belge Paketi`);pdf.setSubject(`${pkg.version}; ${pkg.fingerprint}; ${pkg.ready?'Gönderime hazır':'Eksik bilgilerle inceleme'}`)
   pdf.setCreator('GANU belge üretimi');pdf.setProducer('GANU / pdf-lib')
   const pageSize=[595.28,841.89],margin=45,width=pageSize[0]-margin*2,top=786,bottom=58
@@ -53,6 +58,7 @@ export async function createContractPdfWithLibraries(input,{allowIncomplete=fals
   const newPage=()=>{
     page=pdf.addPage(pageSize);pageInDocument++;y=top
     page.drawLine({start:{x:margin,y:808},end:{x:pageSize[0]-margin,y:808},thickness:1.3,color})
+    page.drawLine({start:{x:margin,y:808},end:{x:margin+32,y:808},thickness:1.3,color:accent})
     draw('GANU',margin,817,11,bold);draw(`${pkg.number} | ${pkg.version}`,pageSize[0]-margin-220,817,7.2,regular,muted)
     if(!pkg.ready)draw(pkg.reviewLabel,margin,794,7.5,bold,rgb(.65,.22,.11))
   }
