@@ -111,6 +111,14 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install exact PDF test dependencies
+        working-directory: web
+        run: npm ci
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
@@ -124,4 +132,5 @@ jobs:
       - name: Actual local DB to real PDF to local fake provider
         env:
           DB_URL: postgresql://postgres:local-test-only@127.0.0.1:5432/ganu_test_operations
-        run: deno run --allow-env=DB_URL --allow-run=psql --allow-net=127.0.0.1 web/scripts/test-operations-e2e.ts
+        working-directory: web
+        run: npm run test:operations-e2e
