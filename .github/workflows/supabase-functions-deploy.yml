@@ -69,5 +69,5 @@ jobs:
         run: |
           set -euo pipefail
           for fn in $FUNCTIONS; do
-            supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --yes
           done
